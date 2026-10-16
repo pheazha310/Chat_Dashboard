@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useSelectedConversation } from "@/entities/conversation";
 import { MessageBubble, TypingBubble, useConversationMessages, useMessageStore } from "@/entities/message";
 import { usePrivacyStore } from "@/features/privacy-controls";
-import { ChatSearchBar, matchesQuery, useChatSearchStore } from "@/features/search-in-chat";
+import { ChatSearchBar, filterByQuery, useChatSearchStore } from "@/features/search-in-chat";
 import { MessageComposer, useComposerStore } from "@/features/send-message";
 import { assets } from "@/shared/config";
 import { AssetIcon, IconButton, notify } from "@/shared/ui";
@@ -24,7 +24,9 @@ export default function ChatWindow({ onOpenContext }: { onOpenContext: () => voi
   const [showMore, setShowMore] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
 
-  const visible = useMemo(() => messages.filter((message) => matchesQuery(message.text, query)), [messages, query]);
+  const trimmedQuery = query.trim();
+  const hasQuery = trimmedQuery.length > 0;
+  const visible = useMemo(() => filterByQuery(messages, query, (message) => message.text), [messages, query]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: "end" });
@@ -78,7 +80,7 @@ export default function ChatWindow({ onOpenContext }: { onOpenContext: () => voi
       <ChatSearchBar />
       <div className="chat-stream" aria-live="polite">
         <div className="today-pill">Today</div>
-        {visible.length === 0 && <div className="empty-search">No messages match “{query}”</div>}
+        {hasQuery && visible.length === 0 && <div className="empty-search">No messages match “{trimmedQuery}”</div>}
         {visible.map((message) => (
           <MessageBubble key={message.id} message={message} showReadReceipts={readReceipts} />
         ))}

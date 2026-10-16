@@ -21,4 +21,4 @@ This project uses the following layer order, from highest to lowest:
 4. Put UI in `shared/ui` only when it is reusable across unrelated features; otherwise keep it with its owning feature or widget.
 5. Add exports to a segment's `index.ts` when another segment needs to use its functionality. Avoid reaching into another segment's `model`, `ui`, or other internals.
 
-Run `npm run check:fsd` to check layer direction and cross-segment imports.
+Run `pnpm check:fsd` to check layer direction and cross-segment imports.

@@ -39,7 +39,7 @@ export default function MediaFilesPanel({
   return (
     <section className="context-detail-panel">
       <header className="detail-panel-header">
-        <button onClick={onBack} aria-label="Back to customer details">
+        <button type="button" onClick={onBack} aria-label="Back to customer details">
           ←
         </button>
         <div>
@@ -49,12 +49,18 @@ export default function MediaFilesPanel({
       </header>
       <div className="media-filter">
         {FILTERS.map((item) => (
-          <button className={filter === item ? "active" : ""} onClick={() => setFilter(item)} key={item}>
+          <button
+            type="button"
+            className={filter === item ? "active" : ""}
+            aria-pressed={filter === item}
+            onClick={() => setFilter(item)}
+            key={item}
+          >
             {item}
           </button>
         ))}
       </div>
-      <button className="upload-file" onClick={() => inputRef.current?.click()}>
+      <button type="button" className="upload-file" onClick={() => inputRef.current?.click()}>
         <span>＋</span>
         <div>
           <strong>Upload a file</strong>
@@ -84,7 +90,11 @@ export default function MediaFilesPanel({
                 {file.size} · {file.added}
               </small>
             </div>
-            <button onClick={() => downloadFile(file, customer, appId)} aria-label={`Download ${file.name}`}>
+            <button
+              type="button"
+              onClick={() => downloadFile(file, customer, appId)}
+              aria-label={`Download ${file.name}`}
+            >
               ↓
             </button>
           </article>

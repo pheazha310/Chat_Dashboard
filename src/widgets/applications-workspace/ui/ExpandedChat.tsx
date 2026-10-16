@@ -35,7 +35,11 @@ export default function ExpandedChat({ onBack }: { onBack: () => void }) {
     const bounds = event.currentTarget.parentElement?.getBoundingClientRect();
     if (!bounds) return;
     event.preventDefault();
-    drag.current = { pointerId: event.pointerId, offsetX: event.clientX - bounds.left, offsetY: event.clientY - bounds.top };
+    drag.current = {
+      pointerId: event.pointerId,
+      offsetX: event.clientX - bounds.left,
+      offsetY: event.clientY - bounds.top,
+    };
     event.currentTarget.setPointerCapture(event.pointerId);
     setPosition({ left: bounds.left, top: bounds.top });
   };
