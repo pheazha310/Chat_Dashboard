@@ -1,3 +1,3 @@
 export { default as AssetIcon } from "./AssetIcon";
-export { Toaster, notify } from "./toast";
+export { Toaster, notify, type ToastType } from "./toast";
 export { default as IconButton } from "./IconButton";

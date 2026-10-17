@@ -42,6 +42,7 @@ export default function MessageComposer({ conversationId }: { conversationId: st
           ref={fileInputRef}
           className="file-input"
           type="file"
+          accept=".pdf,.jpg,.jpeg,.png"
           onChange={(event) => {
             const file = event.target.files?.[0];
             if (file) {
@@ -63,7 +64,7 @@ export default function MessageComposer({ conversationId }: { conversationId: st
             <AssetIcon src={assets.icons.mic} size={18} />
           </button>
           <button className="submit-message" type="submit" aria-label="Send message" disabled={!draft.trim()}>
-            <span />
+            <AssetIcon src={assets.settings.send} size={16} />
           </button>
         </div>
       </div>

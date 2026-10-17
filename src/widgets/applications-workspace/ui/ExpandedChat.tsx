@@ -5,9 +5,10 @@ import { sendMessage, useComposerStore, useDraft } from "@/features/send-message
 import { TakeOverButton } from "@/features/take-over-conversation";
 import { assets } from "@/shared/config";
 import { formatClock } from "@/shared/lib/format-time";
-import { IconButton, notify } from "@/shared/ui";
+import { AssetIcon, IconButton, notify } from "@/shared/ui";
 
 export default function ExpandedChat({ onBack }: { onBack: () => void }) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const chatRef = useRef<HTMLElement>(null);
   const [position, setPosition] = useState<{ left: number; top: number } | null>(null);
   const [size, setSize] = useState<{ width: number; height: number } | null>(null);
@@ -28,6 +29,8 @@ export default function ExpandedChat({ onBack }: { onBack: () => void }) {
   const conversationId = conversation?.id ?? "";
   const messages = useConversationMessages(conversation?.id ?? null);
   const chatDraft = useDraft(conversationId);
+  const attachment = useComposerStore((state) => state.attachments[conversationId] ?? "");
+  const recording = useComposerStore((state) => state.recording);
   const setChatDraft = (text: string) => useComposerStore.getState().setDraft(conversationId, text);
 
   const startDrag = (event: PointerEvent<HTMLElement>) => {
@@ -214,14 +217,57 @@ export default function ExpandedChat({ onBack }: { onBack: () => void }) {
           <textarea
             value={chatDraft}
             onChange={(event) => setChatDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                if (sendMessage(conversationId, chatDraft)) notify("Message sent");
+              }
+            }}
             placeholder="Type a message"
+            aria-label="Type a message"
           />
+          {attachment && (
+            <div className="attachment-chip">
+              {attachment}
+              <button
+                type="button"
+                onClick={() => useComposerStore.getState().setAttachment(conversationId, "")}
+                aria-label="Remove attachment"
+              >
+                ×
+              </button>
+            </div>
+          )}
           <div>
-            <IconButton icon={assets.icons.plus} label="Add attachment" />
+            <button type="button" onClick={() => fileInputRef.current?.click()} aria-label="Add attachment">
+              <img src={assets.icons.plus} alt="" />
+            </button>
+            <input
+              ref={fileInputRef}
+              className="file-input"
+              type="file"
+              accept=".pdf,.jpg,.jpeg,.png"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) {
+                  useComposerStore.getState().setAttachment(conversationId, file.name);
+                  notify("File attached");
+                }
+              }}
+            />
             <span>
-              <IconButton icon={assets.icons.mic} size={18} label="Record voice message" />
-              <button className="expanded-send" type="submit" disabled={!chatDraft.trim()}>
-                <i />
+              <IconButton
+                className={recording ? "recording" : ""}
+                icon={assets.icons.mic}
+                size={18}
+                label="Record voice message"
+                onClick={() => {
+                  useComposerStore.getState().toggleRecording();
+                  notify(recording ? "Voice recording stopped" : "Voice recording started");
+                }}
+              />
+              <button className="expanded-send" type="submit" aria-label="Send message" disabled={!chatDraft.trim()}>
+                <AssetIcon src={assets.settings.send} size={14} />
               </button>
             </span>
           </div>
