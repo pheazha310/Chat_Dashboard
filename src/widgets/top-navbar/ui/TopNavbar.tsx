@@ -13,16 +13,16 @@ function ConnectionPill() {
         : status === "connecting"
           ? "Connecting…"
           : "Reconnecting…";
-  return (
-    <button
-      className={`connection-pill ${status}`}
-      onClick={isMockTransport ? simulateDisconnect : undefined}
-      title={isMockTransport ? "Mock server — click to simulate a dropped connection" : "WebSocket connection"}
-    >
-      <i />
-      {label}
-    </button>
-  );
+  // return (
+  //   <button
+  //     className={`connection-pill ${status}`}
+  //     onClick={isMockTransport ? simulateDisconnect : undefined}
+  //     title={isMockTransport ? "Mock server — click to simulate a dropped connection" : "WebSocket connection"}
+  //   >
+  //     <i />
+  //     {label}
+  //   </button>
+  // );
 }
 
 export default function TopNavbar({ onOpenInbox }: { onOpenInbox: () => void }) {
