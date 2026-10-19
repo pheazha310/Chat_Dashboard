@@ -255,21 +255,22 @@ export default function ExpandedChat({ onBack }: { onBack: () => void }) {
                 }
               }}
             />
-            <span>
-              <IconButton
+            <div>
+              <button
                 className={recording ? "recording" : ""}
-                icon={assets.icons.mic}
-                size={18}
-                label="Record voice message"
+                type="button"
+                aria-label="Record voice message"
                 onClick={() => {
                   useComposerStore.getState().toggleRecording();
                   notify(recording ? "Voice recording stopped" : "Voice recording started");
                 }}
-              />
-              <button className="expanded-send" type="submit" aria-label="Send message" disabled={!chatDraft.trim()}>
-                <AssetIcon src={assets.settings.send} size={14} />
+              >
+                <AssetIcon src={assets.icons.mic} size={18} />
               </button>
-            </span>
+              <button className="submit-message" type="submit" aria-label="Send message" disabled={!chatDraft.trim()}>
+                <span />
+              </button>
+            </div>
           </div>
         </form>
       </div>

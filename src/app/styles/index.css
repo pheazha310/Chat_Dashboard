@@ -2479,34 +2479,17 @@ button {
   display: grid;
   place-items: center;
 }
-.expanded-composer form > div > span {
+.expanded-composer form > div > div {
   display: flex;
   gap: 8px;
 }
-.expanded-composer .expanded-send {
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  background: #ebebeb;
-}
-.expanded-send {
+.expanded-composer .submit-message {
   width: 34px;
   height: 34px;
   border-radius: 50%;
   background: #ebebeb;
   display: grid;
   place-items: center;
-}
-.expanded-send img {
-  width: 14px;
-  height: 14px;
-}
-.expanded-send:disabled {
-  opacity: 0.45;
-}
-.expanded-send:focus-visible {
-  outline: 2px solid #2563eb;
-  outline-offset: 2px;
 }
 .compose-fab {
   position: fixed;
@@ -2760,6 +2743,130 @@ button {
   .compose-fab {
     right: 16px;
     bottom: 16px;
+  }
+}
+
+@media (min-width: 701px) and (max-width: 900px) {
+  .expanded-chat {
+    right: max(20px, calc((100vw - 665px) / 2));
+    width: min(665px, calc(100vw - 40px));
+    height: min(990px, calc(100vh - 64px));
+  }
+  .expanded-chat > header {
+    height: 94px;
+    flex-basis: 94px;
+    padding: 12px 24px 18px;
+    gap: 18px;
+  }
+  .expanded-back {
+    width: 42px;
+    height: 42px;
+  }
+  .expanded-avatar {
+    width: 54px;
+    height: 54px;
+  }
+  .expanded-chat > header strong {
+    font-size: 24px;
+  }
+  .expanded-chat > header span {
+    gap: 6px;
+    font-size: 18px;
+  }
+  .expanded-chat > header span img {
+    width: 8px;
+    height: 8px;
+  }
+  .expanded-chat-actions {
+    width: 132px;
+    height: 60px;
+  }
+  .expanded-chat-stream {
+    padding: 24px;
+    gap: 24px;
+  }
+  .expanded-today {
+    padding: 6px 18px;
+    font-size: 16px;
+  }
+  .expanded-message > p,
+  .expanded-message > div {
+    width: min(395px, 86%);
+    padding: 18px;
+    border-radius: 24px 24px 24px 6px;
+    font-size: 22px;
+    line-height: 30px;
+  }
+  .expanded-message.ai > div {
+    border-radius: 24px 24px 6px 24px;
+  }
+  .expanded-message.ai strong {
+    font-size: 16px;
+  }
+  .expanded-message.ai p {
+    font-size: 22px;
+  }
+  .expanded-message time {
+    font-size: 16px;
+  }
+  .expanded-composer {
+    padding: 18px 24px 12px;
+    gap: 12px;
+  }
+  .expanded-handoff {
+    padding: 18px;
+    border-radius: 22px;
+    gap: 12px;
+  }
+  .expanded-handoff > div span {
+    padding: 6px 12px;
+    font-size: 14px;
+  }
+  .expanded-handoff time {
+    font-size: 15px;
+  }
+  .expanded-handoff p {
+    font-size: 17px;
+    line-height: 25px;
+  }
+  .expanded-handoff section {
+    gap: 12px;
+  }
+  .expanded-handoff button {
+    padding: 10px 16px;
+    border-radius: 13px;
+    font-size: 16px;
+  }
+  .expanded-composer form {
+    min-height: 280px;
+    padding: 30px 42px 24px;
+    border-radius: 48px;
+    gap: 12px;
+  }
+  .expanded-composer textarea {
+    min-height: 70px;
+    font-size: 40px;
+  }
+  .expanded-composer form button {
+    width: 60px;
+    height: 60px;
+  }
+  .expanded-composer form > div > button img {
+    width: 42px;
+    height: 42px;
+  }
+  .expanded-composer form > div > div {
+    gap: 30px;
+  }
+  .expanded-composer .submit-message {
+    width: 102px;
+    height: 102px;
+    flex-basis: 102px;
+  }
+  .expanded-composer .submit-message span {
+    width: 36px;
+    height: 36px;
+    border-radius: 9px;
   }
 }
 

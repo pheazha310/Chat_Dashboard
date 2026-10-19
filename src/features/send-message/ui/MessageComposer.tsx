@@ -64,7 +64,7 @@ export default function MessageComposer({ conversationId }: { conversationId: st
             <AssetIcon src={assets.icons.mic} size={18} />
           </button>
           <button className="submit-message" type="submit" aria-label="Send message" disabled={!draft.trim()}>
-            <AssetIcon src={assets.settings.send} size={16} />
+            <span />
           </button>
         </div>
       </div>
