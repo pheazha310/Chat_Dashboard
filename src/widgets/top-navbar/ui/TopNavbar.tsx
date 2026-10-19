@@ -3,27 +3,27 @@ import { isMockTransport, simulateDisconnect, useConnectionStore } from "@/share
 import { assets } from "@/shared/config";
 import { AssetIcon, IconButton, notify } from "@/shared/ui";
 
-function ConnectionPill() {
-  const status = useConnectionStore((state) => state.status);
-  const label =
-    status === "open"
-      ? "Live"
-      : status === "idle"
-        ? "Offline"
-        : status === "connecting"
-          ? "Connecting…"
-          : "Reconnecting…";
-  // return (
-  //   <button
-  //     className={`connection-pill ${status}`}
-  //     onClick={isMockTransport ? simulateDisconnect : undefined}
-  //     title={isMockTransport ? "Mock server — click to simulate a dropped connection" : "WebSocket connection"}
-  //   >
-  //     <i />
-  //     {label}
-  //   </button>
-  // );
-}
+// function ConnectionPill() {
+//   const status = useConnectionStore((state) => state.status);
+//   const label =
+//     status === "open"
+//       ? "Live"
+//       : status === "idle"
+//         ? "Offline"
+//         : status === "connecting"
+//           ? "Connecting…"
+//           : "Reconnecting…";
+//   return (
+//     <button
+//       className={`connection-pill ${status}`}
+//       onClick={isMockTransport ? simulateDisconnect : undefined}
+//       title={isMockTransport ? "Mock server — click to simulate a dropped connection" : "WebSocket connection"}
+//     >
+//       <i />
+//       {label}
+//     </button>
+//   );
+// }
 
 export default function TopNavbar({ onOpenInbox }: { onOpenInbox: () => void }) {
   const query = useConversationStore((state) => state.query);
@@ -44,7 +44,7 @@ export default function TopNavbar({ onOpenInbox }: { onOpenInbox: () => void }) 
         />
       </label>
       <div className="top-actions">
-        <ConnectionPill />
+        {/* <ConnectionPill /> */}
         <IconButton className="circle-action" icon={assets.icons.message} label="Messages" onClick={onOpenInbox} />
         <button
           className="circle-action notification"
