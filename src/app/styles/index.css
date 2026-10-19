@@ -68,7 +68,7 @@ button {
 }
 .top-navbar {
   height: 72px;
-  padding: 0 20px 0 24px;
+  padding: 0 20px;
   background: rgba(255, 255, 255, 0.9);
   border-bottom: 1px solid #e7e9ee;
   display: flex;
@@ -212,11 +212,11 @@ button {
 }
 
 .workspace {
-  height: calc(100vh - 55px);
-  min-height: 665px;
+  height: calc(100vh - 72px);
+  min-height: 648px;
   padding: 18px 15px 16px;
   display: grid;
-  grid-template-columns: minmax(310px, 393px) minmax(480px, 589px) minmax(350px, 493px);
+  grid-template-columns: minmax(310px, 1fr) minmax(480px, 1.5fr) minmax(350px, 1.25fr);
   gap: 15px;
   background: #f4f5f7;
 }
@@ -1752,7 +1752,7 @@ button {
 .applications-topbar {
   height: 55px;
   flex: 0 0 55px;
-  padding: 0 19px 0 32px;
+  padding: 0 20px;
   border-bottom: 1px solid #e2e8f0;
   background: white;
   display: flex;
@@ -2728,11 +2728,11 @@ button {
   .applications-topbar {
     padding: 0 12px;
   }
-  .applications-topbar > label {
-    width: min(250px, 55vw);
-  }
-  .applications-topbar > div button {
+  .applications-topbar > div {
     display: none;
+  }
+  .applications-topbar > label {
+    width: 100%;
   }
   .applications-content {
     padding: 16px 12px;
@@ -2753,7 +2753,7 @@ button {
     width: 100%;
   }
   .expanded-chat {
-    inset: 65px 10px 15px;
+    inset: 55px 10px 15px;
     width: auto;
     height: auto;
     border-radius: 20px;
@@ -2772,9 +2772,6 @@ button {
   .top-navbar {
     padding: 0 10px;
     gap: 8px;
-  }
-  .global-search {
-    max-width: 200px;
   }
   .top-actions .circle-action {
     display: none;
@@ -2959,7 +2956,7 @@ button {
     gap: 12px;
   }
   .top-navbar {
-    padding: 0 18px 0 22px;
+    padding: 0 18px;
   }
   .global-search {
     width: 320px;
@@ -2983,7 +2980,7 @@ button {
     position: fixed;
     z-index: 40;
     right: 14px;
-    top: 70px;
+    top: 72px;
     bottom: 16px;
     width: 460px;
     transform: translateX(calc(100% + 30px));
@@ -3020,8 +3017,7 @@ button {
     display: none;
   }
   .workspace {
-    height: calc(100vh - 55px);
-    min-height: 565px;
+    min-height: 545px;
     padding: 10px;
     display: block;
   }
@@ -3034,7 +3030,7 @@ button {
     position: fixed;
     z-index: 50;
     left: 10px;
-    top: 65px;
+    top: 72px;
     bottom: 10px;
     width: min(393px, calc(100vw - 20px));
     transform: translateX(calc(-100% - 20px));
@@ -3048,7 +3044,7 @@ button {
     display: block;
   }
   .context-column {
-    top: 65px;
+    top: 72px;
     right: 10px;
     bottom: 10px;
     width: min(460px, calc(100vw - 20px));
@@ -3057,7 +3053,7 @@ button {
     display: block;
     position: fixed;
     z-index: 30;
-    inset: 55px 0 0;
+    inset: 72px 0 0;
     border: 0;
     background: rgba(17, 24, 39, 0.25);
     backdrop-filter: blur(2px);
