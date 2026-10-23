@@ -24,10 +24,16 @@ export function startRealtime() {
     ),
     wsClient.on("conversation.updated", ({ conversation }) => {
       const store = conversations.getState();
-      // The agent is looking at this chat, so incoming messages count as read.
       const viewing = store.selectedId === conversation.id && conversation.unread > 0;
       store.upsert(viewing ? { ...conversation, unread: 0 } : conversation);
       if (viewing) wsClient.send("conversation.read", { conversationId: conversation.id });
+    }),
+    wsClient.on("conversation.assigned", ({ conversationId, agent }) => {
+      const store = conversations.getState();
+      const conversation = store.byId[conversationId];
+      if (!conversation) return;
+      store.upsert({ ...conversation, handoff: "assigned", assignedAgent: agent });
+      notify(`Conversation assigned to ${agent.name}`);
     }),
     wsClient.on("notice", ({ text }) => notify(text)),
   ];

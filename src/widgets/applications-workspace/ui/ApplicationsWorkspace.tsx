@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { MessageSettingsDialog } from "@/features/message-settings";
 import { assets } from "@/shared/config";
-import { AssetIcon, IconButton, notify } from "@/shared/ui";
+import { AssetIcon, IconButton, notify, Icon } from "@/shared/ui";
 import ApplicationsNav from "./ApplicationsNav";
 import ApplicationsTable, { type ApplicationRow, type ApplicationStatus } from "./ApplicationsTable";
 import ExpandedChat from "./ExpandedChat";
@@ -78,7 +78,7 @@ export default function ApplicationsWorkspace({ onClose }: { onClose: () => void
           <div className="status-tabs">
             {statusTabs.map(([label, count, icon]) => (
               <button className={activeTab === label ? "active" : ""} onClick={() => setActiveTab(label)} key={label}>
-                <img src={icon} alt="" />
+                <Icon src={icon} alt="" />
                 <span>{label}</span>
                 <small>{count}</small>
                 {label !== "Paid Off" && <span className="tab-chevron">⌄</span>}

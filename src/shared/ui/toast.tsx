@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { useEffect, useRef } from "react";
 import { assets } from "@/shared/config";
+import Icon from "./Icon";
 
 export type ToastType = "info" | "success" | "warning" | "error";
 
@@ -55,7 +56,7 @@ export function Toaster() {
   return toasts.map((toast) => (
     <div key={toast.id} className={`prototype-toast toast-${toast.type}`} role="status">
       <ToastTimer id={toast.id} />
-      <img className="toast-icon" src={TOAST_ICON[toast.type]} alt="" />
+      <Icon className="toast-icon" src={TOAST_ICON[toast.type]} alt="" />
       <span className="toast-text">{toast.message}</span>
       <button
         type="button"

@@ -184,7 +184,7 @@ button {
   height: 40px;
   position: relative;
 }
-.profile-action > img {
+.profile-action > :is(img, svg) {
   width: 40px;
   height: 40px;
   border-radius: 50%;
@@ -253,7 +253,7 @@ button {
   height: 31px;
   position: relative;
 }
-.sidebar-actions img {
+.sidebar-actions > :is(img, svg, .icon-pill) {
   width: 100px;
   height: 31px;
   display: block;
@@ -412,7 +412,7 @@ button {
   gap: 12px;
   min-width: 0;
 }
-.chat-identity > img {
+.chat-identity > :is(img, svg) {
   width: 40px;
   height: 40px;
   border-radius: 50%;
@@ -458,8 +458,8 @@ button {
   font-family: "Inter:Regular";
   font-size: 12px;
 }
-.chat-identity p img,
-.customer-name p img {
+.chat-identity p :is(img, svg),
+.customer-name p :is(img, svg) {
   width: 6px;
   height: 6px;
 }
@@ -901,7 +901,7 @@ button {
   align-items: center;
   gap: 12px;
 }
-.customer-name > img {
+.customer-name > :is(img, svg) {
   width: 40px;
   height: 40px;
   object-fit: cover;
@@ -976,7 +976,9 @@ button {
 .context-divider {
   width: 100%;
   height: 1px;
-  object-fit: fill;
+  margin: 0;
+  border: 0;
+  background: #e5e7eb;
 }
 .history-card,
 .summary-card {
@@ -1069,7 +1071,7 @@ button {
   font-size: 13px;
   line-height: 1.5;
 }
-.summary-card > img {
+.summary-card > :is(img, svg) {
   width: 100%;
   height: auto;
   display: block;
@@ -1569,7 +1571,7 @@ button {
   align-items: center;
   gap: 12px;
 }
-.settings-row-main > img {
+.settings-row-main > :is(img, svg) {
   width: 20px;
   height: 20px;
   flex: 0 0 auto;
@@ -1601,7 +1603,19 @@ button {
   flex: 0 0 auto;
 }
 .figma-toggle {
+  position: relative;
   display: block;
+  border-radius: 11px;
+  background: #0084ff;
+}
+.figma-toggle i {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: white;
 }
 .settings-toggle-off {
   padding: 2px;
@@ -1625,6 +1639,18 @@ button {
   width: 100%;
   height: 1px;
   display: block;
+  background: #f3f4f6;
+}
+.icon-pill {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  border: 1px solid #d4d4d4;
+  border-radius: 999px;
+  background: #f3f4f6;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+  color: #000;
 }
 @keyframes settings-in {
   from {
@@ -1660,7 +1686,7 @@ button {
   overflow: hidden;
   margin-bottom: 24px;
 }
-.delight-logo img {
+.delight-logo :is(img, svg) {
   position: absolute;
   width: 116%;
   height: 571%;
@@ -1707,7 +1733,7 @@ button {
   background: #053cc7;
   color: white;
 }
-.applications-nav-item > img {
+.applications-nav-item > :is(img, svg) {
   width: 20px;
   height: 20px;
   flex: 0 0 auto;
@@ -1794,7 +1820,7 @@ button {
   display: grid;
   place-items: center;
 }
-.applications-topbar > div > img {
+.applications-topbar > div > :is(img, svg) {
   width: 40px;
   height: 40px;
   border-radius: 50%;
@@ -1843,7 +1869,7 @@ button {
   color: #1f2937;
   font-family: "Inter:Semi Bold";
 }
-.status-tabs button img {
+.status-tabs button :is(img, svg) {
   width: 8px;
   height: 8px;
 }
@@ -2013,7 +2039,7 @@ button {
   align-items: center;
   gap: 6px;
 }
-.customer-cell img {
+.customer-cell :is(img, svg) {
   width: 24px;
   height: 24px;
   border-radius: 50%;
@@ -2133,8 +2159,8 @@ button {
   color: #15803d;
   background: #ecfdf5;
 }
-.occupation-badge img,
-.safe-badge img {
+.occupation-badge :is(img, svg),
+.safe-badge :is(img, svg) {
   width: 6px;
   height: 6px;
 }
@@ -2323,7 +2349,7 @@ button {
   color: #4b5563;
   font-size: 12px;
 }
-.expanded-chat > header span img {
+.expanded-chat > header span :is(img, svg) {
   width: 6px;
   height: 6px;
 }
@@ -2538,7 +2564,7 @@ button {
   width: 100px;
   height: 31px;
 }
-.expanded-list-actions img {
+.expanded-list-actions > :is(img, svg, .icon-pill) {
   width: 100px;
   height: 31px;
   display: block;
@@ -2608,7 +2634,7 @@ button {
 .expanded-conversation:hover {
   background: #f8fafc;
 }
-.expanded-conversation > img {
+.expanded-conversation > :is(img, svg) {
   width: 44px;
   height: 44px;
   flex: 0 0 auto;
@@ -2853,7 +2879,7 @@ button {
     gap: 6px;
     font-size: 18px;
   }
-  .expanded-chat > header span img {
+  .expanded-chat > header span :is(img, svg) {
     width: 8px;
     height: 8px;
   }
@@ -2931,7 +2957,7 @@ button {
     width: 60px;
     height: 60px;
   }
-  .expanded-composer form > div > button img {
+  .expanded-composer form > div > button :is(img, svg) {
     width: 42px;
     height: 42px;
   }
@@ -3408,7 +3434,7 @@ button {
     width: 34px;
     height: 34px;
   }
-  .profile-action > img {
+  .profile-action > :is(img, svg) {
     width: 34px;
     height: 34px;
   }
@@ -3421,7 +3447,7 @@ button {
     width: 38px;
     height: 38px;
   }
-  .chat-identity > img {
+  .chat-identity > :is(img, svg) {
     width: 34px;
     height: 34px;
   }

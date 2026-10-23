@@ -5,7 +5,7 @@ import { usePrivacyStore } from "@/features/privacy-controls";
 import { ChatSearchBar, filterByQuery, useChatSearchStore } from "@/features/search-in-chat";
 import { MessageComposer, useComposerStore } from "@/features/send-message";
 import { assets } from "@/shared/config";
-import { AssetIcon, IconButton, notify } from "@/shared/ui";
+import { AssetIcon, IconButton, notify, Icon } from "@/shared/ui";
 import HandoffCard from "./HandoffCard";
 
 const PRESENCE = {
@@ -52,7 +52,7 @@ export default function ChatWindow({ onOpenContext }: { onOpenContext: () => voi
               {conversation.unread > 0 && <span className="message-pill">{conversation.unread} messages</span>}
             </div>
             <p>
-              <img src={assets.icons.online} alt="" /> {PRESENCE[conversation.handoff]}
+              <Icon src={assets.icons.online} alt="" /> {PRESENCE[conversation.handoff]}
             </p>
           </div>
         </div>

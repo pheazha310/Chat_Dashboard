@@ -1,5 +1,5 @@
 import { assets } from "@/shared/config/assets";
-import type { ChatMessageDto, ConversationDto } from "../protocol";
+import type { ApplicationStatus, ChatMessageDto, ConversationDto } from "../protocol";
 
 /** ISO timestamp for `hh:mm` today (dayOffset 0) or on an earlier day. */
 const at = (time: string, dayOffset = 0) => {
@@ -10,7 +10,7 @@ const at = (time: string, dayOffset = 0) => {
   return date.toISOString();
 };
 
-const application = (appId: string, reference: string, status = "in progress") => ({
+const application = (appId: string, reference: string, status: ApplicationStatus = "in progress") => ({
   appId,
   product: "Instant Cash",
   amount: "$500",
@@ -23,6 +23,7 @@ export function seedConversations(): ConversationDto[] {
   return [
     {
       id: "maya",
+      customerId: "cust-maya",
       name: "Maya Chen",
       avatar: assets.users.mayaList,
       preview: "CM repayment schedule needs review",
@@ -60,6 +61,7 @@ export function seedConversations(): ConversationDto[] {
     },
     {
       id: "gyna",
+      customerId: "cust-gyna",
       name: "Gyna Catherine",
       avatar: assets.users.gyna,
       preview: "Can I upload a bank statement?",
@@ -73,19 +75,27 @@ export function seedConversations(): ConversationDto[] {
     },
     {
       id: "nayla",
+      customerId: "cust-nayla",
       name: "Nayla Sari",
       avatar: assets.users.nayla,
       preview: "Human agent requested",
       lastMessageAt: at("09:24"),
       unread: 0,
       urgent: true,
-      handoff: "needs-human",
+      handoff: "assigned",
+      assignedAgent: {
+        id: "agent-1",
+        name: "Sarah Chen",
+        avatar: assets.users.agent,
+        email: "sarah.chen@example.com",
+      },
       application: application("61833", "LUL-61833-NAYLA"),
       summary: "Nayla asked to speak with a human agent.",
       activity: [],
     },
     {
       id: "raditya",
+      customerId: "cust-raditya",
       name: "Raditya Rasyid",
       avatar: assets.users.raditya,
       preview: "Sent voice note about repayment",
@@ -99,6 +109,7 @@ export function seedConversations(): ConversationDto[] {
     },
     {
       id: "arlene",
+      customerId: "cust-arlene",
       name: "Arlene Lily",
       avatar: assets.users.arlene,
       preview: "Wants to change repayment date",
@@ -112,6 +123,7 @@ export function seedConversations(): ConversationDto[] {
     },
     {
       id: "jacob",
+      customerId: "cust-jacob",
       name: "Jacob Jones",
       avatar: assets.users.jacob,
       preview: "Missed callback on overdue case",
@@ -125,6 +137,7 @@ export function seedConversations(): ConversationDto[] {
     },
     ...["ananda-1", "ananda-2", "ananda-3", "ananda-4"].map((id, index): ConversationDto => ({
       id,
+      customerId: `cust-ananda-${index}`,
       name: "Ananda Alodea",
       avatar: assets.users.ananda,
       preview: "Asked about disbursement timing",
@@ -169,6 +182,7 @@ export function seedMessages(conversations: ConversationDto[]): Record<string, C
         id: "maya-4",
         conversationId: "maya",
         side: "agent",
+        senderId: "agent-1",
         createdAt: at("09:12"),
         text: "Hi! You're chatting with a member of our team. Your application is still being reviewed, and your repayment date is set for the 30th. I've asked our customer management team to confirm the next steps for you.",
       },

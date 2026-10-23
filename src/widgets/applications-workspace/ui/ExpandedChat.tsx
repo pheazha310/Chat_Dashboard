@@ -5,7 +5,7 @@ import { sendMessage, useComposerStore, useDraft } from "@/features/send-message
 import { TakeOverButton } from "@/features/take-over-conversation";
 import { assets } from "@/shared/config";
 import { formatClock } from "@/shared/lib/format-time";
-import { AssetIcon, IconButton, notify } from "@/shared/ui";
+import { AssetIcon, IconButton, notify, Icon, IconPill } from "@/shared/ui";
 
 export default function ExpandedChat({ onBack }: { onBack: () => void }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -147,11 +147,11 @@ export default function ExpandedChat({ onBack }: { onBack: () => void }) {
         <div>
           <strong>{conversation?.name ?? "LAY Vila"}</strong>
           <span>
-            <img src={assets.zoom.online} alt="" />
+            <Icon src={assets.zoom.online} alt="" />
             Active
           </span>
         </div>
-        <img className="expanded-chat-actions" src={assets.zoom.chatActions} alt="" />
+        <IconPill className="expanded-chat-actions" left="call" right="more" />
       </header>
       <div className="expanded-chat-stream">
         <span className="expanded-today">Today</span>
@@ -240,7 +240,7 @@ export default function ExpandedChat({ onBack }: { onBack: () => void }) {
           )}
           <div>
             <button type="button" onClick={() => fileInputRef.current?.click()} aria-label="Add attachment">
-              <img src={assets.icons.plus} alt="" />
+              <Icon src={assets.icons.plus} alt="" />
             </button>
             <input
               ref={fileInputRef}

@@ -1,4 +1,5 @@
 import { assets } from "@/shared/config";
+import { Icon } from "@/shared/ui";
 
 type Props = {
   icon: string;
@@ -29,7 +30,7 @@ export default function SettingsRow({
         {...(onToggle ? { role: "switch", "aria-checked": !!enabled } : {})}
       >
         <span className="settings-row-main">
-          <img src={icon} alt="" />
+          <Icon src={icon} alt="" />
           <span>
             <strong>{title}</strong>
             <small>{description}</small>
@@ -37,17 +38,17 @@ export default function SettingsRow({
         </span>
         {onToggle ? (
           enabled ? (
-            <img className="figma-toggle" src={assets.settings.toggle} alt="" />
+            <span className="figma-toggle"><i /></span>
           ) : (
             <span className="settings-toggle-off">
               <i />
             </span>
           )
         ) : (
-          chevron && <img className="settings-chevron" src={chevron} alt="" />
+          chevron && <Icon className="settings-chevron" src={chevron} alt="" />
         )}
       </button>
-      {!last && <img className="settings-divider" src={assets.settings.divider} alt="" />}
+      {!last && <span className="settings-divider" role="separator" />}
     </div>
   );
 }

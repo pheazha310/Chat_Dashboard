@@ -4,7 +4,7 @@ import { useMessageSettingsStore } from "@/features/message-settings";
 import { selectConversation } from "@/features/select-conversation";
 import { assets } from "@/shared/config";
 import { formatListTime } from "@/shared/lib/format-time";
-import { AssetIcon, notify } from "@/shared/ui";
+import { AssetIcon, notify, Icon, IconPill } from "@/shared/ui";
 
 type Props = { onClose: () => void; onOpened: () => void };
 
@@ -28,7 +28,7 @@ export default function ExpandedMessageList({ onClose, onOpened }: Props) {
       <header>
         <h2>Message</h2>
         <div className="expanded-list-actions">
-          <img src={assets.zoom.backPanelActions} alt="" />
+          <IconPill left="collapse" right="more" />
           <button
             type="button"
             className="collapse-hit"

@@ -1,0 +1,330 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ──────────────────────────────────────────────────────────────────
+
+/// Tracks the escalation state of a conversation between AI and human agents.
+/// Maps to HandoffStatus in protocol.ts: "ai" | "needs-human" | "assigned"
+enum HandoffStatus {
+  AI
+  NEEDS_HUMAN
+  ASSIGNED
+}
+
+/// Identifies who sent a message.
+/// Maps to MessageSide in protocol.ts: "customer" | "assistant" | "agent"
+enum MessageSide {
+  CUSTOMER
+  ASSISTANT
+  AGENT
+}
+
+/// Delivery/read status of a message (mirrors DeliveryStatus in protocol.ts).
+enum DeliveryStatus {
+  SENDING
+  SENT
+  DELIVERED
+  READ
+  FAILED
+}
+
+/// Visual tone for activity timeline entries (maps to ActivityDto.tone).
+enum ActivityTone {
+  BLUE
+  CYAN
+  RED
+}
+
+/// Application lifecycle status (consolidates ApplicationStatus from
+/// ApplicationsTable.tsx and the status string on ConversationDto.application).
+enum ApplicationStatus {
+  NEW
+  REVIEWING
+  COMPLETED
+  FAILED
+  PAID_OFF
+  IN_PROGRESS
+  OVERDUE
+}
+
+/// File classification in the media/shared-files panel.
+enum FileKind {
+  DOCUMENT
+  IMAGE
+}
+
+/// Role of an agent within an assignment (owner vs. read-only observer).
+enum AssignmentRole {
+  OWNER
+  VIEWER
+}
+
+/// Category of a system notification delivered to an agent.
+enum NotificationType {
+  NEW_CONVERSATION
+  HANDOFF
+  CALLBACK
+  MENTION
+  SYSTEM
+}
+
+// ─── Core Entities ──────────────────────────────────────────────────────────
+
+/// A customer who has applied for a loan and may be chatting with agents.
+/// Customer fields (name, avatar) currently live on ConversationDto and are
+/// duplicated in the ApplicationsTable; this table normalizes them.
+model Customer {
+  id          String       @id @default(uuid())
+  name        String
+  avatar      String?      /// URL to avatar image (was ConversationDto.avatar)
+  email       String?
+  phone       String?      /// Phone Number column in ApplicationsTable
+  nationalId  String?      /// NID column in ApplicationsTable
+  salary      String?      /// Salary column in ApplicationsTable
+  occupation  String?      /// Occupation column in ApplicationsTable
+  blacklisted Boolean      @default(false) /// Blacklist column in ApplicationsTable
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  applications  Application[]
+  conversations Conversation[]
+  messages      Message[]
+  files         SharedFile[]
+
+  @@index([phone])
+  @@index([blacklisted])
+}
+
+/// A support agent (or supervisor) who handles conversations.
+/// Currently implicit: the "agent" side of ChatMessageDto and the
+/// conversation.takeover flow; this table makes agents first-class.
+model Agent {
+  id        String   @id @default(uuid())
+  name      String
+  avatar    String?
+  email     String?  @unique
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  assignedConversations AgentConversation[]
+  messages              Message[]
+  activities            Activity[]
+  notifications         Notification[]
+  settings              Setting[]
+
+  @@index([active])
+}
+
+/// A loan application filed by a customer.
+/// ConversationDto.application is an embedded object; this table normalizes it
+/// and adds fields needed by the ApplicationsTable (registered, completeness, etc.).
+model Application {
+  id          String            @id @default(uuid())
+  appId       String            @unique /// e.g. "61831" (was ConversationDto.application.appId)
+  customerId  String?
+  reference   String            @unique /// e.g. "LUL-61831-MAYA"
+  product     String            /// e.g. "Instant Cash"
+  amount      String            /// e.g. "$500"
+  tenor       String            /// e.g. "30 days"
+  loanRequest String?           /// Loan Request column in ApplicationsTable
+  completeness String?          /// Completeness column in ApplicationsTable
+  status      ApplicationStatus
+  registeredAt DateTime?        /// Registered Date column in ApplicationsTable
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  customer     Customer?     @relation(fields: [customerId], references: [id])
+  conversation Conversation?
+  files        SharedFile[]
+
+  @@index([status])
+  @@index([customerId])
+}
+
+/// A chat conversation between a customer and one or more agents/AI.
+/// ConversationDto is a denormalized view composed from this table +
+/// Customer + Application + Activity[].
+model Conversation {
+  id            String       @id /// e.g. "maya", "gyna" (kept as external slug for WS compat)
+  customerId    String?
+  applicationId String?      @unique /// 1:1 to Application (ConversationDto.application)
+  preview       String       /// Last message preview (ConversationDto.preview)
+  lastMessageAt DateTime     /// ConversationDto.lastMessageAt
+  unreadCount   Int          @default(0) /// ConversationDto.unread
+  urgent        Boolean      @default(false) /// ConversationDto.urgent
+  handoff       HandoffStatus @default(AI) /// ConversationDto.handoff
+  assignedAgentId String?    /// Currently assigned agent (HandoffStatus.ASSIGNED)
+  summary       String?      /// ConversationDto.summary
+  summaryImage  String?      /// ConversationDto.summaryImage
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  customer          Customer?          @relation(fields: [customerId], references: [id])
+  application       Application?       @relation(fields: [applicationId], references: [id])
+  assignedAgent     Agent?             @relation("AssignedConversations", fields: [assignedAgentId], references: [id])
+  messages          Message[]
+  activities        Activity[]
+  agentAssignments  AgentConversation[]
+  files             SharedFile[]
+
+  @@index([handoff])
+  @@index([unreadCount])
+  @@index([lastMessageAt])
+  @@index([urgent, handoff])
+}
+
+/// An individual message within a conversation.
+/// Maps to ChatMessageDto; senderId is polymorphic (customer or agent).
+/// For ASSISTANT messages (AI), both sender IDs are NULL.
+model Message {
+  id            String        @id /// e.g. "maya-1" or "c-<uuid>" for optimistic
+  conversationId String
+  senderType    MessageSide   @default(CUSTOMER)
+  senderCustomerId String?     /// FK to Customer when side is "customer"
+  senderAgentId  String?        /// FK to Agent when side is "agent"
+  text          String
+  status        DeliveryStatus? @default(SENT) /// ConversationDto.lastMessageAt
+  createdAt     DateTime      @default(now())
+
+  conversation    Conversation @relation(fields: [conversationId], references: [id])
+  customer        Customer?    @relation("CustomerMessages", fields: [senderCustomerId], references: [id])
+  agent           Agent?       @relation("AgentMessages", fields: [senderAgentId], references: [id])
+
+  @@index([conversationId, createdAt])
+  @@index([conversationId, status])
+}
+
+/// A timeline/activity event attached to a conversation.
+/// Maps to ActivityDto (tone, title, time, copy).
+model Activity {
+  id            String      @id /// e.g. "a1"
+  conversationId String
+  agentId       String?     /// Nullable — many activities are system/AI generated
+  tone          ActivityTone
+  title         String
+  time           String     /// Display time like "09:12" (kept as string for wire-format compat)
+  copy          String
+  createdAt     DateTime    @default(now())
+
+  conversation    Conversation @relation(fields: [conversationId], references: [id])
+  agent           Agent?       @relation(fields: [agentId], references: [id])
+
+  @@index([conversationId, createdAt])
+}
+
+/// Tracks the assignment history of agents to conversations.
+/// Every takeover / handoff creates a new row (closing the previous one).
+/// Enables audit of who owned which conversation and when.
+model AgentConversation {
+  id              String          @id @default(uuid())
+  agentId         String
+  conversationId  String
+  role            AssignmentRole  @default(OWNER)
+  assignedAt      DateTime        @default(now())
+  unassignedAt    DateTime?
+
+  agent           Agent           @relation(fields: [agentId], references: [id])
+  conversation    Conversation    @relation(fields: [conversationId], references: [id])
+
+  @@unique([agentId, conversationId, unassignedAt])
+  @@index([conversationId, assignedAt])
+}
+
+/// A file shared in a conversation (media, documents).
+/// SharedFile in share-files/model/store.ts is currently a disconnected local
+/// store; this table links files to conversations, customers, and applications.
+model SharedFile {
+  id            String   @id @default(uuid())
+  conversationId String
+  customerId    String
+  applicationId String?
+  name          String
+  kind          FileKind
+  size          String   /// e.g. "1.8 MB"
+  url           String   /// Storage URL for download
+  addedAt       String   /// Display timestamp like "Today, 09:06"
+  createdAt     DateTime @default(now())
+
+  conversation    Conversation @relation(fields: [conversationId], references: [id])
+  customer        Customer     @relation(fields: [customerId], references: [id])
+  application     Application? @relation(fields: [applicationId], references: [id])
+
+  @@index([conversationId])
+  @@index([customerId])
+}
+
+/// A persistent agent/user preference (settings).
+/// Message settings and privacy controls currently live only in Zustand stores.
+model Setting {
+  id        String   @id @default(uuid())
+  agentId   String
+  key       String   /// e.g. "conversationAlerts", "readReceipts", "aiReplies"
+  value     Boolean  @default(false)
+  updatedAt DateTime @updatedAt
+
+  agent     Agent    @relation(fields: [agentId], references: [id])
+
+  @@unique([agentId, key])
+}
+
+/// A system notification for an agent.
+/// The Notifications feature (features/notifications/) is a placeholder;
+/// this table backs it with persisted, queryable data.
+model Notification {
+  id        String          @id @default(uuid())
+  agentId   String
+  type      NotificationType @default(SYSTEM)
+  text      String
+  read      Boolean         @default(false)
+  createdAt DateTime        @default(now())
+
+  agent     Agent           @relation(fields: [agentId], references: [id])
+
+  @@index([agentId, read])
+  @@index([createdAt])
+}
+
+// ─── Views (documented, not managed by Prisma) ─────────────────────────────
+
+/// The WebSocket `sync` event returns `ConversationDto[]`, a denormalized view.
+/// In Postgres this can be expressed as a materialized view:
+///
+/// ```sql
+/// CREATE MATERIALIZED VIEW conversation_dto AS
+/// SELECT
+///   c.id,
+///   cu.name,
+///   cu.avatar   AS avatar,
+///   c.preview,
+///   c."lastMessageAt"      AS "lastMessageAt",
+///   c."unreadCount"        AS unread,
+///   c.urgent,
+///   c.handoff,
+///   jsonb_build_object(
+///     'appId',     a."appId",
+///     'product',   a.product,
+///     'amount',    a.amount,
+///     'tenor',     a.tenor,
+///     'status',    a.status,
+///     'reference', a.reference
+///   ) AS application,
+///   (SELECT jsonb_agg(jsonb_build_object(
+///     'id',    act.id,
+///     'tone',  act.tone,
+///     'title', act.title,
+///     'time',  act.time,
+///     'copy',  act.copy
+///   )) FROM "Activity" act WHERE act."conversationId" = c.id) AS activity,
+///   c.summary,
+///   c."summaryImage" AS "summaryImage"
+/// FROM "Conversation" c
+/// LEFT JOIN "Customer" cu ON cu.id = c."customerId"
+/// LEFT JOIN "Application" a ON a.id = c."applicationId";
+/// ```

@@ -5,8 +5,22 @@ const make = (id: string, overrides: Partial<Conversation> = {}): Conversation =
   ({
     id,
     name: id,
+    avatar: "/assets/avatar.png",
+    preview: "",
     lastMessageAt: "2026-01-01T09:00:00Z",
     unread: 0,
+    urgent: false,
+    handoff: "ai",
+    application: {
+      appId: "61801",
+      product: "Instant Cash",
+      amount: "$500",
+      tenor: "30 days",
+      status: "in progress",
+      reference: "REF-001",
+    },
+    activity: [],
+    summary: "",
     ...overrides,
   }) as Conversation;
 

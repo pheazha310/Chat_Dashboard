@@ -1,5 +1,5 @@
 import { assets } from "@/shared/config";
-import { AssetIcon, IconButton, notify } from "@/shared/ui";
+import { AssetIcon, IconButton, notify, Icon } from "@/shared/ui";
 
 export type ApplicationStatus = "New" | "Reviewing" | "Completed" | "Failed" | "Paid Off";
 export type ApplicationRow = { id: number; status: ApplicationStatus; occupation: string };
@@ -146,13 +146,13 @@ export default function ApplicationsTable({ rows, query, onQueryChange, onOpenCh
                 </td>
                 <td>
                   <span className="occupation-badge">
-                    <img src={assets.zoom.employee} alt="" />
+                    <Icon src={assets.zoom.employee} alt="" />
                     {row.occupation}
                   </span>
                 </td>
                 <td>
                   <span className="safe-badge">
-                    <img src={assets.zoom.safe} alt="" />
+                    <Icon src={assets.zoom.safe} alt="" />
                     Not Listed
                   </span>
                 </td>

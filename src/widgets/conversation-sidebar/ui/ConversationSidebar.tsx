@@ -3,7 +3,7 @@ import { ConversationItem, useConversationStore } from "@/entities/conversation"
 import { selectConversation } from "@/features/select-conversation";
 import { useMessageSettingsStore } from "@/features/message-settings";
 import { assets } from "@/shared/config";
-import { AssetIcon } from "@/shared/ui";
+import { AssetIcon, Icon, IconPill } from "@/shared/ui";
 
 type Props = { open: boolean; onClose: () => void; onExpand: () => void };
 
@@ -27,7 +27,7 @@ export default function ConversationSidebar({ open, onClose, onExpand }: Props) 
       <div className="sidebar-title">
         <h1>Message</h1>
         <div className="sidebar-actions">
-          <img src={assets.icons.sidebarActions} alt="" />
+          <IconPill left="more" right="collapse" />
           <button className="settings-hit" onClick={() => openSettings(true)} aria-label="Open message settings" />
           <button className="zoom-hit" onClick={onExpand} aria-label="Open expanded applications workspace" />
         </div>

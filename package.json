@@ -17,6 +17,7 @@
     "check": "pnpm typecheck && pnpm lint && pnpm check:fsd && pnpm format:check && pnpm test"
   },
   "dependencies": {
+    "@iconify-react/material-symbols": "^1.0.32",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "zustand": "^5.0.15"

@@ -3,7 +3,7 @@ import { useSelectedConversation } from "@/entities/conversation";
 import { PrivacyPanel } from "@/features/privacy-controls";
 import { MediaFilesPanel } from "@/features/share-files";
 import { assets } from "@/shared/config";
-import { AssetIcon } from "@/shared/ui";
+import { AssetIcon, Icon } from "@/shared/ui";
 
 export default function CustomerContext({ open, onClose }: { open: boolean; onClose: () => void }) {
   const conversation = useSelectedConversation();
@@ -28,7 +28,7 @@ export default function CustomerContext({ open, onClose }: { open: boolean; onCl
               <div>
                 <h3>{conversation.name}</h3>
                 <p>
-                  <img src={assets.icons.online} alt="" /> App ID: {application.appId}
+                  <Icon src={assets.icons.online} alt="" /> App ID: {application.appId}
                 </p>
               </div>
             </div>
@@ -66,7 +66,7 @@ export default function CustomerContext({ open, onClose }: { open: boolean; onCl
               Privacy & support
             </button>
           </div>
-          <img className="context-divider" src={assets.icons.divider} alt="" />
+          <hr className="context-divider" />
 
           <section className="info-card history-card">
             <div className="card-heading">

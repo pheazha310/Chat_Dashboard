@@ -1,5 +1,5 @@
 import { assets } from "@/shared/config";
-import { notify } from "@/shared/ui";
+import { notify, Icon } from "@/shared/ui";
 
 export default function ApplicationsNav() {
   return (
@@ -49,9 +49,9 @@ function NavItem({
 }) {
   return (
     <button className={`applications-nav-item ${active ? "active" : ""}`} onClick={onClick}>
-      <img src={icon} alt="" />
+      <Icon src={icon} alt="" />
       <span>{label}</span>
-      {expanded && <img className="nav-chevron" src={assets.zoom.navChevron} alt="" />}
+      {expanded && <Icon className="nav-chevron" src={assets.zoom.navChevron} alt="" />}
     </button>
   );
 }

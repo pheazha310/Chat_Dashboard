@@ -60,11 +60,29 @@ export class MockLendingServer {
         return this.handleSend(payload.conversationId, payload.clientId, payload.text);
       case "conversation.read":
         return this.update(payload.conversationId, { unread: 0 });
-      case "conversation.takeover":
-        this.update(payload.conversationId, { handoff: "assigned", unread: 0 });
+      case "conversation.takeover": {
+        const conversation = this.find(payload.conversationId);
+        if (conversation) {
+          conversation.handoff = "assigned";
+          conversation.unread = 0;
+          conversation.assignedAgent = {
+            id: "agent-1",
+            name: "Sarah Chen",
+            avatar: "/assets/7691e.png",
+          };
+        }
+        this.broadcast("conversation.assigned", {
+          conversationId: payload.conversationId,
+          agent: {
+            id: "agent-1",
+            name: "Sarah Chen",
+            avatar: "/assets/7691e.png",
+          },
+        });
         return this.broadcast("notice", {
           text: "Conversation assigned to you",
         });
+      }
       case "callback.request": {
         const conversation = this.find(payload.conversationId);
         return this.broadcast("notice", {
