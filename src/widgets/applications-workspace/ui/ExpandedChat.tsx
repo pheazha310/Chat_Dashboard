@@ -151,7 +151,7 @@ export default function ExpandedChat({ onBack }: { onBack: () => void }) {
             Active
           </span>
         </div>
-        <IconPill className="expanded-chat-actions" left="call" right="more" />
+        <IconPill className="expanded-chat-actions" left="call" right="moreVert" />
       </header>
       <div className="expanded-chat-stream">
         <span className="expanded-today">Today</span>

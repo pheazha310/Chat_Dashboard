@@ -1,8 +1,9 @@
 import MoreHoriz from "@iconify-react/material-symbols/more-horiz";
 import ZoomInMap from "@iconify-react/material-symbols/zoom-in-map";
+import MoreVert from "@iconify-react/material-symbols/more-vert";
 import CallOutline from "@iconify-react/material-symbols/call-outline";
 
-const GLYPHS = { more: MoreHoriz, collapse: ZoomInMap, call: CallOutline } as const;
+const GLYPHS = { more: MoreHoriz, moreVert: MoreVert, collapse: ZoomInMap, call: CallOutline } as const;
 
 type IconPillProps = {
   left: keyof typeof GLYPHS;

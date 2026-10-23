@@ -1,13 +1,22 @@
-import { useState } from "react";
 import { useSelectedConversation } from "@/entities/conversation";
-import { PrivacyPanel } from "@/features/privacy-controls";
 import { MediaFilesPanel } from "@/features/share-files";
 import { assets } from "@/shared/config";
-import { AssetIcon, Icon } from "@/shared/ui";
+import { Icon } from "@/shared/ui";
 
-export default function CustomerContext({ open, onClose }: { open: boolean; onClose: () => void }) {
+type ContextView = "media" | null;
+
+export default function CustomerContext({
+  open,
+  view,
+  onViewChange,
+  onClose,
+}: {
+  open: boolean;
+  view: ContextView;
+  onViewChange: (view: ContextView) => void;
+  onClose: () => void;
+}) {
   const conversation = useSelectedConversation();
-  const [view, setView] = useState<"media" | "privacy" | null>(null);
   if (!conversation) return <aside className="context-column" />;
   const { application, activity } = conversation;
 
@@ -17,9 +26,7 @@ export default function CustomerContext({ open, onClose }: { open: boolean; onCl
         ×
       </button>
       {view === "media" ? (
-        <MediaFilesPanel customer={conversation.name} appId={application.appId} onBack={() => setView(null)} />
-      ) : view === "privacy" ? (
-        <PrivacyPanel reference={application.reference} onBack={() => setView(null)} />
+        <MediaFilesPanel customer={conversation.name} appId={application.appId} onBack={() => onViewChange(null)} />
       ) : (
         <>
           <div className="customer-card info-card">
@@ -52,22 +59,6 @@ export default function CustomerContext({ open, onClose }: { open: boolean; onCl
             </dl>
           </div>
 
-          <div className="context-actions">
-            <button type="button" onClick={() => setView("media")}>
-              <span>
-                <AssetIcon src={assets.icons.paperclip} />
-              </span>
-              Media & files
-            </button>
-            <button type="button" onClick={() => setView("privacy")}>
-              <span>
-                <AssetIcon src={assets.icons.shield} />
-              </span>
-              Privacy & support
-            </button>
-          </div>
-          <hr className="context-divider" />
-
           <section className="info-card history-card">
             <div className="card-heading">
               <h3>History & Activity</h3>
@@ -94,11 +85,7 @@ export default function CustomerContext({ open, onClose }: { open: boolean; onCl
               <h3>AI Summary</h3>
               <span>Generated</span>
             </div>
-            {conversation.summaryImage ? (
-              <img src={conversation.summaryImage} alt={conversation.summary} />
-            ) : (
-              <p>{conversation.summary}</p>
-            )}
+            <p>{conversation.summary}</p>
           </section>
         </>
       )}

@@ -28,7 +28,7 @@ export default function ExpandedMessageList({ onClose, onOpened }: Props) {
       <header>
         <h2>Message</h2>
         <div className="expanded-list-actions">
-          <IconPill left="collapse" right="more" />
+          <IconPill left="collapse" right="moreVert" />
           <button
             type="button"
             className="collapse-hit"

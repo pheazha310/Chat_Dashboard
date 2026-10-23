@@ -68,7 +68,8 @@ button {
 }
 .top-navbar {
   height: 72px;
-  padding: 0 20px;
+  padding: 0 24px;
+  gap: 16px;
   background: rgba(255, 255, 255, 0.9);
   border-bottom: 1px solid #e7e9ee;
   display: flex;
@@ -108,7 +109,7 @@ button {
 .top-actions {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 16px;
 }
 .connection-pill {
   display: inline-flex;
@@ -257,6 +258,30 @@ button {
   width: 100px;
   height: 31px;
   display: block;
+}
+.sidebar-actions > span.icon-pill,
+.expanded-list-actions > span.icon-pill {
+  position: relative;
+  display: flex;
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+}
+.sidebar-actions > .icon-pill > svg,
+.expanded-list-actions > .icon-pill > svg {
+  width: 24px;
+  height: 24px;
+}
+.sidebar-actions > .icon-pill::after,
+.expanded-list-actions > .icon-pill::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 1px;
+  height: 24px;
+  background: #d9dce1;
+  transform: translate(-50%, -50%);
 }
 .sidebar-actions button {
   position: absolute;
@@ -886,10 +911,11 @@ button {
   font-size: 25px;
 }
 .info-card {
-  border: 1px solid #e5e7eb;
-  border-radius: 16px;
+  border: 1.5px solid #e4e7ec;
+  border-radius: 20px;
   background: white;
-  padding: 16px;
+  padding: 18px;
+  box-shadow: 0 1px 3px rgba(16, 24, 40, 0.04);
 }
 .customer-card {
   display: flex;
@@ -987,9 +1013,7 @@ button {
   gap: 22px;
 }
 .history-card {
-  border: 2px solid #e4e7ec;
-  border-radius: 28px;
-  padding: 24px 22px;
+  gap: 16px;
 }
 .card-heading {
   display: flex;
@@ -1068,6 +1092,26 @@ button {
 .activity p {
   margin: 5px 0 0;
   color: #64748b;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.summary-card {
+  gap: 8px;
+}
+.summary-card .card-heading h3 {
+  color: #1f2124;
+  font-family: "Inter:Bold";
+  font-size: 14px;
+  letter-spacing: -0.2px;
+}
+.summary-card .card-heading span {
+  padding: 4px 10px;
+  color: #2f3441;
+  font-size: 11px;
+}
+.summary-card > p {
+  margin: 0;
+  color: #5f6368;
   font-size: 13px;
   line-height: 1.5;
 }
@@ -1525,9 +1569,10 @@ button {
   flex: 0 0 auto;
   padding: 4px 0;
   overflow: hidden;
-  border: 1px solid #e5e7eb;
-  border-radius: 16px;
+  border: 1.5px solid #e4e7ec;
+  border-radius: 20px;
   background: white;
+  box-shadow: 0 1px 3px rgba(16, 24, 40, 0.04);
 }
 .settings-card-heading {
   padding: 12px 16px;
@@ -1550,11 +1595,13 @@ button {
 }
 .settings-row {
   width: 100%;
-  min-height: 60px;
-  padding: 10px 16px;
+  min-height: 68px;
+  padding: 12px 18px;
   border: 0;
   background: white;
   color: #111827;
+  cursor: pointer;
+  transition: background 0.15s ease;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1562,18 +1609,21 @@ button {
   text-align: left;
 }
 .settings-row:hover {
-  background: #fafafa;
+  background: #f9fafb;
+}
+.settings-row:active {
+  background: #f3f4f6;
 }
 .settings-row-main {
   min-width: 0;
   flex: 1;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
 }
 .settings-row-main > :is(img, svg) {
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   flex: 0 0 auto;
 }
 .settings-row-main > span {
@@ -1634,12 +1684,14 @@ button {
   width: 14px;
   height: 14px;
   flex: 0 0 auto;
+  opacity: 0.55;
 }
 .settings-divider {
-  width: 100%;
+  width: auto;
   height: 1px;
   display: block;
-  background: #f3f4f6;
+  margin: 0 18px 0 54px;
+  background: #eef0f3;
 }
 .icon-pill {
   box-sizing: border-box;
@@ -1651,6 +1703,10 @@ button {
   background: #f3f4f6;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
   color: #000;
+}
+.icon-pill > svg {
+  flex: 0 0 auto;
+  display: block;
 }
 @keyframes settings-in {
   from {
@@ -2304,13 +2360,13 @@ button {
   background: #2563eb;
 }
 .expanded-chat > header {
-  height: 62px;
-  flex: 0 0 62px;
-  padding: 8px 16px 12px;
+  height: 70px;
+  flex: 0 0 70px;
+  padding: 12px 16px;
   border-bottom: 1px solid #e5e7eb;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
   cursor: grab;
   touch-action: none;
   user-select: none;
@@ -2349,23 +2405,41 @@ button {
   color: #4b5563;
   font-size: 12px;
 }
-.expanded-chat > header span :is(img, svg) {
+.expanded-chat > header span:not(.icon-pill) :is(img, svg) {
   width: 6px;
   height: 6px;
 }
 .expanded-chat-actions {
-  width: 94px;
-  height: 43px;
+  position: relative;
+  width: 96px;
+  height: 40px;
   margin-left: auto;
+  border: 0;
+  box-shadow: none;
+  background: #f3f4f6;
+}
+.expanded-chat-actions > svg {
+  width: 24px;
+  height: 24px;
+}
+.expanded-chat-actions::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 1px;
+  height: 28px;
+  background: #d9dce1;
+  transform: translate(-50%, -50%);
 }
 .expanded-chat-stream {
   flex: 1;
   min-height: 0;
-  padding: 16px;
+  padding: 20px 16px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 20px;
 }
 .expanded-today {
   align-self: center;
@@ -2384,10 +2458,10 @@ button {
 .expanded-message > div {
   width: 260px;
   margin: 0;
-  padding: 12px;
+  padding: 14px 16px;
   border-radius: 16px 16px 16px 4px;
   font-size: 14px;
-  line-height: 20px;
+  line-height: 1.5;
 }
 .expanded-message.customer > p {
   background: #2563eb;
@@ -2407,30 +2481,30 @@ button {
   font-size: 11px;
 }
 .expanded-message.ai p {
-  margin: 4px 0 0;
+  margin: 6px 0 0;
   color: #1f2937;
   font-size: 14px;
-  line-height: 1.4;
+  line-height: 1.5;
 }
 .expanded-message time {
   color: #9ca3af;
   font-size: 11px;
 }
 .expanded-composer {
-  padding: 12px 16px 8px;
+  padding: 16px;
   border-top: 1px solid #e5e7eb;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
 }
 .expanded-handoff {
-  padding: 12px;
+  padding: 16px;
   border: 1px solid #8b5cf6;
   border-radius: 16px;
   background: #f5edff;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
 }
 .expanded-handoff > div {
   display: flex;
@@ -2457,7 +2531,7 @@ button {
 }
 .expanded-handoff section {
   display: flex;
-  gap: 8px;
+  gap: 12px;
 }
 .expanded-handoff button {
   padding: 7px 12px;
@@ -2476,9 +2550,9 @@ button {
   color: #722ed1;
 }
 .expanded-composer form {
-  min-height: 92px;
+  min-height: 96px;
   height: auto;
-  padding: 12px 14px;
+  padding: 14px 16px;
   border: 1px solid #e5e7eb;
   border-radius: 18px;
   display: flex;
@@ -2497,6 +2571,7 @@ button {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
 }
 .expanded-composer form button {
   width: 30px;
@@ -2508,7 +2583,7 @@ button {
 }
 .expanded-composer form > div > div {
   display: flex;
-  gap: 8px;
+  gap: 12px;
 }
 .expanded-composer .submit-message {
   width: 34px;
@@ -2879,13 +2954,13 @@ button {
     gap: 6px;
     font-size: 18px;
   }
-  .expanded-chat > header span :is(img, svg) {
+  .expanded-chat > header span:not(.icon-pill) :is(img, svg) {
     width: 8px;
     height: 8px;
   }
   .expanded-chat-actions {
-    width: 132px;
-    height: 60px;
+    width: 112px;
+    height: 44px;
   }
   .expanded-chat-stream {
     padding: 24px;

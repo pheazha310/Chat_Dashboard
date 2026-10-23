@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSelectedConversation } from "@/entities/conversation";
 import { MessageBubble, TypingBubble, useConversationMessages, useMessageStore } from "@/entities/message";
-import { usePrivacyStore } from "@/features/privacy-controls";
 import { ChatSearchBar, filterByQuery, useChatSearchStore } from "@/features/search-in-chat";
 import { MessageComposer, useComposerStore } from "@/features/send-message";
 import { assets } from "@/shared/config";
@@ -14,11 +13,10 @@ const PRESENCE = {
   assigned: "active • handled by you",
 } as const;
 
-export default function ChatWindow({ onOpenContext }: { onOpenContext: () => void }) {
+export default function ChatWindow({ onOpenContext, onOpenMedia }: { onOpenContext: () => void; onOpenMedia: () => void }) {
   const conversation = useSelectedConversation();
   const messages = useConversationMessages(conversation?.id ?? null);
   const typing = useMessageStore((state) => (conversation ? state.typing[conversation.id] : undefined));
-  const readReceipts = usePrivacyStore((state) => state.readReceipts);
   const { query, toggle } = useChatSearchStore();
   const setDraft = useComposerStore((state) => state.setDraft);
   const [showMore, setShowMore] = useState(false);
@@ -72,6 +70,14 @@ export default function ChatWindow({ onOpenContext }: { onOpenContext: () => voi
               <button onClick={menuAction("Conversation marked unread")}>Mark as unread</button>
               <button onClick={menuAction("Conversation assigned to you")}>Assign to me</button>
               <button onClick={menuAction("Conversation archived")}>Archive conversation</button>
+              <button
+                onClick={() => {
+                  onOpenMedia();
+                  setShowMore(false);
+                }}
+              >
+                Media & files
+              </button>
             </div>
           )}
         </div>
@@ -82,7 +88,7 @@ export default function ChatWindow({ onOpenContext }: { onOpenContext: () => voi
         <div className="today-pill">Today</div>
         {hasQuery && visible.length === 0 && <div className="empty-search">No messages match “{trimmedQuery}”</div>}
         {visible.map((message) => (
-          <MessageBubble key={message.id} message={message} showReadReceipts={readReceipts} />
+          <MessageBubble key={message.id} message={message} showReadReceipts />
         ))}
         {typing === "customer" && <TypingBubble />}
         <div ref={endRef} />

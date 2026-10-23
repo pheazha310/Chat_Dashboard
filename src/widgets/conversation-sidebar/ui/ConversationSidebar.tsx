@@ -27,7 +27,7 @@ export default function ConversationSidebar({ open, onClose, onExpand }: Props) 
       <div className="sidebar-title">
         <h1>Message</h1>
         <div className="sidebar-actions">
-          <IconPill left="more" right="collapse" />
+          <IconPill left="moreVert" right="collapse" />
           <button className="settings-hit" onClick={() => openSettings(true)} aria-label="Open message settings" />
           <button className="zoom-hit" onClick={onExpand} aria-label="Open expanded applications workspace" />
         </div>

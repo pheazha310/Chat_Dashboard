@@ -18,8 +18,8 @@ import MChatOutline from "@iconify-react/material-symbols/chat-outline";
 import MArchiveOutline from "@iconify-react/material-symbols/archive-outline";
 import MChevronRight from "@iconify-react/material-symbols/chevron-right";
 import MSendOutline from "@iconify-react/material-symbols/send-outline";
-import MPersonRemoveOutline from "@iconify-react/material-symbols/person-remove-outline";
-import MRemove from "@iconify-react/material-symbols/remove";
+import MPersonCancelOutline from "@iconify-react/material-symbols/person-cancel-outline";
+import MDoNotDisturbOnOutline from "@iconify-react/material-symbols/do-not-disturb-on-outline";
 import MHomeOutline from "@iconify-react/material-symbols/home-outline";
 import MAssignmentOutline from "@iconify-react/material-symbols/assignment-outline";
 import MVerifiedUserOutline from "@iconify-react/material-symbols/verified-user-outline";
@@ -63,8 +63,8 @@ export const materialIcons: Record<string, { Icon: MaterialIcon; size: number; e
   "aba08": { Icon: MChevronRight, size: 14 },
   "95915": { Icon: MSendOutline, size: 20 },
   "27a6f": { Icon: MChevronRight, size: 14 },
-  "21ab4": { Icon: MPersonRemoveOutline, size: 20 },
-  "b5104": { Icon: MRemove, size: 20 },
+  "21ab4": { Icon: MPersonCancelOutline, size: 22 },
+  "b5104": { Icon: MDoNotDisturbOnOutline, size: 22 },
   "7bae6": { Icon: MHomeOutline, size: 20 },
   "962e0": { Icon: MAssignmentOutline, size: 20 },
   "69b92": { Icon: MVerifiedUserOutline, size: 20 },
