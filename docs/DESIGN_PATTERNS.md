@@ -23,7 +23,11 @@ Layers (import direction: `app → pages → widgets → features → entities �
 - UI components live in `shared/ui` **only** when reused across unrelated features.
 - WebSocket connection/protocol code stays in `shared/api/ws`; app-specific event routing lives in `app`.
 
+- Features do not import other features; compose them in a widget or page.
+
 **State management:** Zustand stores are used at every level. Each store co-locates with its feature/entity. Selectors are preferred over full-state subscriptions to minimize re-renders.
+
+See [FSD.md](../FSD.md) for slice structure, where new code goes, and the `pnpm check:fsd` rules.
 
 ---
 
@@ -145,6 +149,17 @@ A circular floating action button (`.compose-fab`) positioned fixed at `right: 2
 - `size` defaults to `20` (both width and height).
 - Used for all iconography sourced from `assets.*`.
 
+### 3.2a Icon (`Icon`) and Icon Pill (`IconPill`)
+
+```tsx
+<Icon src={assets.icons.online} alt="" />
+<IconPill left="moreVert" right="collapse" />
+```
+
+- `Icon` resolves an asset by the hex id in its filename: a Material Symbols glyph if one replaces it, else an inline SVG component, else a plain `<img>`. Prefer it over `AssetIcon` for new code.
+- Decorative by default (`alt=""` sets `aria-hidden`); pass `alt` to expose it as `role="img"`.
+- `IconPill` is a decorative two-glyph pill; the caller layers real `<button>` hit targets on top (see the sidebar header), each with its own `aria-label`.
+
 ### 3.3 List Item Pattern
 
 **Conversation items** (`ConversationItem`, `.conversation-item`):
@@ -174,6 +189,7 @@ A circular floating action button (`.compose-fab`) positioned fixed at `right: 2
 - **Styling:** rounded speech-bubble shape (`16px 16px 16px 4px` for agent, `4px 16px 16px` for customer). Distinct background colors per side.
 - **Sender label:** `assistant` shows "AI ASSISTANT", `agent` shows "SUPPORT AGENT" — uppercase, `#722ed1` / `#2563eb` respectively, `font-size: 11px`.
 - **Status line:** `formatClock(message.createdAt)` + optional delivery status ("Sent", "Delivered", "Read", "Failed to send") joined by ` • `.
+- **Failed state:** a `failed` message gets `.failed` and, when `onRetry` is passed, a **Retry** button (`.retry-message`) under the caption. The caller wires it to `retryMessage(conversationId, id)`, which reuses the client id so the server ack replaces the message.
 - **Typing indicator:** `TypingBubble` renders `•••` with `animation: typing-pulse 1s ease-in-out infinite`.
 
 ### 3.5 Composer Pattern (`MessageComposer`)
@@ -192,7 +208,7 @@ A circular floating action button (`.compose-fab`) positioned fixed at `right: 2
 </form>
 ```
 
-- **Send trigger:** `onSubmit` form handler + `onKeyDown` intercepting `Enter` (without `Shift`). `Shift+Enter` produces a newline.
+- **Send trigger:** `onSubmit` form handler + `onKeyDown` intercepting `Enter` (without `Shift`). `Shift+Enter` produces a newline. Enter is ignored while an IME composition is active (`nativeEvent.isComposing`) so confirming a Khmer/CJK candidate does not send.
 - **Disabled state:** send button disabled when draft is empty (`!draft.trim()`).
 - **Attachment chip:** inline, dismissible with `×` button, `aria-label="Remove attachment"`.
 - **File input:** hidden (`display: none`), triggered via label/button click, restricted file types via `accept` attribute.
@@ -211,6 +227,8 @@ A circular floating action button (`.compose-fab`) positioned fixed at `right: 2
 - `autoFocus` on mount, `Escape` to close.
 - Filters use `filterByQuery` — normalizes text (NFD accent stripping, lowercasing) and checks substring match.
 - Empty results show `.empty-search`: `No messages match "{query}"`.
+- The sidebar quick search matches conversation name **or** message preview, and shows `.empty-search` ("No conversations found") when nothing matches.
+- With no conversation selected, the chat window shows an `.empty-search` prompt rather than a blank panel.
 
 ### 3.7 Settings Row Pattern (`SettingsRow`)
 
@@ -281,13 +299,13 @@ When `conversation.handoff === "needs-human"`:
 ### 4.3 More Options Menu (Contextual Popover)
 
 ```tsx
-<button onClick={() => setShowMore(!showMore)}>⋯</button>
-{showMore && <div className="more-menu">...</div>}
+<button aria-haspopup="menu" aria-expanded={showMore} onClick={() => setShowMore(!showMore)}>⋯</button>
+{showMore && <div className="more-menu" role="menu">...</div>}
 ```
 
 - Positioned absolutely relative to the button container (`.chat-actions`).
-- Closes on selecting an item (each `menuAction` resets `showMore`).
-- Contains: "Mark as unread", "Assign to me", "Archive conversation".
+- Closes on selecting an item (each `menuAction` resets `showMore`), on `Escape`, and on a mouse press outside `.chat-actions`.
+- Contains: "Mark as unread", "Assign to me", "Archive conversation", "Media & files". The first three currently only show a toast; they have no server event yet.
 - `z-index: 20`, `border-radius: 12px`, `box-shadow: 0 12px 28px rgba(17, 24, 39, 0.14)`.
 
 ### 4.4 Detail Panel Sub-Navigation
@@ -295,11 +313,11 @@ When `conversation.handoff === "needs-human"`:
 The Customer Context panel uses a `view` state to switch between the overview and detail sub-views:
 
 ```tsx
-const [view, setView] = useState<"media" | "privacy" | null>(null);
+const [view, setView] = useState<"media" | null>(null); // owned by ChatPage
 ```
 
 - Overview shows a row of `.context-actions` buttons (icon + label).
-- Selecting an action sets `view` and renders the corresponding detail panel (`<MediaFilesPanel>`, `<PrivacyPanel>`).
+- Selecting an action sets `view` and renders the corresponding detail panel (`<MediaFilesPanel>`; add new detail views by extending the `view` union).
 - Detail panels share a `context-detail-panel` layout with a back-arrow header button calling `onBack`.
 - When a detail view is active, `.has-detail` class collapses the overview (`overflow: hidden; padding: 0`).
 
@@ -316,9 +334,9 @@ Search, settings, and panels all follow the same toggle pattern:
 
 All user-initiated mutations use optimistic updates:
 
-- **Message sending:** appends to local store with `status: "sending"` immediately, then sends via WebSocket. Server ack updates to `"sent"`, `"delivered"`, or `"read"`.
+- **Message sending:** appends to local store with `status: "sending"` immediately, then sends via WebSocket. Server ack updates to `"sent"`, `"delivered"`, or `"read"`; a failure sets `"failed"` and offers Retry.
 - **Conversation read:** marks `unread: 0` locally, then sends `conversation.read` event.
-- **File attachment:** adds filename to store immediately, shows toast.
+- **File attachment:** adds filename to store immediately, shows toast. (The attachment is only a chip today; it is not yet sent with the message.)
 
 ### 4.7 Draft Persistence
 
@@ -446,11 +464,12 @@ Universal focus-visible pattern:
 | Toast | `role="status"` |
 | Typing indicator | `aria-label="Customer is typing"` |
 | Chat stream | `aria-live="polite"` |
+| More-options button / menu | `aria-haspopup="menu"`, `aria-expanded` / `role="menu"` |
 
 ### 7.3 Keyboard Navigation
 
-- **Escape** closes: dialogs, search bars, more-menu (via state reset).
-- **Enter** sends message (without Shift); Shift+Enter inserts newline.
+- **Escape** closes: dialogs, search bars, more-menu.
+- **Enter** sends message (without Shift, and not during IME composition); Shift+Enter inserts newline.
 - **Tab** focus moves naturally through interactive elements.
 - Focus-visible outlines are applied consistently.
 
@@ -496,7 +515,7 @@ Each feature/entity exposes a Zustand store via `index.ts`:
 export { useXStore, useXSelections, type XType } from "./model/store";
 ```
 
-Store state is a flat object; mutations return new state via Immer-style setters or explicit spread.
+Store state is a flat object; mutations return new state with explicit spreads (no Immer). Keep records keyed by id (`byId` + `order`, `byConversation`) rather than nested arrays.
 
 ### 9.2 Derived Selectors
 
@@ -552,16 +571,15 @@ src/
 │   ├── request-callback/
 │   ├── message-settings/
 │   ├── search-in-chat/
-│   ├── privacy-controls/
 │   └── share-files/
 ├── entities/                 # Domain concepts
 │   ├── conversation/
 │   └── message/
 └── shared/                   # Framework-agnostic utilities
-    ├── ui/                   # Reusable components
-    ├── api/ws/               # WebSocket client
+    ├── ui/                   # Reusable components (Icon, IconButton, toast…)
+    ├── api/ws/               # WebSocket client, protocol types, mock server
     ├── config/               # Assets, constants
-    └─ lib/                   # Utilities (format-time, etc.)
+    └── lib/                  # Utilities (format-time, etc.)
 ```
 
 **Barrel exports:** Every segment directory has an `index.ts` that re-exports its public API. Cross-segment imports use `@/layer/segment` path aliases, never direct file paths into another segment's internals.

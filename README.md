@@ -1,6 +1,6 @@
 # Chat Dashboard
 
-React 19 + TypeScript + Vite dashboard for handling customer chat conversations, with AI/human handoff, in-chat search, privacy controls and an applications workspace.
+React 19 + TypeScript + Vite dashboard for handling customer chat conversations, with AI/human handoff, in-chat search, shared media & files and an applications workspace.
 
 ## Getting started
 

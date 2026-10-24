@@ -2,38 +2,21 @@
   "name": "chat-dashboard",
   "private": true,
   "version": "1.0.0",
-  "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
-    "format": "prettier --write src scripts",
-    "lint": "oxlint",
-    "typecheck": "tsc --noEmit",
-    "check:fsd": "node scripts/check-fsd-boundaries.mjs",
-    "test": "vitest run",
-    "lint:fix": "oxlint --fix",
-    "format:check": "prettier --check src scripts",
+    "dev": "pnpm --filter @chat-dashboard/frontend dev",
+    "build": "pnpm -r build",
+    "preview": "pnpm --filter @chat-dashboard/frontend preview",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint",
+    "lint:fix": "pnpm -r lint:fix",
+    "check:fsd": "pnpm -r check:fsd",
+    "test": "pnpm -r test",
+    "format": "pnpm -r format",
+    "format:check": "pnpm -r format:check",
     "check": "pnpm typecheck && pnpm lint && pnpm check:fsd && pnpm format:check && pnpm test"
   },
-  "dependencies": {
-    "@iconify-react/material-symbols": "^1.0.32",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "zustand": "^5.0.15"
-  },
   "devDependencies": {
-    "@tailwindcss/vite": "^4.0.0",
-    "@types/node": "^22.0.0",
-    "@types/react": "^19.0.0",
-    "@types/react-dom": "^19.0.0",
-    "@vitejs/plugin-react": "^6.0.0",
-    "oxlint": "^1.87.0",
-    "prettier": "3",
-    "tailwindcss": "^4.0.0",
-    "typescript": "^5.7.0",
-    "vite": "^8.0.5",
-    "vitest": "^5.0.3"
+    "prettier": "3"
   },
   "packageManager": "pnpm@10.34.3"
 }
