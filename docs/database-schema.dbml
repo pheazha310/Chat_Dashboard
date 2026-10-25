@@ -108,7 +108,7 @@ Table customers {
   id          char(36) [pk, ref: - users.id, note: 'same value as users.id']
   phone       varchar(32)
   national_id varchar(64)
-  salary      varchar(64)
+  salary      decimal(12,2) [note: 'latest known monthly income']
   occupation  varchar(150)
   blacklisted boolean [not null, default: false]
   created_at  datetime [not null, default: `now()`]
@@ -140,6 +140,8 @@ Table applications {
   amount        decimal(12,2) [not null]
   currency      char(3) [not null, default: 'USD']
   tenor_days    int [not null]
+  monthly_income decimal(12,2) [note: 'income declared at application time']
+  occupation    varchar(150) [note: 'occupation declared at application time']
   loan_request  varchar(255)
   completeness  varchar(64)
   status        application_status [not null]
@@ -198,6 +200,7 @@ Table messages {
     (conversation_id, created_at)
     (conversation_id, status)
     sender_user_id
+    text [type: fulltext, note: 'search-in-chat']
     (conversation_id, client_id) [unique]
   }
 }
@@ -242,7 +245,9 @@ Table shared_files {
   kind            file_kind [not null]
   size_bytes      int [not null]
   mime_type       varchar(127)
-  url             varchar(1024) [not null]
+  storage_key     varchar(512) [not null, note: 'object key; download URLs are derived/signed from it']
+  url             varchar(1024) [note: 'optional cached public URL']
+  checksum_sha256 char(64)
   created_at      datetime [not null, default: `now()`]
 
   indexes {
@@ -276,4 +281,50 @@ Table notifications {
     (agent_id, read)
     created_at
   }
+}
+
+Table application_status_history {
+  id                 char(36) [pk, default: `uuid()`]
+  application_id     char(36) [not null, ref: > applications.id]
+  from_status        application_status [note: 'NULL for the first status']
+  to_status          application_status [not null]
+  changed_by_user_id char(36) [ref: > users.id, note: 'NULL for system / AI changes']
+  note               varchar(500)
+  created_at         datetime [not null, default: `now()`]
+
+  indexes {
+    (application_id, created_at)
+  }
+
+  Note: 'Audit trail of application status changes.'
+}
+
+Table conversation_reads {
+  user_id         char(36) [not null, ref: > users.id]
+  conversation_id char(36) [not null, ref: > conversations.id]
+  last_read_at    datetime [not null]
+
+  indexes {
+    (user_id, conversation_id) [pk]
+    conversation_id
+  }
+
+  Note: 'Per-user read position. conversations.unread_count stays as the shared inbox badge.'
+}
+
+Table sessions {
+  id         char(36) [pk, default: `uuid()`]
+  user_id    char(36) [not null, ref: > users.id]
+  token_hash char(64) [not null, unique, note: 'sha-256 hex of the refresh token']
+  user_agent varchar(255)
+  ip_address varchar(45) [note: 'fits IPv6']
+  expires_at datetime [not null]
+  revoked_at datetime
+  created_at datetime [not null, default: `now()`]
+
+  indexes {
+    (user_id, expires_at)
+  }
+
+  Note: 'Login sessions; only a hash of the token is stored.'
 }

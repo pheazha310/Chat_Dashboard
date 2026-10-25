@@ -71,7 +71,7 @@ users ──1:1── customers ──< applications ──1:1── conversatio
 | `last_login_at`, `created_at`, `updated_at` | DATETIME | |
 
 ### customers (profile, `id` = `users.id`)
-`phone`, `national_id`, `salary`, `occupation`, `blacklisted`, timestamps.
+`phone`, `national_id`, `salary` (DECIMAL, latest known monthly income), `occupation`, `blacklisted`, timestamps.
 
 ### agents (profile, `id` = `users.id`)
 `available` (accepting new chats; distinct from `users.active`), timestamps.
@@ -86,6 +86,7 @@ users ──1:1── customers ──< applications ──1:1── conversatio
 | `product` | VARCHAR(150) | |
 | `amount`, `currency` | DECIMAL(12,2), CHAR(3) | |
 | `tenor_days` | INT | |
+| `monthly_income`, `occupation` | DECIMAL(12,2)?, VARCHAR? | snapshot at application time; later profile edits don't rewrite history |
 | `loan_request`, `completeness` | VARCHAR? | |
 | `status` | ENUM | `NEW`, `REVIEWING`, `COMPLETED`, `FAILED`, `PAID_OFF`, `IN_PROGRESS`, `OVERDUE` |
 | `registered_at`, timestamps | DATETIME | |
@@ -113,7 +114,7 @@ users ──1:1── customers ──< applications ──1:1── conversatio
 | `sender_type` | ENUM | `CUSTOMER`, `ASSISTANT`, `AGENT` |
 | `sender_user_id` | CHAR(36)? | NULL exactly when `ASSISTANT` (CHECK); RESTRICT |
 | `type` | ENUM | `TEXT`, `IMAGE`, `FILE`, `NOTE` (internal), `SYSTEM` |
-| `text` | TEXT | |
+| `text` | TEXT | FULLTEXT index for search-in-chat (`MATCH ... AGAINST`) |
 | `client_id` | VARCHAR(64)? | unique with `conversation_id` |
 | `status` | ENUM? | `SENDING`, `SENT`, `DELIVERED`, `READ`, `FAILED` |
 | `created_at`, `edited_at`, `deleted_at` | DATETIME | |
@@ -130,7 +131,19 @@ can have only one active owner.
 
 ### shared_files
 `conversation_id` (CASCADE), `customer_id`, `application_id`?, `message_id`?,
-`name`, `kind` (`DOCUMENT`/`IMAGE`), `size_bytes`, `mime_type`?, `url`, `created_at`.
+`name`, `kind` (`DOCUMENT`/`IMAGE`), `size_bytes`, `mime_type`?, `storage_key` (object key; derive or sign download URLs from it), `url`? (optional cached URL), `checksum_sha256`?, `created_at`.
+
+### application_status_history
+Audit trail: `application_id` (CASCADE), `from_status`? , `to_status`, `changed_by_user_id`? (SET NULL; NULL = system/AI), `note`?, `created_at`.
+Write a row in the same transaction as every `applications.status` change.
+
+### conversation_reads
+Composite key `(user_id, conversation_id)` with `last_read_at`. Gives each agent their own
+unread state; `conversations.unread_count` remains the shared inbox badge.
+
+### sessions
+`user_id` (CASCADE), `token_hash` (sha-256 of the refresh token, unique, the token itself is never stored),
+`user_agent`?, `ip_address`?, `expires_at`, `revoked_at`?, `created_at`.
 
 ### settings / notifications
 `settings`: one boolean per `(agent_id, key)`. `notifications`: `agent_id`, `type`,
