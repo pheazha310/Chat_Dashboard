@@ -13,10 +13,19 @@
     "test": "pnpm -r test",
     "format": "pnpm -r format",
     "format:check": "pnpm -r format:check",
-    "check": "pnpm typecheck && pnpm lint && pnpm check:fsd && pnpm format:check && pnpm test"
+    "check": "pnpm typecheck && pnpm lint && pnpm check:fsd && pnpm format:check && pnpm test",
+    "db:generate": "prisma generate",
+    "db:validate": "prisma validate",
+    "db:migrate": "prisma migrate dev"
   },
   "devDependencies": {
-    "prettier": "3"
+    "prettier": "3",
+    "prisma": "7.10.1"
   },
-  "packageManager": "pnpm@10.34.3"
+  "packageManager": "pnpm@10.34.3",
+  "dependencies": {
+    "@prisma/adapter-mariadb": "^7.10.1",
+    "@prisma/client": "^7.10.1",
+    "dotenv": "^18.0.9"
+  }
 }

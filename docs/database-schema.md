@@ -2,267 +2,186 @@
 
 ## Overview
 
-This document describes the persistent data model backing the Chat Dashboard
-frontend. The schema is defined in `prisma/schema.prisma` and targets
-PostgreSQL. It normalizes entities that are currently embedded or duplicated in
-the client-side TypeScript DTOs (`ConversationDto`, `ChatMessageDto`,
-`ActivityDto` in `src/shared/api/ws/protocol.ts`).
+The persistent data model behind the Chat Dashboard. It is defined in
+`prisma/schema.prisma` and targets **MySQL 8.0.16+** (Prisma 7). It normalizes
+entities that are currently embedded in the client DTOs (`ConversationDto`,
+`ChatMessageDto`, `ActivityDto` in `frontend/src/shared/api/ws/protocol.ts`).
+
+Related files:
+
+| File | Purpose |
+|---|---|
+| `prisma/schema.prisma` | Source of truth for tables, columns, relations, enums |
+| `prisma/sql/constraints.sql` | Constraints Prisma cannot express; append to the first migration |
+| `prisma.config.ts` | Prisma 7 config (schema path, `DATABASE_URL`) |
+| `prisma/client.ts` | `PrismaClient` with the MariaDB/MySQL driver adapter |
+| `docs/database-schema.dbml` | Same schema for https://dbdiagram.io/d |
+
+Tables are snake_case plural (`users`, `agent_conversations`); in code use the
+Prisma names (`prisma.user`, `lastMessageAt`).
 
 ## Entity Relationship Diagram
 
 ```
-Customer ──<  Application  >── Conversation  >── Message
-  │            │                  │  │  │         │
-  └──< Conversations            │  │  │         └── Customer (sender)
-      └── Messages (customer)   │  │  └── Agent (assigned)
-      └── Files                 │  └── AgentConversation (assignments)
-                               │  └── Activities
-                               └── Files
-Agent ──< AgentConversation
-  │     └── Messages (agent)
-  ├── Activities
-  ├── Notifications
-  └── Settings
+users ──1:1── customers ──< applications ──1:1── conversations
+  │                │                                │  │  │
+  │                └──< conversations >─────────────┘  │  ├──< messages >── users (sender)
+  │                                                    │  ├──< activities
+  └──1:1── agents ──< agent_conversations >────────────┘  └──< shared_files
+             │  └──< conversations (assigned_agent_id)
+             ├──< notifications
+             ├──< settings
+             └──< activities
 ```
 
-## Entities
+## Design decisions
 
-### 1. Customer
+1. **One `users` table for identity.** Name, avatar, email, password hash and
+   role live on `users`. `customers` and `agents` are 1:1 profile tables that
+   share the user's id (`customers.id = users.id`).
+2. **Two sources of "who owns this chat" are kept in sync.** `conversations.assigned_agent_id`
+   is the fast read path for the inbox; `agent_conversations` is the append-only history.
+3. **`handoff` is the AI-to-human state machine**, separate from the lifecycle `status`:
 
-| Column          | Type      | Notes                                    |
-|----------------|-----------|------------------------------------------------|
-| `id`           | UUID (PK) | Internal primary key                        |
-| `name`         | String    | Full name (was `ConversationDto.name`)      |
-| `avatar`       | String?   | Avatar URL (was `ConversationDto.avatar`)   |
-| `email`        | String?   | Email address                               |
-| `phone`        | String?   | Phone number (ApplicationsTable column)     |
-| `nationalId`   | String?   | NID (ApplicationsTable column)              |
-| `salary`       | String?   | Salary (ApplicationsTable column)           |
-| `occupation`   | String?   | Occupation (ApplicationsTable column)       |
-| `blacklisted`  | Boolean   | Blacklist flag (ApplicationsTable column)   |
-| `createdAt`    | DateTime  |                                            |
-| `updatedAt`    | DateTime  |                                            |
+   ```
+   AI ──(escalate / callback / customer asks)──▶ NEEDS_HUMAN ──(takeover)──▶ ASSIGNED
+    ▲                                                                           │
+    └──────────────────────────(release / resolve)──────────────────────────────┘
+   ```
+4. **Messages are append-only.** Soft delete via `deleted_at`; `client_id` makes
+   optimistic sends idempotent (unique with `conversation_id`).
+5. **Denormalized inbox fields** (`preview`, `last_message_at`, `unread_count`)
+   are updated in the same transaction as the message insert.
+6. **Display strings are derived.** Money is `DECIMAL`, tenor is days, file size
+   is bytes, and `Activity.time` / `SharedFile.addedAt` come from `created_at`.
+   The server formats them when building DTOs.
 
-**Why normalized**: `ConversationDto` currently stores `name` and `avatar`
-directly. These are customer attributes shared with the ApplicationsTable.
-A customer with multiple loan applications or conversations should not have
-their data duplicated.
+## Tables
 
-### 2. Agent
+### users
+| Column | Type | Notes |
+|---|---|---|
+| `id` | CHAR(36) PK | uuid |
+| `name` | VARCHAR(150) | |
+| `avatar` | VARCHAR(512)? | URL |
+| `email` | VARCHAR(255)? unique | |
+| `role` | ENUM | `CUSTOMER`, `AGENT`, `SUPERVISOR`, `ADMIN` |
+| `password_hash` | VARCHAR(255)? | null for customers / SSO-only staff |
+| `active` | BOOLEAN | account enabled |
+| `last_login_at`, `created_at`, `updated_at` | DATETIME | |
 
-| Column      | Type      | Notes                          |
-|------------|-----------|------------------------------------------------|
-| `id`        | UUID (PK) | Internal primary key          |
-| `name`      | String    | Full name                     |
-| `avatar`    | String?   | Avatar URL                    |
-| `email`     | String?   | Unique email                  |
-| `active`    | Boolean   | Whether the agent is available|
-| `createdAt` | DateTime  |                            |
-| `updatedAt` | DateTime  |                            |
+### customers (profile, `id` = `users.id`)
+`phone`, `national_id`, `salary`, `occupation`, `blacklisted`, timestamps.
 
-**Why added**: Messages with `side: "agent"` reference a specific support
-agent. The `conversation.takeover` flow assigns conversations to agents.
-Previously, agents were implicit; this table makes them first-class entities.
+### agents (profile, `id` = `users.id`)
+`available` (accepting new chats; distinct from `users.active`), timestamps.
 
-### 3. Application
+### applications
+| Column | Type | Notes |
+|---|---|---|
+| `id` | CHAR(36) PK | |
+| `app_id` | VARCHAR(64) unique | e.g. `61831` |
+| `customer_id` | CHAR(36) | required, RESTRICT |
+| `reference` | VARCHAR(100) unique | e.g. `LUL-61831-MAYA` |
+| `product` | VARCHAR(150) | |
+| `amount`, `currency` | DECIMAL(12,2), CHAR(3) | |
+| `tenor_days` | INT | |
+| `loan_request`, `completeness` | VARCHAR? | |
+| `status` | ENUM | `NEW`, `REVIEWING`, `COMPLETED`, `FAILED`, `PAID_OFF`, `IN_PROGRESS`, `OVERDUE` |
+| `registered_at`, timestamps | DATETIME | |
 
-| Column         | Type              | Notes                                    |
-|---------------|-------------------|------------------------------------------|
-| `id`           | UUID (PK)         | Internal primary key                     |
-| `appId`        | String (Unique)   | e.g. "61831" (was `Dto.application.appId`)|
-| `customerId`   | UUID? (FK)        | Nullable: applications may not have customers yet |
-| `reference`    | String (Unique)   | e.g. "LUL-61831-MAYA"                    |
-| `product`      | String            | e.g. "Instant Cash"                      |
-| `amount`       | String            | e.g. "$500"                              |
-| `tenor`        | String            | e.g. "30 days"                           |
-| `loanRequest`  | String?           | Loan Request column (ApplicationsTable)  |
-| `completeness` | String?           | Completeness column (ApplicationsTable)  |
-| `status`       | Enum              | `ApplicationStatus`                       |
-| `registeredAt` | DateTime?         | Registered Date column (ApplicationsTable)|
-| `createdAt`    | DateTime          |                                           |
-| `updatedAt`    | DateTime          |                                           |
+### conversations
+| Column | Type | Notes |
+|---|---|---|
+| `id` | CHAR(36) PK | |
+| `slug` | VARCHAR(100) unique | external id the WS protocol uses today (e.g. `maya`) |
+| `customer_id` | CHAR(36) | required |
+| `application_id` | CHAR(36)? unique | 1:1 with an application |
+| `status` | ENUM | `OPEN`, `RESOLVED`, `CLOSED` |
+| `closed_at` | DATETIME? | set exactly when `status != OPEN` (CHECK) |
+| `channel` | VARCHAR(32) | default `web` |
+| `handoff` | ENUM | `AI`, `NEEDS_HUMAN`, `ASSIGNED` |
+| `assigned_agent_id` | CHAR(36)? | set exactly when `handoff = ASSIGNED` (CHECK) |
+| `preview`, `last_message_at`, `unread_count`, `urgent` | | inbox fields |
+| `summary`, `summary_image` | TEXT?, VARCHAR? | |
 
-**Why normalized**: `ConversationDto.application` is an embedded object with
-6 fields. The ApplicationsTable displays additional fields (NID, phone, salary,
-occupation, loan request, completeness, registered date) that don't exist on
-the DTO. This table unifies both views.
+### messages
+| Column | Type | Notes |
+|---|---|---|
+| `id` | CHAR(36) PK | |
+| `conversation_id` | CHAR(36) | CASCADE |
+| `sender_type` | ENUM | `CUSTOMER`, `ASSISTANT`, `AGENT` |
+| `sender_user_id` | CHAR(36)? | NULL exactly when `ASSISTANT` (CHECK); RESTRICT |
+| `type` | ENUM | `TEXT`, `IMAGE`, `FILE`, `NOTE` (internal), `SYSTEM` |
+| `text` | TEXT | |
+| `client_id` | VARCHAR(64)? | unique with `conversation_id` |
+| `status` | ENUM? | `SENDING`, `SENT`, `DELIVERED`, `READ`, `FAILED` |
+| `created_at`, `edited_at`, `deleted_at` | DATETIME | |
 
-**Enum reconciliation**: The DTO uses string statuses like `"in progress"` and
-`"overdue"` (from seed.ts) while `ApplicationsTable.tsx` uses
-`"New" | "Reviewing" | "Completed" | "Failed" | "Paid Off"`. The
-`ApplicationStatus` enum covers both sets.
+### activities
+`id`, `conversation_id` (CASCADE), `agent_id`? (SET NULL), `tone` (`BLUE`/`CYAN`/`RED`), `title`, `copy`, `created_at`.
 
-### 4. Conversation
+### agent_conversations (assignment history)
+`agent_id`, `conversation_id`, `role` (`OWNER`/`VIEWER`), `assigned_at`, `unassigned_at`
+(NULL = currently assigned). Both foreign keys are RESTRICT so history survives.
+`active_owner_key` is a **generated column** (never write to it) with a UNIQUE
+index: it holds `conversation_id` while the row is the active OWNER, so a chat
+can have only one active owner.
 
-| Column             | Type             | Notes                                      |
-|--------------------|------------------|--------------------------------------------|
-| `id`               | String (PK)      | External slug (e.g. "maya") for WS compat  |
-| `customerId`       | UUID? (FK)       | Nullable                                    |
-| `applicationId`    | String? (Unique) | 1:1 to Application                          |
-| `preview`          | String           | Last message preview                       |
-| `lastMessageAt`    | DateTime         | Timestamp of last message                  |
-| `unreadCount`      | Int              | Unread message count                       |
-| `urgent`           | Boolean          | Priority flag                              |
-| `handoff`          | Enum             | `HandoffStatus`: AI, NEEDS_HUMAN, ASSIGNED |
-| `assignedAgentId`  | UUID? (FK)       | Currently assigned agent                   |
-| `summary`          | String?          | AI-generated summary                       |
-| `summaryImage`     | String?          | Summary diagram URL                        |
-| `createdAt`        | DateTime         |                                            |
-| `updatedAt`        | DateTime         |                                            |
+### shared_files
+`conversation_id` (CASCADE), `customer_id`, `application_id`?, `message_id`?,
+`name`, `kind` (`DOCUMENT`/`IMAGE`), `size_bytes`, `mime_type`?, `url`, `created_at`.
 
-**Key relationships**:
-- `customerId` → Customer (the customer in the conversation)
-- `applicationId` → Application (the loan this conversation is about)
-- `assignedAgentId` → Agent (via `Agent.assignedConversations`)
-- `messages` → Message[] (1:M)
-- `activities` → Activity[] (1:M, embedded in DTO as array)
-- `agentAssignments` → AgentConversation[] (1:M, assignment history)
-- `files` → SharedFile[] (1:M)
+### settings / notifications
+`settings`: one boolean per `(agent_id, key)`. `notifications`: `agent_id`, `type`,
+`text`, `read`, `created_at`.
 
-### 5. Message
+## Database-enforced rules
 
-| Column             | Type           | Notes                              |
-|--------------------|----------------|------------------------------------|
-| `id`               | String (PK)    | External ID (e.g. "maya-1", "c-<uuid>") |
-| `conversationId`   | String (FK)    | Parent conversation                |
-| `senderType`       | Enum           | `MessageSide`: CUSTOMER, ASSISTANT, AGENT |
-| `senderCustomerId` | UUID? (FK)     | Populated when `senderType=CUSTOMER`|
-| `senderAgentId`    | UUID? (FK)     | Populated when `senderType=AGENT`  |
-| `text`             | String         | Message content                    |
-| `status`           | Enum?          | `DeliveryStatus`: SENDING, SENT, … |
-| `createdAt`        | DateTime       | Timestamp                          |
+| Rule | Mechanism |
+|---|---|
+| `handoff = ASSIGNED` ⇔ `assigned_agent_id` set | CHECK |
+| `status = OPEN` ⇔ `closed_at` is NULL | CHECK |
+| `ASSISTANT` message ⇔ no `sender_user_id` | CHECK |
+| One active OWNER per conversation | generated column + UNIQUE |
+| No duplicate optimistic sends | UNIQUE `(conversation_id, client_id)` |
+| Users with messages, agents on chats, chats with assignment history can't be deleted | FK RESTRICT |
 
-**Polymorphic sender**: `senderType` determines whether `senderCustomerId` or
-`senderAgentId` is populated. For `ASSISTANT` messages (AI), both are NULL.
-This avoids a polymorphic FK while still linking individual messages to the
-real person who sent them.
+CHECKs need **MySQL 8.0.16+**; older versions parse them and silently ignore them.
 
-### 6. Activity
+Not enforced by the database (do it in the application): `users.role` matching
+the presence of a `customers` / `agents` row, and the sender's role matching
+`sender_type`.
 
-| Column          | Type       | Notes                              |
-|----------------|------------|------------------------------------|
-| `id`           | String (PK)| e.g. "a1"                          |
-| `conversationId`| String (FK)| Parent conversation               |
-| `agentId`      | UUID? (FK) | Nullable — many are system/AI     |
-| `tone`         | Enum       | `ActivityTone`: BLUE, CYAN, RED    |
-| `title`         | String     | Short label                       |
-| `time`          | String     | Display time (e.g. "09:12")       |
-| `copy`          | String     | Description text                  |
-| `createdAt`     | DateTime   |                                |
+## Workflows
 
-**Why normalized**: `ConversationDto.activity` is an embedded array of
-`ActivityDto`. As a separate table, activity entries can be paginated, filtered
-by tone, and queried independently of conversations.
+**Customer message:** insert message → update conversation (`preview`,
+`last_message_at`, `unread_count + 1`) in one transaction → if `handoff = AI`,
+queue the AI reply; if it escalates, set `NEEDS_HUMAN`, `urgent`, and notify agents.
 
-### 7. AgentConversation (Assignment History)
+**Takeover (race-safe):**
+```sql
+UPDATE conversations
+SET handoff = 'ASSIGNED', assigned_agent_id = ?
+WHERE id = ? AND handoff = 'NEEDS_HUMAN';   -- 0 rows affected = someone else won
+```
+In the same transaction, close any open owner row (`unassigned_at = NOW()`) and
+insert the new `agent_conversations` row.
 
-| Column           | Type       | Notes                             |
-|-----------------|------------|-----------------------------------|
-| `id`            | UUID (PK)  |                                   |
-| `agentId`       | UUID (FK)  | The agent                         |
-| `conversationId`| String (FK)| The conversation                  |
-| `role`          | Enum       | `AssignmentRole`: OWNER, VIEWER  |
-| `assignedAt`    | DateTime   | When assignment began             |
-| `unassignedAt`  | DateTime?  | When assignment ended (NULL = active)|
+**Agent message:** validate ownership → insert → `message.ack` maps `client_id`
+to the real id → `message.status` updates.
 
-**Why added**: The `conversation.takeover` flow changes a conversation's
-`handoff` to `ASSIGNED` and sets `assignedAgentId`, but there's no audit trail.
-This table records every assignment, enabling:
-- "Who handled this conversation?" queries
-- Workload analytics (time-to-response per agent)
-- Transfer history
+## Setup
 
-### 8. SharedFile
+```bash
+pnpm add -D prisma && pnpm add @prisma/client @prisma/adapter-mariadb dotenv
+export DATABASE_URL="mysql://user:pass@localhost:3306/chat"
+pnpm exec prisma generate                      # client -> prisma/generated/prisma
+pnpm exec prisma migrate dev --create-only     # then append prisma/sql/constraints.sql to the new migration.sql
+pnpm exec prisma migrate dev
+```
 
-| Column           | Type      | Notes                                    |
-|-----------------|-----------|------------------------------------------|
-| `id`            | UUID (PK) |                                          |
-| `conversationId`| String(FK)| Links file to its conversation           |
-| `customerId`    | UUID(FK)  | Links file to the customer               |
-| `applicationId` | UUID?(FK) | Links to the loan application            |
-| `name`          | String    | File name                                |
-| `kind`          | Enum      | `FileKind`: DOCUMENT, IMAGE              |
-| `size`          | String    | Human-readable size (e.g. "1.8 MB")      |
-| `url`           | String    | Storage URL for download                 |
-| `addedAt`       | String    | Display time (e.g. "Today, 09:06")       |
-| `createdAt`     | DateTime  |                                          |
+## Conversation DTO view
 
-**Why normalized**: `SharedFile` in `share-files/model/store.ts` is a local
-Zustand array with no relationship to conversations. This table links shared
-files to the conversation, customer, and application, enabling the MediaFilesPanel
-to fetch files scoped to a customer or application.
-
-### 9. Setting
-
-| Column     | Type      | Notes                                  |
-|-----------|-----------|----------------------------------------|
-| `id`      | UUID (PK) |                                        |
-| `agentId` | UUID (FK) | Which agent's setting this is          |
-| `key`     | String    | e.g. "readReceipts", "aiReplies"       |
-| `value`   | Boolean   | On/off                                   |
-| `updatedAt`| DateTime |                                     |
-
-**Why added**: Settings from `message-settings` and `privacy-controls` are
-currently ephemeral Zustand state. Persisting them allows agent preferences to
-survive across sessions and devices.
-
-### 10. Notification
-
-| Column     | Type            | Notes                                  |
-|-----------|-----------------|----------------------------------------|
-| `id`      | UUID (PK)       |                                        |
-| `agentId` | UUID (FK)       | Recipient agent                        |
-| `type`    | Enum            | `NotificationType`                     |
-| `text`    | String          | Notification message                   |
-| `read`    | Boolean         | Whether the agent has seen it          |
-| `createdAt`| DateTime       | Chronological ordering                 |
-
-**Why added**: The Notifications feature (`features/notifications/`) is a
-placeholder. This table backs it with persisted, filterable notifications.
-
-## Mapping: Database → WebSocket DTOs
-
-The server composes DTOs from the normalized tables when sending `sync` and
-`conversation.updated` events. A materialized view (`conversation_dto`) is
-documented in the Prisma schema as SQL for reference.
-
-| DTO field                                        | Source table        |
-|--------------------------------------------------|---------------------|
-| `ConversationDto.id`                             | Conversation.id     |
-| `ConversationDto.name`                           | Customer.name       |
-| `ConversationDto.avatar`                         | Customer.avatar     |
-| `ConversationDto.preview`                        | Conversation.preview  |
-| `ConversationDto.lastMessageAt`                  | Conversation.lastMessageAt |
-| `ConversationDto.unread`                         | Conversation.unreadCount |
-| `ConversationDto.urgent`                         | Conversation.urgent |
-| `ConversationDto.handoff`                        | Conversation.handoff |
-| `ConversationDto.application.*`                  | Application.*       |
-| `ConversationDto.activity[]`                     | Activity[]          |
-| `ConversationDto.summary`                        | Conversation.summary |
-| `ConversationDto.summaryImage`                   | Conversation.summaryImage |
-| `ChatMessageDto.*`                               | Message.*           |
-| `ActivityDto.*`                                  | Activity.*          |
-
-## Indexes
-
-Key indexes for query performance:
-
-- `Conversation(handoff, unreadCount)` — dashboard filtering (unassigned / urgent)
-- `Conversation(lastMessageAt)` — conversation list ordering
-- `Message(conversationId, createdAt)` — message list pagination
-- `Message(conversationId, status)` — delivery status tracking
-- `Activity(conversationId, createdAt)` — activity timeline
-- `AgentConversation(conversationId, assignedAt)` — assignment history
-- `Notification(agentId, read)` — notification inbox
-- `Notification(createdAt)` — chronological notification ordering
-- `Customer(phone)`, `Customer(blacklisted)` — lookup by phone, blacklist checks
-
-## WebSocket Protocol Compatibility
-
-The schema preserves external string IDs used by the WebSocket protocol:
-- Conversation IDs like `"maya"`, `"gyna"` are used directly as `Conversation.id`
-- Message IDs like `"maya-1"` or `"c-<uuid>"` are used directly as `Message.id`
-- Activity IDs like `"a1"` are used directly as `Activity.id`
-
-This avoids a migration of existing WebSocket message references from the
-client side.
+`ConversationDto` is a denormalized join; see the `CREATE VIEW conversation_dto`
+example at the bottom of `prisma/schema.prisma` (MySQL has no materialized views).

@@ -20,3 +20,6 @@ logs/
 /.plugins/
 /.opencode-skills/
 .DS_Store
+
+# Generated Prisma client (prisma generate)
+/prisma/generated/

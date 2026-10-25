@@ -1,0 +1,279 @@
+// Chat Dashboard schema, paste into https://dbdiagram.io/d
+// Mirrors prisma/schema.prisma (MySQL 8.0.16+).
+
+Project chat_dashboard {
+  database_type: 'MySQL'
+  Note: 'Loan-application support chat with AI to human handoff'
+}
+
+// ─── Enums ──────────────────────────────────────────────────────────
+
+Enum handoff_status {
+  AI
+  NEEDS_HUMAN
+  ASSIGNED
+}
+
+Enum user_role {
+  CUSTOMER
+  AGENT
+  SUPERVISOR
+  ADMIN
+}
+
+Enum conversation_status {
+  OPEN
+  RESOLVED
+  CLOSED
+}
+
+Enum message_side {
+  CUSTOMER
+  ASSISTANT
+  AGENT
+}
+
+Enum message_type {
+  TEXT
+  IMAGE
+  FILE
+  NOTE [note: 'internal agent note, never sent to the customer']
+  SYSTEM [note: 'e.g. Agent X took over']
+}
+
+Enum delivery_status {
+  SENDING
+  SENT
+  DELIVERED
+  READ
+  FAILED
+}
+
+Enum activity_tone {
+  BLUE
+  CYAN
+  RED
+}
+
+Enum application_status {
+  NEW
+  REVIEWING
+  COMPLETED
+  FAILED
+  PAID_OFF
+  IN_PROGRESS
+  OVERDUE
+}
+
+Enum file_kind {
+  DOCUMENT
+  IMAGE
+}
+
+Enum assignment_role {
+  OWNER
+  VIEWER
+}
+
+Enum notification_type {
+  NEW_CONVERSATION
+  HANDOFF
+  CALLBACK
+  MENTION
+  SYSTEM
+}
+
+// ─── Tables ─────────────────────────────────────────────────────────
+
+Table users {
+  id            char(36) [pk]
+  name          varchar(150) [not null]
+  avatar        varchar(512) [note: 'avatar URL']
+  email         varchar(255) [unique]
+  role          user_role [not null]
+  password_hash varchar(255) [note: 'argon2/bcrypt; null for customers and SSO-only staff']
+  active        boolean [not null, default: true, note: 'account enabled']
+  last_login_at datetime
+  created_at    datetime [not null, default: `now()`]
+  updated_at    datetime [not null, default: `now()`]
+
+  indexes {
+    (role, active)
+  }
+
+  Note: 'Identity + auth for everyone. Role-specific data lives in customers / agents (1:1, same id).'
+}
+
+Table customers {
+  id          char(36) [pk, ref: - users.id, note: 'same value as users.id']
+  phone       varchar(32)
+  national_id varchar(64)
+  salary      varchar(64)
+  occupation  varchar(150)
+  blacklisted boolean [not null, default: false]
+  created_at  datetime [not null, default: `now()`]
+  updated_at  datetime [not null, default: `now()`]
+
+  indexes {
+    phone
+    blacklisted
+  }
+}
+
+Table agents {
+  id         char(36) [pk, ref: - users.id, note: 'same value as users.id']
+  available  boolean [not null, default: true, note: 'accepting new chats']
+  created_at datetime [not null, default: `now()`]
+  updated_at datetime [not null, default: `now()`]
+
+  indexes {
+    available
+  }
+}
+
+Table applications {
+  id            char(36) [pk]
+  app_id        varchar(64) [not null, unique, note: 'e.g. 61831']
+  customer_id   char(36) [not null, ref: > customers.id]
+  reference     varchar(100) [not null, unique, note: 'e.g. LUL-61831-MAYA']
+  product       varchar(150) [not null, note: 'e.g. Instant Cash']
+  amount        decimal(12,2) [not null]
+  currency      char(3) [not null, default: 'USD']
+  tenor_days    int [not null]
+  loan_request  varchar(255)
+  completeness  varchar(64)
+  status        application_status [not null]
+  registered_at datetime
+  created_at    datetime [not null, default: `now()`]
+  updated_at    datetime [not null, default: `now()`]
+
+  indexes {
+    status
+    customer_id
+  }
+}
+
+Table conversations {
+  id                char(36) [pk]
+  slug              varchar(100) [not null, unique, note: 'external id used by the WS protocol/frontend, e.g. maya']
+  customer_id       char(36) [not null, ref: > customers.id]
+  status            conversation_status [not null, default: 'OPEN']
+  channel           varchar(32) [not null, default: 'web']
+  closed_at         datetime [note: 'NULL <=> status = OPEN']
+  application_id    char(36) [unique, ref: - applications.id, note: '1:1 with application']
+  preview           varchar(255) [not null, note: 'denormalized last message preview']
+  last_message_at   datetime [not null]
+  unread_count      int [not null, default: 0]
+  urgent            boolean [not null, default: false]
+  handoff           handoff_status [not null, default: 'AI']
+  assigned_agent_id char(36) [ref: > agents.id, note: 'current owner when handoff = ASSIGNED']
+  summary           text
+  summary_image     varchar(512)
+  created_at        datetime [not null, default: `now()`]
+  updated_at        datetime [not null, default: `now()`]
+
+  indexes {
+    handoff
+    last_message_at
+    (urgent, handoff)
+    (status, last_message_at)
+    unread_count
+  }
+}
+
+Table messages {
+  id                 char(36) [pk]
+  conversation_id    char(36) [not null, ref: > conversations.id]
+  sender_type        message_side [not null, default: 'CUSTOMER']
+  sender_user_id     char(36) [ref: > users.id, note: 'customer or agent; NULL for ASSISTANT']
+  type               message_type [not null, default: 'TEXT']
+  text               text [not null]
+  client_id          varchar(64) [note: 'client-generated id for optimistic sends (idempotency)']
+  status             delivery_status [default: 'SENT']
+  created_at         datetime [not null, default: `now()`]
+  edited_at          datetime
+  deleted_at         datetime [note: 'soft delete']
+
+  indexes {
+    (conversation_id, created_at)
+    (conversation_id, status)
+    sender_user_id
+    (conversation_id, client_id) [unique]
+  }
+}
+
+Table activities {
+  id              char(36) [pk, default: `uuid()`]
+  conversation_id char(36) [not null, ref: > conversations.id]
+  agent_id        char(36) [ref: > agents.id, note: 'NULL for system/AI events']
+  tone            activity_tone [not null]
+  title           varchar(255) [not null]
+  copy            text [not null]
+  created_at      datetime [not null, default: `now()`]
+
+  indexes {
+    (conversation_id, created_at)
+  }
+}
+
+Table agent_conversations {
+  id              char(36) [pk]
+  agent_id        char(36) [not null, ref: > agents.id]
+  conversation_id char(36) [not null, ref: > conversations.id]
+  role            assignment_role [not null, default: 'OWNER']
+  assigned_at     datetime [not null, default: `now()`]
+  unassigned_at   datetime [note: 'NULL = currently assigned']
+  active_owner_key char(36) [unique, note: 'GENERATED STORED: conversation_id while this row is the active OWNER, else NULL. Gives one active owner per conversation. Never write to it.']
+
+  indexes {
+    (conversation_id, assigned_at)
+  }
+
+  Note: 'Append-only assignment history; FKs are RESTRICT so history survives. conversations.handoff = ASSIGNED <=> assigned_agent_id is set (CHECK). One active OWNER per conversation via the generated column + UNIQUE index (prisma/sql/constraints.sql).'
+}
+
+Table shared_files {
+  id              char(36) [pk]
+  conversation_id char(36) [not null, ref: > conversations.id]
+  customer_id     char(36) [not null, ref: > customers.id]
+  application_id  char(36) [ref: > applications.id]
+  message_id      char(36) [ref: > messages.id, note: 'message the file was sent with']
+  name            varchar(150) [not null]
+  kind            file_kind [not null]
+  size_bytes      int [not null]
+  mime_type       varchar(127)
+  url             varchar(1024) [not null]
+  created_at      datetime [not null, default: `now()`]
+
+  indexes {
+    conversation_id
+    customer_id
+    message_id
+  }
+}
+
+Table settings {
+  id         char(36) [pk]
+  agent_id   char(36) [not null, ref: > agents.id]
+  key        varchar(100) [not null, note: 'e.g. readReceipts, aiReplies']
+  value      boolean [not null, default: false]
+  updated_at datetime [not null, default: `now()`]
+
+  indexes {
+    (agent_id, key) [unique]
+  }
+}
+
+Table notifications {
+  id         char(36) [pk]
+  agent_id   char(36) [not null, ref: > agents.id]
+  type       notification_type [not null, default: 'SYSTEM']
+  text       text [not null]
+  read       boolean [not null, default: false]
+  created_at datetime [not null, default: `now()`]
+
+  indexes {
+    (agent_id, read)
+    created_at
+  }
+}

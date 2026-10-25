@@ -1,10 +1,11 @@
 generator client {
-  provider = "prisma-client-js"
+  provider = "prisma-client"
+  output   = "./generated/prisma"
 }
 
+// Prisma 7: the connection URL lives in prisma.config.ts, not here.
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider = "mysql"
 }
 
 // ─── Enums ──────────────────────────────────────────────────────────────────
@@ -53,6 +54,30 @@ enum ApplicationStatus {
   OVERDUE
 }
 
+/// Account type. CUSTOMER rows have a Customer profile; the rest have an Agent profile.
+enum UserRole {
+  CUSTOMER
+  AGENT
+  SUPERVISOR
+  ADMIN
+}
+
+/// Lifecycle of a conversation, independent of who is handling it (handoff).
+enum ConversationStatus {
+  OPEN
+  RESOLVED
+  CLOSED
+}
+
+/// Kind of content carried by a message.
+enum MessageType {
+  TEXT
+  IMAGE
+  FILE
+  NOTE /// internal agent note, never delivered to the customer
+  SYSTEM /// e.g. "Agent X took over"
+}
+
 /// File classification in the media/shared-files panel.
 enum FileKind {
   DOCUMENT
@@ -76,255 +101,286 @@ enum NotificationType {
 
 // ─── Core Entities ──────────────────────────────────────────────────────────
 
-/// A customer who has applied for a loan and may be chatting with agents.
-/// Customer fields (name, avatar) currently live on ConversationDto and are
-/// duplicated in the ApplicationsTable; this table normalizes them.
-model Customer {
-  id          String       @id @default(uuid())
-  name        String
-  avatar      String?      /// URL to avatar image (was ConversationDto.avatar)
-  email       String?
-  phone       String?      /// Phone Number column in ApplicationsTable
-  nationalId  String?      /// NID column in ApplicationsTable
-  salary      String?      /// Salary column in ApplicationsTable
-  occupation  String?      /// Occupation column in ApplicationsTable
-  blacklisted Boolean      @default(false) /// Blacklist column in ApplicationsTable
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+/// Every person who can appear in the system: customers and staff.
+/// Holds identity and authentication; role-specific data is in Customer / Agent.
+model User {
+  id           String    @id @default(uuid()) @db.Char(36)
+  name         String    @db.VarChar(150)
+  avatar       String?   @db.VarChar(512) /// URL to avatar image
+  email        String?   @unique @db.VarChar(255)
+  role         UserRole
+  passwordHash String?   @map("password_hash") @db.VarChar(255) /// argon2/bcrypt hash; null for customers and SSO-only staff
+  active       Boolean   @default(true) /// account enabled
+  lastLoginAt  DateTime? @map("last_login_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
 
+  customer Customer?
+  agent    Agent?
+  messages Message[]
+
+  @@index([role, active])
+  @@map("users")
+}
+
+/// Loan applicant profile. Shares its primary key with User (1:1), so
+/// Customer.id == User.id. Identity (name, avatar, email) lives on User.
+model Customer {
+  id          String   @id @db.Char(36)
+  phone       String?  @db.VarChar(32) /// Phone Number column in ApplicationsTable
+  nationalId  String?  @map("national_id") @db.VarChar(64) /// NID column in ApplicationsTable
+  salary      String?  @db.VarChar(64) /// Salary column in ApplicationsTable
+  occupation  String?  @db.VarChar(150) /// Occupation column in ApplicationsTable
+  blacklisted Boolean  @default(false) /// Blacklist column in ApplicationsTable
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  user          User           @relation(fields: [id], references: [id], onDelete: Cascade)
   applications  Application[]
   conversations Conversation[]
-  messages      Message[]
   files         SharedFile[]
 
   @@index([phone])
   @@index([blacklisted])
+  @@map("customers")
 }
 
-/// A support agent (or supervisor) who handles conversations.
-/// Currently implicit: the "agent" side of ChatMessageDto and the
-/// conversation.takeover flow; this table makes agents first-class.
+/// Staff profile. Shares its primary key with User (1:1), so Agent.id == User.id.
+/// Identity and login (name, email, passwordHash, role) live on User.
 model Agent {
-  id        String   @id @default(uuid())
-  name      String
-  avatar    String?
-  email     String?  @unique
-  active    Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id        String   @id @db.Char(36)
+  available Boolean  @default(true) /// accepting new chats (distinct from User.active = account enabled)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  assignedConversations AgentConversation[]
-  messages              Message[]
+  user                  User                @relation(fields: [id], references: [id], onDelete: Cascade)
+  assignments           AgentConversation[]
+  assignedConversations Conversation[]      @relation("AssignedConversations")
   activities            Activity[]
   notifications         Notification[]
   settings              Setting[]
 
-  @@index([active])
+  @@index([available])
+  @@map("agents")
 }
 
 /// A loan application filed by a customer.
 /// ConversationDto.application is an embedded object; this table normalizes it
 /// and adds fields needed by the ApplicationsTable (registered, completeness, etc.).
 model Application {
-  id          String            @id @default(uuid())
-  appId       String            @unique /// e.g. "61831" (was ConversationDto.application.appId)
-  customerId  String?
-  reference   String            @unique /// e.g. "LUL-61831-MAYA"
-  product     String            /// e.g. "Instant Cash"
-  amount      String            /// e.g. "$500"
-  tenor       String            /// e.g. "30 days"
-  loanRequest String?           /// Loan Request column in ApplicationsTable
-  completeness String?          /// Completeness column in ApplicationsTable
-  status      ApplicationStatus
-  registeredAt DateTime?        /// Registered Date column in ApplicationsTable
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
+  id           String            @id @default(uuid()) @db.Char(36)
+  appId        String            @unique @map("app_id") @db.VarChar(64) /// e.g. "61831" (was ConversationDto.application.appId)
+  customerId   String            @map("customer_id") @db.Char(36)
+  reference    String            @unique @db.VarChar(100) /// e.g. "LUL-61831-MAYA"
+  product      String            @db.VarChar(150) /// e.g. "Instant Cash"
+  amount       Decimal           @db.Decimal(12, 2) /// DTO formats as "$500"
+  currency     String            @default("USD") @db.Char(3)
+  tenorDays    Int               @map("tenor_days") /// DTO formats as "30 days"
+  loanRequest  String?           @map("loan_request") @db.VarChar(255) /// Loan Request column in ApplicationsTable
+  completeness String?           @db.VarChar(64) /// Completeness column in ApplicationsTable
+  status       ApplicationStatus
+  registeredAt DateTime?         @map("registered_at") /// Registered Date column in ApplicationsTable
+  createdAt    DateTime          @default(now()) @map("created_at")
+  updatedAt    DateTime          @updatedAt @map("updated_at")
 
-  customer     Customer?     @relation(fields: [customerId], references: [id])
+  customer     Customer      @relation(fields: [customerId], references: [id], onDelete: Restrict)
   conversation Conversation?
   files        SharedFile[]
 
   @@index([status])
   @@index([customerId])
+  @@map("applications")
 }
 
 /// A chat conversation between a customer and one or more agents/AI.
 /// ConversationDto is a denormalized view composed from this table +
 /// Customer + Application + Activity[].
 model Conversation {
-  id            String       @id /// e.g. "maya", "gyna" (kept as external slug for WS compat)
-  customerId    String?
-  applicationId String?      @unique /// 1:1 to Application (ConversationDto.application)
-  preview       String       /// Last message preview (ConversationDto.preview)
-  lastMessageAt DateTime     /// ConversationDto.lastMessageAt
-  unreadCount   Int          @default(0) /// ConversationDto.unread
-  urgent        Boolean      @default(false) /// ConversationDto.urgent
-  handoff       HandoffStatus @default(AI) /// ConversationDto.handoff
-  assignedAgentId String?    /// Currently assigned agent (HandoffStatus.ASSIGNED)
-  summary       String?      /// ConversationDto.summary
-  summaryImage  String?      /// ConversationDto.summaryImage
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
+  id              String             @id @default(uuid()) @db.Char(36)
+  slug            String             @unique @db.VarChar(100) /// e.g. "maya" (external id the WS protocol/frontend uses today)
+  customerId      String             @map("customer_id") @db.Char(36)
+  status          ConversationStatus @default(OPEN)
+  channel         String             @default("web") @db.VarChar(32) /// web | telegram | ...
+  closedAt        DateTime?          @map("closed_at")
+  applicationId   String?            @unique @map("application_id") @db.Char(36) /// 1:1 to Application (ConversationDto.application)
+  preview         String             @db.VarChar(255) /// Last message preview (ConversationDto.preview)
+  lastMessageAt   DateTime           @map("last_message_at") /// ConversationDto.lastMessageAt
+  unreadCount     Int                @default(0) @map("unread_count") /// ConversationDto.unread
+  urgent          Boolean            @default(false) /// ConversationDto.urgent
+  handoff         HandoffStatus      @default(AI) /// ConversationDto.handoff
+  assignedAgentId String?            @map("assigned_agent_id") @db.Char(36) /// Currently assigned agent (HandoffStatus.ASSIGNED)
+  summary         String?            @db.Text /// ConversationDto.summary
+  summaryImage    String?            @map("summary_image") @db.VarChar(512) /// ConversationDto.summaryImage
+  createdAt       DateTime           @default(now()) @map("created_at")
+  updatedAt       DateTime           @updatedAt @map("updated_at")
 
-  customer          Customer?          @relation(fields: [customerId], references: [id])
-  application       Application?       @relation(fields: [applicationId], references: [id])
-  assignedAgent     Agent?             @relation("AssignedConversations", fields: [assignedAgentId], references: [id])
-  messages          Message[]
-  activities        Activity[]
-  agentAssignments  AgentConversation[]
-  files             SharedFile[]
+  customer         Customer            @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  application      Application?        @relation(fields: [applicationId], references: [id], onDelete: SetNull)
+  assignedAgent    Agent?              @relation("AssignedConversations", fields: [assignedAgentId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  messages         Message[]
+  activities       Activity[]
+  agentAssignments AgentConversation[]
+  files            SharedFile[]
 
-  @@index([handoff])
-  @@index([unreadCount])
+  @@index([handoff, lastMessageAt])
+  @@index([status, lastMessageAt])
   @@index([lastMessageAt])
   @@index([urgent, handoff])
+  @@map("conversations")
 }
 
 /// An individual message within a conversation.
 /// Maps to ChatMessageDto; senderId is polymorphic (customer or agent).
-/// For ASSISTANT messages (AI), both sender IDs are NULL.
+/// For ASSISTANT messages (AI), senderUserId is NULL.
 model Message {
-  id            String        @id /// e.g. "maya-1" or "c-<uuid>" for optimistic
-  conversationId String
-  senderType    MessageSide   @default(CUSTOMER)
-  senderCustomerId String?     /// FK to Customer when side is "customer"
-  senderAgentId  String?        /// FK to Agent when side is "agent"
-  text          String
-  status        DeliveryStatus? @default(SENT) /// ConversationDto.lastMessageAt
-  createdAt     DateTime      @default(now())
+  id             String          @id @default(uuid()) @db.Char(36)
+  conversationId String          @map("conversation_id") @db.Char(36)
+  senderType     MessageSide     @default(CUSTOMER) @map("sender_type")
+  senderUserId   String?         @map("sender_user_id") @db.Char(36) /// customer or agent; NULL for ASSISTANT
+  type           MessageType     @default(TEXT)
+  text           String          @db.Text
+  clientId       String?         @map("client_id") @db.VarChar(64) /// client-generated id for optimistic sends (idempotency key)
+  status         DeliveryStatus? @default(SENT) /// ConversationDto.lastMessageAt
+  createdAt      DateTime        @default(now()) @map("created_at")
+  editedAt       DateTime?       @map("edited_at")
+  deletedAt      DateTime?       @map("deleted_at") /// soft delete; never hard-delete messages
 
-  conversation    Conversation @relation(fields: [conversationId], references: [id])
-  customer        Customer?    @relation("CustomerMessages", fields: [senderCustomerId], references: [id])
-  agent           Agent?       @relation("AgentMessages", fields: [senderAgentId], references: [id])
+  files SharedFile[]
 
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User?        @relation(fields: [senderUserId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@unique([conversationId, clientId]) /// retry after reconnect must not duplicate
   @@index([conversationId, createdAt])
   @@index([conversationId, status])
+  @@index([senderUserId])
+  @@map("messages")
 }
 
 /// A timeline/activity event attached to a conversation.
 /// Maps to ActivityDto (tone, title, time, copy).
 model Activity {
-  id            String      @id /// e.g. "a1"
-  conversationId String
-  agentId       String?     /// Nullable — many activities are system/AI generated
-  tone          ActivityTone
-  title         String
-  time           String     /// Display time like "09:12" (kept as string for wire-format compat)
-  copy          String
-  createdAt     DateTime    @default(now())
+  id             String       @id @default(uuid()) @db.Char(36)
+  conversationId String       @map("conversation_id") @db.Char(36)
+  agentId        String?      @map("agent_id") @db.Char(36) /// Nullable — many activities are system/AI generated
+  tone           ActivityTone
+  title          String       @db.VarChar(255)
+  copy           String       @db.Text
+  createdAt      DateTime     @default(now()) @map("created_at") /// DTO "time" is derived from this
 
-  conversation    Conversation @relation(fields: [conversationId], references: [id])
-  agent           Agent?       @relation(fields: [agentId], references: [id])
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  agent        Agent?       @relation(fields: [agentId], references: [id], onDelete: SetNull)
 
   @@index([conversationId, createdAt])
+  @@map("activities")
 }
 
 /// Tracks the assignment history of agents to conversations.
 /// Every takeover / handoff creates a new row (closing the previous one).
 /// Enables audit of who owned which conversation and when.
 model AgentConversation {
-  id              String          @id @default(uuid())
-  agentId         String
-  conversationId  String
-  role            AssignmentRole  @default(OWNER)
-  assignedAt      DateTime        @default(now())
-  unassignedAt    DateTime?
+  id             String         @id @default(uuid()) @db.Char(36)
+  agentId        String         @map("agent_id") @db.Char(36)
+  conversationId String         @map("conversation_id") @db.Char(36)
+  role           AssignmentRole @default(OWNER)
+  assignedAt     DateTime       @default(now()) @map("assigned_at")
+  unassignedAt   DateTime?      @map("unassigned_at")
+  /// GENERATED column (see prisma/sql/constraints.sql): conversationId while this row is the
+  /// active OWNER, else NULL. Its UNIQUE index gives "one active owner per conversation"
+  /// because MySQL has no partial indexes. Never write to it.
+  activeOwnerKey String?        @map("active_owner_key") @db.Char(36)
 
-  agent           Agent           @relation(fields: [agentId], references: [id])
-  conversation    Conversation    @relation(fields: [conversationId], references: [id])
+  agent        Agent        @relation(fields: [agentId], references: [id], onDelete: Restrict)
+  /// Restrict + NoAction (not Cascade): MySQL forbids a generated column (activeOwnerKey) on a column
+  /// whose FK cascades, and assignment history is an audit trail that shouldn't vanish with a chat.
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Restrict, onUpdate: NoAction)
 
-  @@unique([agentId, conversationId, unassignedAt])
   @@index([conversationId, assignedAt])
+  @@map("agent_conversations")
 }
 
 /// A file shared in a conversation (media, documents).
 /// SharedFile in share-files/model/store.ts is currently a disconnected local
 /// store; this table links files to conversations, customers, and applications.
 model SharedFile {
-  id            String   @id @default(uuid())
-  conversationId String
-  customerId    String
-  applicationId String?
-  name          String
-  kind          FileKind
-  size          String   /// e.g. "1.8 MB"
-  url           String   /// Storage URL for download
-  addedAt       String   /// Display timestamp like "Today, 09:06"
-  createdAt     DateTime @default(now())
+  id             String   @id @default(uuid()) @db.Char(36)
+  conversationId String   @map("conversation_id") @db.Char(36)
+  customerId     String   @map("customer_id") @db.Char(36)
+  applicationId  String?  @map("application_id") @db.Char(36)
+  name           String   @db.VarChar(255)
+  kind           FileKind
+  messageId      String?  @map("message_id") @db.Char(36) /// message the file was sent with, if any
+  sizeBytes      Int      @map("size_bytes") /// DTO formats as "1.8 MB"
+  mimeType       String?  @map("mime_type") @db.VarChar(127)
+  url            String   @db.VarChar(1024) /// Storage URL for download
+  createdAt      DateTime @default(now()) @map("created_at") /// DTO "addedAt" is derived from this
 
-  conversation    Conversation @relation(fields: [conversationId], references: [id])
-  customer        Customer     @relation(fields: [customerId], references: [id])
-  application     Application? @relation(fields: [applicationId], references: [id])
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  customer     Customer     @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  application  Application? @relation(fields: [applicationId], references: [id], onDelete: SetNull)
+  message      Message?     @relation(fields: [messageId], references: [id], onDelete: SetNull)
 
   @@index([conversationId])
   @@index([customerId])
+  @@index([messageId])
+  @@map("shared_files")
 }
 
 /// A persistent agent/user preference (settings).
 /// Message settings and privacy controls currently live only in Zustand stores.
 model Setting {
-  id        String   @id @default(uuid())
-  agentId   String
-  key       String   /// e.g. "conversationAlerts", "readReceipts", "aiReplies"
+  id        String   @id @default(uuid()) @db.Char(36)
+  agentId   String   @map("agent_id") @db.Char(36)
+  key       String   @db.VarChar(100) /// e.g. "conversationAlerts", "readReceipts", "aiReplies"
   value     Boolean  @default(false)
-  updatedAt DateTime @updatedAt
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  agent     Agent    @relation(fields: [agentId], references: [id])
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
 
   @@unique([agentId, key])
+  @@map("settings")
 }
 
 /// A system notification for an agent.
 /// The Notifications feature (features/notifications/) is a placeholder;
 /// this table backs it with persisted, queryable data.
 model Notification {
-  id        String          @id @default(uuid())
-  agentId   String
+  id        String           @id @default(uuid()) @db.Char(36)
+  agentId   String           @map("agent_id") @db.Char(36)
   type      NotificationType @default(SYSTEM)
-  text      String
-  read      Boolean         @default(false)
-  createdAt DateTime        @default(now())
+  text      String           @db.Text
+  read      Boolean          @default(false)
+  createdAt DateTime         @default(now()) @map("created_at")
 
-  agent     Agent           @relation(fields: [agentId], references: [id])
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
 
   @@index([agentId, read])
   @@index([createdAt])
+  @@map("notifications")
 }
 
 // ─── Views (documented, not managed by Prisma) ─────────────────────────────
 
 /// The WebSocket `sync` event returns `ConversationDto[]`, a denormalized view.
-/// In Postgres this can be expressed as a materialized view:
+/// MySQL has no materialized views; a plain VIEW (or the query in code) works:
 ///
 /// ```sql
-/// CREATE MATERIALIZED VIEW conversation_dto AS
+/// CREATE VIEW conversation_dto AS
 /// SELECT
-///   c.id,
-///   cu.name,
-///   cu.avatar   AS avatar,
-///   c.preview,
-///   c."lastMessageAt"      AS "lastMessageAt",
-///   c."unreadCount"        AS unread,
-///   c.urgent,
-///   c.handoff,
-///   jsonb_build_object(
-///     'appId',     a."appId",
-///     'product',   a.product,
-///     'amount',    a.amount,
-///     'tenor',     a.tenor,
-///     'status',    a.status,
-///     'reference', a.reference
+///   c.id, c.slug, u.name, u.avatar, c.preview,
+///   c.last_message_at AS lastMessageAt,
+///   c.unread_count    AS unread,
+///   c.urgent, c.handoff,
+///   JSON_OBJECT(
+///     'appId', a.app_id, 'product', a.product, 'amount', a.amount,
+///     'tenorDays', a.tenor_days, 'status', a.status, 'reference', a.reference
 ///   ) AS application,
-///   (SELECT jsonb_agg(jsonb_build_object(
-///     'id',    act.id,
-///     'tone',  act.tone,
-///     'title', act.title,
-///     'time',  act.time,
-///     'copy',  act.copy
-///   )) FROM "Activity" act WHERE act."conversationId" = c.id) AS activity,
-///   c.summary,
-///   c."summaryImage" AS "summaryImage"
-/// FROM "Conversation" c
-/// LEFT JOIN "Customer" cu ON cu.id = c."customerId"
-/// LEFT JOIN "Application" a ON a.id = c."applicationId";
+///   (SELECT JSON_ARRAYAGG(JSON_OBJECT(
+///     'id', act.id, 'tone', act.tone, 'title', act.title,
+///     'createdAt', act.created_at, 'copy', act.copy))
+///    FROM activities act WHERE act.conversation_id = c.id) AS activity,
+///   c.summary, c.summary_image AS summaryImage
+/// FROM conversations c
+/// JOIN users u ON u.id = c.customer_id
+/// LEFT JOIN applications a ON a.id = c.application_id;
 /// ```
