@@ -1,4 +1,3 @@
-// Chat Dashboard schema, paste into https://dbdiagram.io/d
 // Mirrors prisma/schema.prisma (MySQL 8.0.16+).
 
 Project chat_dashboard {
