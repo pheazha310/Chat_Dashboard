@@ -14,18 +14,12 @@
     "format": "pnpm -r format",
     "format:check": "pnpm -r format:check",
     "check": "pnpm typecheck && pnpm lint && pnpm check:fsd && pnpm format:check && pnpm test",
-    "db:generate": "prisma generate",
-    "db:validate": "prisma validate",
-    "db:migrate": "prisma migrate dev"
+    "db:generate": "pnpm --filter @chat-dashboard/backend db:generate",
+    "db:validate": "pnpm --filter @chat-dashboard/backend db:validate",
+    "db:migrate": "pnpm --filter @chat-dashboard/backend db:migrate"
   },
   "devDependencies": {
-    "prettier": "3",
-    "prisma": "7.10.1"
+    "prettier": "3"
   },
-  "packageManager": "pnpm@10.34.3",
-  "dependencies": {
-    "@prisma/adapter-mariadb": "^7.10.1",
-    "@prisma/client": "^7.10.1",
-    "dotenv": "^18.0.9"
-  }
+  "packageManager": "pnpm@10.34.3"
 }

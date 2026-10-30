@@ -293,7 +293,7 @@ model AgentConversation {
   role           AssignmentRole @default(OWNER)
   assignedAt     DateTime       @default(now()) @map("assigned_at")
   unassignedAt   DateTime?      @map("unassigned_at")
-  /// GENERATED column (see prisma/sql/constraints.sql): conversationId while this row is the
+  /// GENERATED column (see backend/prisma/sql/constraints.sql): conversationId while this row is the
   /// active OWNER, else NULL. Its UNIQUE index gives "one active owner per conversation"
   /// because MySQL has no partial indexes. Never write to it.
   activeOwnerKey String?        @map("active_owner_key") @db.Char(36)

@@ -1,4 +1,4 @@
-// Mirrors prisma/schema.prisma (MySQL 8.0.16+).
+// Mirrors backend/prisma/schema.prisma (MySQL 8.0.16+).
 
 Project chat_dashboard {
   database_type: 'MySQL'
@@ -231,7 +231,7 @@ Table agent_conversations {
     (conversation_id, assigned_at)
   }
 
-  Note: 'Append-only assignment history; FKs are RESTRICT so history survives. conversations.handoff = ASSIGNED <=> assigned_agent_id is set (CHECK). One active OWNER per conversation via the generated column + UNIQUE index (prisma/sql/constraints.sql).'
+  Note: 'Append-only assignment history; FKs are RESTRICT so history survives. conversations.handoff = ASSIGNED <=> assigned_agent_id is set (CHECK). One active OWNER per conversation via the generated column + UNIQUE index (backend/prisma/sql/constraints.sql).'
 }
 
 Table shared_files {

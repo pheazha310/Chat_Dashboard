@@ -8,7 +8,7 @@ Requires Node 22 and pnpm (versions pinned in `.mise.toml` / `package.json`).
 
 ```sh
 pnpm install
-cp .env.example .env
+cp frontend/.env.example frontend/.env
 pnpm dev
 ```
 
@@ -29,3 +29,21 @@ pnpm dev
 ## Architecture
 
 Feature-Sliced Design: `app → pages → widgets → features → entities → shared`. See [FSD.md](FSD.md) for layer responsibilities and import rules, which `pnpm check:fsd` enforces.
+
+## Backend
+
+Backend database code lives in `backend/`, a pnpm workspace package.
+The Prisma schema, SQL constraints, and database client are in `backend/prisma/`;
+Prisma configuration is in `backend/prisma.config.ts`.
+
+```sh
+cp backend/.env.example backend/.env
+# Set DATABASE_URL in backend/.env to your MySQL connection URL.
+pnpm db:validate
+pnpm db:generate
+pnpm db:migrate
+```
+
+Run these commands from the repository root. They run Prisma in the backend
+package, which loads `backend/.env`. See [database setup](docs/database-schema.md)
+for the additional SQL constraints to apply to the first migration.

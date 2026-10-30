@@ -3,7 +3,7 @@
 ## Overview
 
 The persistent data model behind the Chat Dashboard. It is defined in
-`prisma/schema.prisma` and targets **MySQL 8.0.16+** (Prisma 7). It normalizes
+`backend/prisma/schema.prisma` and targets **MySQL 8.0.16+** (Prisma 7). It normalizes
 entities that are currently embedded in the client DTOs (`ConversationDto`,
 `ChatMessageDto`, `ActivityDto` in `frontend/src/shared/api/ws/protocol.ts`).
 
@@ -11,10 +11,10 @@ Related files:
 
 | File | Purpose |
 |---|---|
-| `prisma/schema.prisma` | Source of truth for tables, columns, relations, enums |
-| `prisma/sql/constraints.sql` | Constraints Prisma cannot express; append to the first migration |
-| `prisma.config.ts` | Prisma 7 config (schema path, `DATABASE_URL`) |
-| `prisma/client.ts` | `PrismaClient` with the MariaDB/MySQL driver adapter |
+| `backend/prisma/schema.prisma` | Source of truth for tables, columns, relations, enums |
+| `backend/prisma/sql/constraints.sql` | Constraints Prisma cannot express; append to the first migration |
+| `backend/prisma.config.ts` | Prisma 7 config (schema path, `DATABASE_URL`) |
+| `backend/prisma/client.ts` | `PrismaClient` with the MariaDB/MySQL driver adapter |
 | `docs/database-schema.dbml` | Same schema for https://dbdiagram.io/d |
 
 Tables are snake_case plural (`users`, `agent_conversations`); in code use the
@@ -187,14 +187,15 @@ to the real id → `message.status` updates.
 ## Setup
 
 ```bash
-pnpm add -D prisma && pnpm add @prisma/client @prisma/adapter-mariadb dotenv
+pnpm install
+cp backend/.env.example backend/.env
 export DATABASE_URL="mysql://user:pass@localhost:3306/chat"
-pnpm exec prisma generate                      # client -> prisma/generated/prisma
-pnpm exec prisma migrate dev --create-only     # then append prisma/sql/constraints.sql to the new migration.sql
-pnpm exec prisma migrate dev
+pnpm db:generate                              # client -> backend/prisma/generated/prisma
+pnpm db:migrate --create-only     # then append backend/prisma/sql/constraints.sql to the new migration.sql
+pnpm db:migrate
 ```
 
 ## Conversation DTO view
 
 `ConversationDto` is a denormalized join; see the `CREATE VIEW conversation_dto`
-example at the bottom of `prisma/schema.prisma` (MySQL has no materialized views).
+example at the bottom of `backend/prisma/schema.prisma` (MySQL has no materialized views).

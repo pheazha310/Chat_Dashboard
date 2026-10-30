@@ -22,4 +22,6 @@ logs/
 .DS_Store
 
 # Generated Prisma client (prisma generate)
-/prisma/generated/
+/backend/prisma/generated/
+
+!backend/.env.example

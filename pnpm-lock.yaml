@@ -7,6 +7,12 @@ settings:
 importers:
 
   .:
+    devDependencies:
+      prettier:
+        specifier: '3'
+        version: 3.9.9
+
+  backend:
     dependencies:
       '@prisma/adapter-mariadb':
         specifier: ^7.10.1
@@ -18,9 +24,6 @@ importers:
         specifier: ^18.0.9
         version: 18.0.9
     devDependencies:
-      prettier:
-        specifier: '3'
-        version: 3.9.9
       prisma:
         specifier: 7.10.1
         version: 7.10.1(@types/node@22.19.17)(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(magicast@0.5.5)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(typescript@5.9.3)
