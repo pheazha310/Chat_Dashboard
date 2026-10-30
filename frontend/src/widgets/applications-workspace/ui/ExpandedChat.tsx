@@ -2,6 +2,7 @@ import { useRef, useState, type PointerEvent } from "react";
 import { useSelectedConversation } from "@/entities/conversation";
 import { useConversationMessages } from "@/entities/message";
 import { sendMessage, useComposerStore, useDraft } from "@/features/send-message";
+import { useCustomerCallStore } from "@/features/customer-call";
 import { TakeOverButton } from "@/features/take-over-conversation";
 import { assets } from "@/shared/config";
 import { formatClock } from "@/shared/lib/format-time";
@@ -151,7 +152,15 @@ export default function ExpandedChat({ onBack }: { onBack: () => void }) {
             Active
           </span>
         </div>
-        <IconPill className="expanded-chat-actions" left="call" right="moreVert" />
+        <div className="expanded-chat-actions">
+          <IconPill left="call" right="moreVert" />
+          <button
+            className="expanded-call-trigger"
+            aria-label={`Call ${conversation?.name ?? "customer"}`}
+            disabled={!conversation}
+            onClick={() => conversation && useCustomerCallStore.getState().start(conversation)}
+          />
+        </div>
       </header>
       <div className="expanded-chat-stream">
         <span className="expanded-today">Today</span>

@@ -5,6 +5,7 @@ import { ChatSearchBar, filterByQuery, useChatSearchStore } from "@/features/sea
 import { MessageComposer, retryMessage, useComposerStore } from "@/features/send-message";
 import { assets } from "@/shared/config";
 import { AssetIcon, IconButton, notify, Icon } from "@/shared/ui";
+import { useCustomerCallStore } from "@/features/customer-call";
 import HandoffCard from "./HandoffCard";
 
 const PRESENCE = {
@@ -82,7 +83,10 @@ export default function ChatWindow({
         </div>
         <div className="chat-actions" ref={actionsRef}>
           <IconButton icon={assets.icons.chatSearch} size={24} label="Search conversation" onClick={toggle} />
-          <button onClick={() => notify(`Calling ${conversation.name}...`)} aria-label={`Call ${conversation.name}`}>
+          <button
+            onClick={() => useCustomerCallStore.getState().start(conversation)}
+            aria-label={`Call ${conversation.name}`}
+          >
             <AssetIcon src={assets.icons.phone} />
           </button>
           <button

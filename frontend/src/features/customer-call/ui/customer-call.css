@@ -1,0 +1,265 @@
+.customer-call {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  width: min(540px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  scrollbar-width: none;
+  padding: 28px 34px 30px;
+  border: 1px solid #3c4661;
+  border-radius: 36px;
+  color: #fff;
+  background: radial-gradient(ellipse at 50% 18%, #1d326e 0, #0b173a 39%, #050d20 85%);
+  box-shadow: 0 28px 90px #02081766;
+  text-align: center;
+}
+.customer-call::-webkit-scrollbar {
+  display: none;
+}
+.customer-call::backdrop {
+  background: #17203399;
+  backdrop-filter: blur(7px);
+}
+.customer-call button {
+  color: inherit;
+  cursor: pointer;
+}
+.customer-call button:focus-visible {
+  outline: 3px solid #a0caff;
+  outline-offset: 5px;
+}
+.customer-call-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #cbd5e1;
+  font-size: 14px;
+  font-weight: 600;
+}
+.customer-call-heading > span {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.customer-call-heading > span svg {
+  width: 19px;
+  height: 19px;
+}
+.customer-call-close {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #ffffff12;
+  border: 1px solid #ffffff26;
+}
+.customer-call-avatar {
+  position: relative;
+  width: 146px;
+  height: 146px;
+  margin: 18px auto 34px;
+}
+.customer-call-avatar img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  border: 5px solid #46578e;
+  object-fit: cover;
+}
+.customer-call-avatar > span {
+  position: absolute;
+  right: 2px;
+  bottom: 12px;
+  width: 22px;
+  height: 22px;
+  background: #20c469;
+  border: 4px solid #13234c;
+  border-radius: 50%;
+}
+.customer-call-status {
+  margin: 0 0 16px;
+  color: #96c1f5;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+.customer-call h2 {
+  margin: 0;
+  font-size: clamp(28px, 5vw, 34px);
+  line-height: 1.2;
+  font-weight: 700;
+  letter-spacing: -1px;
+}
+.customer-call-details {
+  color: #94a3b8;
+  font-size: 15px;
+  margin: 18px 0 26px;
+}
+.customer-call-time {
+  display: block;
+  color: #e2e8f0;
+  font-size: 18px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  margin-bottom: 4px;
+}
+.customer-call-controls {
+  display: flex;
+  justify-content: center;
+  gap: 48px;
+}
+.customer-call-controls > button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  background: none;
+  border: 0;
+  padding: 0;
+  color: #cbd5e1;
+  font-weight: 600;
+  font-size: 14px;
+}
+.customer-call-controls > button > span {
+  width: 61px;
+  height: 61px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #ffffff14;
+  border: 1px solid #ffffff2b;
+}
+.customer-call-controls > button > span.selected {
+  background: #2563eb;
+  border-color: #7ba9ff;
+  color: white;
+}
+.customer-call-controls svg {
+  width: 26px;
+  height: 26px;
+}
+.customer-call-end {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin: 38px auto 34px;
+  padding: 17px 34px;
+  background: #f43f43;
+  border: 0;
+  border-radius: 999px;
+  box-shadow: 0 14px 30px #f43f4326;
+  font-size: 16px;
+  font-weight: 700;
+}
+.customer-call-end:hover {
+  background: #e92f36;
+}
+.customer-call-end svg {
+  width: 29px;
+  height: 29px;
+}
+.customer-call-footer {
+  border-top: 1px solid #ffffff1c;
+  padding-top: 20px;
+  color: #75849d;
+  font-size: 13px;
+}
+.customer-call-footer p {
+  margin: 0;
+}
+.customer-call-footer p:first-child {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: #cbd5e1;
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+.customer-call-footer span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #22c55e;
+}
+.customer-call-keypad {
+  width: 240px;
+  margin: 24px auto 0;
+}
+.customer-call-keypad output {
+  display: block;
+  min-height: 30px;
+  overflow-wrap: anywhere;
+  color: #cbd5e1;
+}
+.customer-call-keypad > div {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.customer-call-keypad button {
+  background: #ffffff12;
+  border: 1px solid #ffffff20;
+  border-radius: 14px;
+  padding: 10px;
+}
+.customer-call-keypad > button {
+  margin-top: 10px;
+  font-size: 13px;
+}
+.customer-call-keypad button:disabled {
+  opacity: 0.4;
+}
+.expanded-call-trigger {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 50%;
+  background: transparent;
+  border: 0;
+  border-radius: 20px 0 0 20px;
+}
+@media (max-width: 480px) {
+  .customer-call {
+    padding: 22px;
+    border-radius: 28px;
+  }
+  .customer-call-controls {
+    gap: 30px;
+  }
+  .customer-call-avatar {
+    width: 120px;
+    height: 120px;
+    margin-bottom: 24px;
+  }
+}
+@media (max-height: 760px) {
+  .customer-call-avatar {
+    width: 110px;
+    height: 110px;
+    margin: 12px auto 20px;
+  }
+  .customer-call-details {
+    margin: 12px 0 18px;
+  }
+  .customer-call-end {
+    margin: 24px auto;
+  }
+}
+
+.expanded-chat-actions > .icon-pill {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  box-shadow: none;
+}
+.expanded-chat-actions > .icon-pill > svg {
+  width: 24px;
+  height: 24px;
+}
+.expanded-chat-actions::after {
+  pointer-events: none;
+}
