@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useSelectedConversation } from "@/entities/conversation";
+import { useConversationStore, useSelectedConversation } from "@/entities/conversation";
 import { MessageBubble, TypingBubble, useConversationMessages, useMessageStore } from "@/entities/message";
 import { ChatSearchBar, filterByQuery, useChatSearchStore } from "@/features/search-in-chat";
 import { MessageComposer, retryMessage, useComposerStore } from "@/features/send-message";
@@ -60,7 +60,8 @@ export default function ChatWindow({
     );
 
   const firstName = conversation.name.split(" ")[0];
-  const menuAction = (text: string) => () => {
+  const menuAction = (action: "markUnreadLocally" | "assignToMeLocally" | "archiveLocally", text: string) => () => {
+    useConversationStore.getState()[action](conversation.id);
     notify(text);
     setShowMore(false);
   };
@@ -102,9 +103,9 @@ export default function ChatWindow({
           </button>
           {showMore && (
             <div className="more-menu" role="menu">
-              <button onClick={menuAction("Conversation marked unread")}>Mark as unread</button>
-              <button onClick={menuAction("Conversation assigned to you")}>Assign to me</button>
-              <button onClick={menuAction("Conversation archived")}>Archive conversation</button>
+              <button onClick={menuAction("markUnreadLocally", "Conversation marked unread")}>Mark as unread</button>
+              <button onClick={menuAction("assignToMeLocally", "Conversation assigned to you")}>Assign to me</button>
+              <button onClick={menuAction("archiveLocally", "Conversation archived")}>Archive conversation</button>
               <button
                 onClick={() => {
                   onOpenMedia();

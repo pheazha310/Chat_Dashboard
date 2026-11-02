@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import type { ConversationDto } from "@/shared/api/ws";
 
-export type Conversation = ConversationDto;
+export type Conversation = ConversationDto & { archived?: boolean };
 
 type ConversationState = {
   byId: Record<string, Conversation>;
@@ -13,6 +13,9 @@ type ConversationState = {
   select: (id: string) => void;
   setQuery: (query: string) => void;
   markReadLocally: (id: string) => void;
+  markUnreadLocally: (id: string) => void;
+  assignToMeLocally: (id: string) => void;
+  archiveLocally: (id: string) => void;
 };
 
 export const useConversationStore = create<ConversationState>((set) => ({
@@ -42,6 +45,39 @@ export const useConversationStore = create<ConversationState>((set) => ({
     }),
   select: (id) => set((state) => (state.byId[id] ? { selectedId: id } : state)),
   setQuery: (query) => set({ query }),
+  markUnreadLocally: (id) =>
+    set((state) => {
+      const conversation = state.byId[id];
+      if (!conversation) return state;
+      return { byId: { ...state.byId, [id]: { ...conversation, unread: Math.max(1, conversation.unread) } } };
+    }),
+  assignToMeLocally: (id) =>
+    set((state) => {
+      const conversation = state.byId[id];
+      if (!conversation) return state;
+      return {
+        byId: {
+          ...state.byId,
+          [id]: {
+            ...conversation,
+            handoff: "assigned",
+            assignedAgent: { id: "local-agent", name: "You", avatar: "", active: true },
+          },
+        },
+      };
+    }),
+  archiveLocally: (id) =>
+    set((state) => {
+      const conversation = state.byId[id];
+      if (!conversation) return state;
+      return {
+        byId: { ...state.byId, [id]: { ...conversation, archived: true } },
+        selectedId:
+          state.selectedId === id
+            ? (state.order.find((other) => other !== id && !state.byId[other]?.archived) ?? null)
+            : state.selectedId,
+      };
+    }),
   markReadLocally: (id) =>
     set((state) => {
       const conversation = state.byId[id];

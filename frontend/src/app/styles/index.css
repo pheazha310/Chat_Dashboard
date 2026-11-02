@@ -3558,3 +3558,187 @@ button {
     width: auto;
   }
 }
+
+/* Expanded conversation header */
+.expanded-chat > header {
+  height: 64px;
+  flex-basis: 64px;
+  padding: 10px 14px;
+  gap: 10px;
+  background: #fff;
+  border-bottom: 1px solid #e5e7eb;
+  border-radius: 24px 24px 0 0;
+}
+.expanded-chat > header .expanded-back {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  background: #f4f5f7;
+}
+.expanded-chat > header .expanded-back :is(img, svg) {
+  width: 16px;
+  height: 16px;
+}
+.expanded-chat > header .expanded-avatar {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  object-fit: cover;
+}
+.expanded-chat > header .expanded-chat-identity {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.expanded-chat > header .expanded-chat-identity strong {
+  color: #111827;
+  font-size: 16px;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.expanded-chat > header .expanded-chat-identity > span {
+  font-size: 12px;
+  line-height: 1.2;
+  color: #536074;
+  gap: 6px;
+}
+.expanded-presence-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  border-radius: 50%;
+  background: #792bdd;
+}
+.expanded-chat > header .expanded-chat-actions {
+  display: block;
+  flex: 0 0 88px;
+  width: 88px;
+  height: 36px;
+  margin-left: auto;
+  border-radius: 999px;
+  background: #f4f5f7;
+}
+.expanded-chat > header .expanded-chat-actions > .icon-pill {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  background: transparent;
+}
+.expanded-chat > header .expanded-chat-actions > .icon-pill > svg {
+  width: 19px;
+  height: 19px;
+  color: #080808;
+}
+.expanded-chat > header .expanded-chat-actions::after {
+  height: 20px;
+  background: #d6d7db;
+  pointer-events: none;
+}
+.expanded-chat > header .expanded-call-trigger,
+.expanded-chat > header .expanded-more-trigger {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 50%;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.expanded-chat > header .expanded-call-trigger {
+  left: 0;
+  border-radius: 999px 0 0 999px;
+}
+.expanded-chat > header .expanded-more-trigger {
+  right: 0;
+  border-radius: 0 999px 999px 0;
+}
+.expanded-chat > header .expanded-call-trigger:hover,
+.expanded-chat > header .expanded-more-trigger:hover {
+  background: #11182708;
+}
+.expanded-chat > header button:focus-visible {
+  outline: 2px solid #0064dc;
+  outline-offset: 3px;
+}
+.expanded-chat > header .expanded-actions-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 50;
+  width: 184px;
+  padding: 4px;
+  background: white;
+  border: 1px solid #e4e7ec;
+  border-radius: 10px;
+  box-shadow: 0 12px 30px #1118271f;
+}
+.expanded-actions-menu button {
+  display: block;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  padding: 9px 10px;
+  color: #111827;
+  font-size: 12px;
+  line-height: 1.4;
+  border-radius: 6px;
+}
+.expanded-actions-menu button:hover {
+  background: #f4f5f7;
+}
+@media (max-width: 480px) {
+  .expanded-chat > header {
+    padding: 12px;
+    gap: 10px;
+    height: 60px;
+    flex-basis: 60px;
+  }
+  .expanded-chat > header .expanded-avatar {
+    width: 34px;
+    height: 34px;
+    flex-basis: 34px;
+  }
+  .expanded-chat > header .expanded-chat-identity strong {
+    font-size: 15px;
+  }
+  .expanded-chat > header .expanded-chat-identity > span {
+    font-size: 12px;
+  }
+  .expanded-chat > header .expanded-chat-actions {
+    width: 88px;
+    flex-basis: 88px;
+    height: 36px;
+  }
+}
+
+.expanded-media-view {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+.expanded-media-view > .context-detail-panel {
+  position: relative;
+  inset: auto;
+  flex: 1;
+  min-height: 0;
+  border-radius: 0;
+  padding: 18px;
+}
+
+.detail-panel-header > .media-back-button {
+  display: grid;
+  place-items: center;
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 50%;
+  background: #f4f5f7;
+  color: #202020;
+}

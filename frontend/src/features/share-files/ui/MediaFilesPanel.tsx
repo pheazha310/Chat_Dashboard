@@ -21,10 +21,12 @@ export default function MediaFilesPanel({
   customer,
   appId,
   onBack,
+  backLabel = "Back to customer details",
 }: {
   customer: string;
   appId: string;
   onBack: () => void;
+  backLabel?: string;
 }) {
   const { files, filter, setFilter, add } = useSharedFilesStore();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -39,8 +41,16 @@ export default function MediaFilesPanel({
   return (
     <section className="context-detail-panel">
       <header className="detail-panel-header">
-        <button type="button" onClick={onBack} aria-label="Back to customer details">
-          ←
+        <button className="media-back-button" type="button" onClick={onBack} aria-label={backLabel} autoFocus>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path
+              d="m14 5-7 7 7 7"
+              stroke="currentColor"
+              strokeWidth="3"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
         </button>
         <div>
           <h3>Media & files</h3>

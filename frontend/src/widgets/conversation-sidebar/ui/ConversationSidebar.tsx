@@ -21,6 +21,7 @@ export default function ConversationSidebar({ open, onClose, onExpand }: Props) 
       .filter(
         (conversation) =>
           conversation &&
+          !conversation.archived &&
           (conversation.name.toLowerCase().includes(needle) || conversation.preview.toLowerCase().includes(needle)),
       );
   }, [byId, order, query]);

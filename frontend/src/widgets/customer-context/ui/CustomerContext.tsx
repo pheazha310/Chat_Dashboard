@@ -1,4 +1,5 @@
 import { useSelectedConversation } from "@/entities/conversation";
+import { useMessageSettingsStore } from "@/features/message-settings";
 import { MediaFilesPanel } from "@/features/share-files";
 import { assets } from "@/shared/config";
 import { Icon } from "@/shared/ui";
@@ -16,6 +17,7 @@ export default function CustomerContext({
   onViewChange: (view: ContextView) => void;
   onClose: () => void;
 }) {
+  const aiSummaries = useMessageSettingsStore((state) => state.values.aiSummaries);
   const conversation = useSelectedConversation();
   if (!conversation) return <aside className="context-column" />;
   const { application, activity } = conversation;
@@ -80,13 +82,15 @@ export default function CustomerContext({
             </div>
           </section>
 
-          <section className="info-card summary-card">
-            <div className="card-heading">
-              <h3>AI Summary</h3>
-              <span>Generated</span>
-            </div>
-            <p>{conversation.summary}</p>
-          </section>
+          {aiSummaries && (
+            <section className="info-card summary-card">
+              <div className="card-heading">
+                <h3>AI Summary</h3>
+                <span>Generated</span>
+              </div>
+              <p>{conversation.summary}</p>
+            </section>
+          )}
         </>
       )}
     </aside>

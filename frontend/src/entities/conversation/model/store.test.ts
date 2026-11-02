@@ -106,3 +106,41 @@ describe("markReadLocally", () => {
     expect(state().byId).toBe(before);
   });
 });
+
+describe("local conversation actions", () => {
+  it("marks unread without reducing existing unread messages", () => {
+    state().setAll([make("a"), make("b", { unread: 3 })]);
+    state().markUnreadLocally("a");
+    state().markUnreadLocally("b");
+    expect(state().byId.a.unread).toBe(1);
+    expect(state().byId.b.unread).toBe(3);
+  });
+
+  it("assigns the conversation to you", () => {
+    state().setAll([make("a", { handoff: "needs-human" })]);
+    state().assignToMeLocally("a");
+    expect(state().byId.a.handoff).toBe("assigned");
+    expect(state().byId.a.assignedAgent?.name).toBe("You");
+  });
+
+  it("keeps archived data and selects the next unarchived conversation", () => {
+    state().setAll([make("a"), make("b"), make("c")]);
+    state().archiveLocally("b");
+    expect(state().selectedId).toBe("a");
+    state().archiveLocally("a");
+    expect(state().selectedId).toBe("c");
+    expect(state().byId.a.archived).toBe(true);
+    expect(state().byId.a.name).toBe("a");
+    state().archiveLocally("c");
+    expect(state().selectedId).toBeNull();
+  });
+
+  it("ignores unknown conversations", () => {
+    state().setAll([make("a")]);
+    const before = state().byId;
+    state().markUnreadLocally("missing");
+    state().assignToMeLocally("missing");
+    state().archiveLocally("missing");
+    expect(state().byId).toBe(before);
+  });
+});

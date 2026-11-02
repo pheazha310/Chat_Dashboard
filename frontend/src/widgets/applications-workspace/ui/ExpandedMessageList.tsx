@@ -18,7 +18,7 @@ export default function ExpandedMessageList({ onClose, onOpened }: Props) {
     () =>
       order
         .map((id) => byId[id])
-        .filter((item) => item && item.name.toLowerCase().includes(panelQuery.toLowerCase()))
+        .filter((item) => item && !item.archived && item.name.toLowerCase().includes(panelQuery.toLowerCase()))
         .slice(0, 7),
     [byId, order, panelQuery],
   );
