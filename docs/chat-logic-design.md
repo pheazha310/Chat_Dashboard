@@ -102,7 +102,7 @@ application with Backend 1, then finds the existing active conversation for that
 2. Generate the reply and insert `ASSISTANT` messages.
 3. If the AI decides to escalate, or the customer asked for a person:
    - set `handoff_status = NEEDS_HUMAN` and raise `priority` if needed;
-   - insert an `ai_handoffs` row (`PENDING`), a `SYSTEM` message and a `conversation_activities` row;
+   - insert a `SYSTEM` message and a `conversation_activities` row;
    - create `notifications` for available agents.
 
 ### 5.3 Agent sends a message (`message.send`)
@@ -138,7 +138,7 @@ await prisma.$transaction(async (tx) => {
   await tx.conversationAssignment.create({
     data: { conversationId: id, agentId, assignedBy: agentId, assignmentType: "OWNER", assignmentAction: "TAKEOVER" },
   });
-  // also: SYSTEM message, conversation_activities row, ai_handoffs -> ACCEPTED
+  // also: SYSTEM message, conversation_activities row
 });
 ```
 

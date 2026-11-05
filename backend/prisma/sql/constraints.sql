@@ -44,9 +44,6 @@ ALTER TABLE agent_presence_history ADD CONSTRAINT agent_presence_history_status_
 ALTER TABLE canned_responses ADD CONSTRAINT canned_responses_scope_check CHECK (scope IN ('PERSONAL', 'TEAM'));
 ALTER TABLE automation_logs ADD CONSTRAINT automation_logs_execution_status_check CHECK (execution_status IN ('SUCCESS', 'FAILED', 'SKIPPED'));
 
-ALTER TABLE ai_handoffs ADD CONSTRAINT ai_handoffs_requested_by_type_check CHECK (requested_by_type IN ('AI', 'CUSTOMER', 'AGENT', 'SYSTEM'));
-ALTER TABLE ai_handoffs ADD CONSTRAINT ai_handoffs_status_check CHECK (status IN ('PENDING', 'ACCEPTED', 'COMPLETED', 'CANCELLED'));
-ALTER TABLE ai_suggestions ADD CONSTRAINT ai_suggestions_status_check CHECK (status IN ('PENDING', 'ACCEPTED', 'EDITED', 'DISMISSED'));
 
 ALTER TABLE callback_requests ADD CONSTRAINT callback_requests_status_check CHECK (status IN ('PENDING', 'COMPLETED', 'CANCELLED', 'MISSED'));
 ALTER TABLE calls ADD CONSTRAINT calls_initiated_by_type_check CHECK (initiated_by_type IN ('CUSTOMER', 'AGENT'));
@@ -142,11 +139,6 @@ CREATE UNIQUE INDEX conversations_one_open_per_application
 CREATE UNIQUE INDEX conversation_participants_one_active
   ON conversation_participants (conversation_id, participant_type, coalesce(participant_id, '00000000-0000-0000-0000-000000000000'::uuid))
   WHERE left_at IS NULL;
-
--- At most one pending AI handoff per conversation.
-CREATE UNIQUE INDEX ai_handoffs_one_pending
-  ON ai_handoffs (conversation_id)
-  WHERE status = 'PENDING';
 
 -- One active OWNER per conversation (race-safe takeover/assign relies on this).
 CREATE UNIQUE INDEX conversation_assignments_one_active_owner

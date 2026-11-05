@@ -338,47 +338,6 @@ CREATE TABLE "automation_logs" (
 );
 
 -- CreateTable
-CREATE TABLE "ai_handoffs" (
-    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
-    "conversation_id" UUID NOT NULL,
-    "requested_by_type" VARCHAR(30) NOT NULL,
-    "requested_by_id" UUID,
-    "reason" TEXT,
-    "status" VARCHAR(30) NOT NULL DEFAULT 'PENDING',
-    "accepted_by" UUID,
-    "requested_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "accepted_at" TIMESTAMPTZ(6),
-    "completed_at" TIMESTAMPTZ(6),
-
-    CONSTRAINT "ai_handoffs_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "ai_summaries" (
-    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
-    "conversation_id" UUID NOT NULL,
-    "summary" TEXT NOT NULL,
-    "model_version" VARCHAR(100),
-    "generated_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "ai_summaries_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "ai_suggestions" (
-    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
-    "conversation_id" UUID NOT NULL,
-    "agent_id" UUID NOT NULL,
-    "suggestion" TEXT NOT NULL,
-    "status" VARCHAR(30) NOT NULL DEFAULT 'PENDING',
-    "final_content" TEXT,
-    "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "ai_suggestions_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
 CREATE TABLE "callback_requests" (
     "id" UUID NOT NULL DEFAULT gen_random_uuid(),
     "conversation_id" UUID NOT NULL,
@@ -688,15 +647,6 @@ CREATE INDEX "automation_logs_conversation_id_idx" ON "automation_logs"("convers
 CREATE INDEX "automation_logs_message_id_idx" ON "automation_logs"("message_id");
 
 -- CreateIndex
-CREATE INDEX "ai_handoffs_conversation_id_status_idx" ON "ai_handoffs"("conversation_id", "status");
-
--- CreateIndex
-CREATE INDEX "ai_summaries_conversation_id_generated_at_idx" ON "ai_summaries"("conversation_id", "generated_at");
-
--- CreateIndex
-CREATE INDEX "ai_suggestions_conversation_id_agent_id_idx" ON "ai_suggestions"("conversation_id", "agent_id");
-
--- CreateIndex
 CREATE INDEX "callback_requests_assigned_agent_id_status_scheduled_at_idx" ON "callback_requests"("assigned_agent_id", "status", "scheduled_at");
 
 -- CreateIndex
@@ -832,15 +782,6 @@ ALTER TABLE "automation_logs" ADD CONSTRAINT "automation_logs_conversation_id_fk
 ALTER TABLE "automation_logs" ADD CONSTRAINT "automation_logs_message_id_fkey" FOREIGN KEY ("message_id") REFERENCES "messages"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "ai_handoffs" ADD CONSTRAINT "ai_handoffs_conversation_id_fkey" FOREIGN KEY ("conversation_id") REFERENCES "conversations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "ai_summaries" ADD CONSTRAINT "ai_summaries_conversation_id_fkey" FOREIGN KEY ("conversation_id") REFERENCES "conversations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "ai_suggestions" ADD CONSTRAINT "ai_suggestions_conversation_id_fkey" FOREIGN KEY ("conversation_id") REFERENCES "conversations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
 ALTER TABLE "callback_requests" ADD CONSTRAINT "callback_requests_conversation_id_fkey" FOREIGN KEY ("conversation_id") REFERENCES "conversations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -905,9 +846,6 @@ ALTER TABLE agent_presence_history ADD CONSTRAINT agent_presence_history_status_
 ALTER TABLE canned_responses ADD CONSTRAINT canned_responses_scope_check CHECK (scope IN ('PERSONAL', 'TEAM'));
 ALTER TABLE automation_logs ADD CONSTRAINT automation_logs_execution_status_check CHECK (execution_status IN ('SUCCESS', 'FAILED', 'SKIPPED'));
 
-ALTER TABLE ai_handoffs ADD CONSTRAINT ai_handoffs_requested_by_type_check CHECK (requested_by_type IN ('AI', 'CUSTOMER', 'AGENT', 'SYSTEM'));
-ALTER TABLE ai_handoffs ADD CONSTRAINT ai_handoffs_status_check CHECK (status IN ('PENDING', 'ACCEPTED', 'COMPLETED', 'CANCELLED'));
-ALTER TABLE ai_suggestions ADD CONSTRAINT ai_suggestions_status_check CHECK (status IN ('PENDING', 'ACCEPTED', 'EDITED', 'DISMISSED'));
 
 ALTER TABLE callback_requests ADD CONSTRAINT callback_requests_status_check CHECK (status IN ('PENDING', 'COMPLETED', 'CANCELLED', 'MISSED'));
 ALTER TABLE calls ADD CONSTRAINT calls_initiated_by_type_check CHECK (initiated_by_type IN ('CUSTOMER', 'AGENT'));
@@ -1003,11 +941,6 @@ CREATE UNIQUE INDEX conversations_one_open_per_application
 CREATE UNIQUE INDEX conversation_participants_one_active
   ON conversation_participants (conversation_id, participant_type, coalesce(participant_id, '00000000-0000-0000-0000-000000000000'::uuid))
   WHERE left_at IS NULL;
-
--- At most one pending AI handoff per conversation.
-CREATE UNIQUE INDEX ai_handoffs_one_pending
-  ON ai_handoffs (conversation_id)
-  WHERE status = 'PENDING';
 
 -- One active OWNER per conversation (race-safe takeover/assign relies on this).
 CREATE UNIQUE INDEX conversation_assignments_one_active_owner

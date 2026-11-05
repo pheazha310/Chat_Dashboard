@@ -103,8 +103,6 @@ and `customer_identifier` are snapshots kept so the inbox can be searched and so
 | `agent_presence_history`              | Agent status periods. Live presence is in Redis; this is history.                                                     |
 | `canned_responses`                    | Templates: `shortcut`, `scope` (`PERSONAL`/`TEAM`), `team_id` (set exactly when `TEAM`), `created_by`, `is_active`.   |
 | `automation_rules`, `automation_logs` | Auto-reply rules (`trigger_type`, `conditions`, `response_content`) and their execution log.                          |
-| `ai_handoffs`                         | AI-to-human handoff requests; at most one `PENDING` per conversation.                                                 |
-| `ai_summaries`, `ai_suggestions`      | Generated summaries and per-agent reply suggestions.                                                                  |
 
 ### Callbacks, calls, moderation, mobile and workspace
 
@@ -144,9 +142,6 @@ Confirm them before the first migration.
 | `attachments.upload_status`                                                                                                            | `PENDING`, `UPLOADED`, `FAILED`                                                                                                                                                                                                         |
 | `conversation_escalations.status`                                                                                                      | `PENDING`, `RESOLVED`, `CANCELLED`                                                                                                                                                                                                      |
 | `canned_responses.scope`                                                                                                               | `PERSONAL`, `TEAM`                                                                                                                                                                                                                      |
-| `ai_handoffs.requested_by_type`                                                                                                        | `AI`, `CUSTOMER`, `AGENT`, `SYSTEM`                                                                                                                                                                                                     |
-| `ai_handoffs.status`                                                                                                                   | `PENDING`, `ACCEPTED`, `COMPLETED`, `CANCELLED`                                                                                                                                                                                         |
-| `ai_suggestions.status`                                                                                                                | `PENDING`, `ACCEPTED`, `EDITED`, `DISMISSED`                                                                                                                                                                                            |
 | `callback_requests.status`                                                                                                             | `PENDING`, `COMPLETED`, `CANCELLED`, `MISSED`                                                                                                                                                                                           |
 | `calls.call_type`                                                                                                                      | `AUDIO`, `VIDEO`                                                                                                                                                                                                                        |
 | `calls.status`                                                                                                                         | `INITIATING`, `RINGING`, `ACTIVE`, `ENDED`, `DECLINED`, `MISSED`, `CANCELLED`, `FAILED`                                                                                                                                                 |
@@ -172,7 +167,6 @@ These were run against a scratch PostgreSQL (48 insert/update/delete cases) and 
 | One pending escalation per conversation                                                                       | partial UNIQUE index                                                           |
 | `is_edited` agrees with `edited_at`; `deleted_by` needs `deleted_at`; a receipt is read after it is delivered | CHECK                                                                          |
 | A participant joins a call once                                                                               | UNIQUE `(call_id, participant_type, participant_id)`                           |
-| One pending AI handoff per conversation                                                                       | partial UNIQUE index                                                           |
 | One open presence period per agent                                                                            | partial UNIQUE index                                                           |
 | A reply points at a message in the same conversation; message numbers start at 1                              | composite FK + unique index, CHECK                                             |
 | A message can only link an attachment from its own conversation                                               | composite foreign keys                                                         |
@@ -193,13 +187,13 @@ role Backend 1 reports for the id, permissions, attachment type and size limits,
 **Customer message:** in one transaction, `UPDATE conversations SET last_sequence_number = last_sequence_number + 1,
 last_message_at = now(), last_message_preview = ... WHERE id = ? RETURNING last_sequence_number`, insert the message
 with that number, and (if `conversation_mode = AI`) queue the AI reply. The row lock serializes concurrent senders, so
-there are no gaps from races. If the AI escalates, set `handoff_status = NEEDS_HUMAN`, insert an `ai_handoffs` and a
+there are no gaps from races. If the AI escalates, set `handoff_status = NEEDS_HUMAN`, insert a
 `conversation_activities` row, and notify agents.
 
 **Takeover / assign (race-safe):** in one transaction (a deferred trigger checks at COMMIT that the conversation pointer and the open OWNER row agree, so write both before committing), update the conversation only if `handoff_status =
 'NEEDS_HUMAN'` (0 rows = someone else won) setting `conversation_mode = 'HUMAN'`, `handoff_status = 'ASSIGNED'` and
 `assigned_agent_id`; end any open `OWNER` assignment (`ended_at`, `ended_by`); insert the new `conversation_assignments`
-row (the partial unique index is the backstop); accept the pending `ai_handoffs`; write an activity.
+row (the partial unique index is the backstop); write an activity.
 
 **Agent message:** validate the caller holds the open `OWNER` assignment, insert (idempotent on `client_id`), return
 the ack mapping `client_id` to the new id, then record receipts as recipients acknowledge and update

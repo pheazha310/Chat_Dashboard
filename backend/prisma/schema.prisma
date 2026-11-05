@@ -58,9 +58,6 @@ model Conversation {
   notifications                    Notification[]
   conversationNotificationSettings ConversationNotificationSetting[]
   automationLogs                   AutomationLog[]
-  aiHandoffs                       AiHandoff[]
-  aiSummaries                      AiSummary[]
-  aiSuggestions                    AiSuggestion[]
   callbackRequests                 CallbackRequest[]
   calls                            Call[]
   spamReports                      SpamReport[]
@@ -442,51 +439,6 @@ model AutomationLog {
   @@index([conversationId])
   @@index([messageId])
   @@map("automation_logs")
-}
-
-/// At most one PENDING handoff per conversation (partial unique index).
-model AiHandoff {
-  id              String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  conversationId  String       @map("conversation_id") @db.Uuid
-  requestedByType String       @map("requested_by_type") @db.VarChar(30)
-  requestedById   String?      @map("requested_by_id") @db.Uuid
-  reason          String?      @db.Text
-  status          String       @default("PENDING") @db.VarChar(30)
-  acceptedBy      String?      @map("accepted_by") @db.Uuid /// External agents.id
-  requestedAt     DateTime     @default(now()) @map("requested_at") @db.Timestamptz(6)
-  acceptedAt      DateTime?    @map("accepted_at") @db.Timestamptz(6)
-  completedAt     DateTime?    @map("completed_at") @db.Timestamptz(6)
-  conversation    Conversation @relation(fields: [conversationId], references: [id], onDelete: Restrict)
-
-  @@index([conversationId, status])
-  @@map("ai_handoffs")
-}
-
-model AiSummary {
-  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  conversationId String       @map("conversation_id") @db.Uuid
-  summary        String       @db.Text
-  modelVersion   String?      @map("model_version") @db.VarChar(100)
-  generatedAt    DateTime     @default(now()) @map("generated_at") @db.Timestamptz(6)
-  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Restrict)
-
-  @@index([conversationId, generatedAt])
-  @@map("ai_summaries")
-}
-
-model AiSuggestion {
-  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  conversationId String       @map("conversation_id") @db.Uuid
-  agentId        String       @map("agent_id") @db.Uuid /// External agents.id
-  suggestion     String       @db.Text
-  status         String       @default("PENDING") @db.VarChar(30)
-  finalContent   String?      @map("final_content") @db.Text
-  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt      DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
-  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Restrict)
-
-  @@index([conversationId, agentId])
-  @@map("ai_suggestions")
 }
 
 model CallbackRequest {
