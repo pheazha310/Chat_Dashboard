@@ -1,9 +1,15 @@
+import { logger } from "@config/logger.js";
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "@shared/errors/AppError.js";
 import type { AuthContext } from "@shared/auth/auth.types.js";
+import type { AvailableAgents } from "@shared/ports/available-agents.js";
+import type { AccessibleConversationState, ConversationAccess } from "@shared/ports/conversation-access.js";
+import type { AgentProfile, Directory } from "@shared/ports/directory.js";
+import type { RealtimeNotifier } from "@shared/ports/realtime.js";
 import type { SystemMessagePort } from "@shared/ports/system-message.js";
 import { bestEffort } from "@shared/utils/best-effort.js";
 import { idToString } from "@shared/utils/ids.js";
 import { pageArgs, pageMeta, type PageQuery } from "@shared/utils/pagination.js";
+import type { NotificationService } from "@modules/notifications/index.js";
 import { canView, permissionsFor } from "@shared/policy/conversation-access.js";
 import type { ConversationRepository } from "./conversation.repository.js";
 import type { CreateInput, ListQuery } from "./conversation.schema.js";
@@ -11,6 +17,7 @@ import type {
   AccessibleConversation,
   ActivityDto,
   ConversationDetailDto,
+  ConversationEventDto,
   ConversationPermissions,
   ConversationStatus,
   ConversationSummaryDto,
@@ -18,10 +25,14 @@ import type {
 } from "./conversation.types.js";
 import type { ConversationActivity } from "../../../prisma/generated/prisma/client.js";
 
-export class ConversationService {
+export class ConversationService implements ConversationAccess {
   constructor(
     private readonly repository: ConversationRepository,
     private readonly systemMessages: SystemMessagePort,
+    private readonly realtime: RealtimeNotifier,
+    private readonly directory: Directory,
+    private readonly notifications: NotificationService,
+    private readonly availableAgents: AvailableAgents,
   ) {}
 
   async list(auth: AuthContext, query: ListQuery) {
@@ -31,13 +42,18 @@ export class ConversationService {
       auth.userId,
       items.map((item) => item.id),
     );
-    return { items: items.map((item) => toSummary(item, unread.get(item.id) ?? 0)), meta: pageMeta(total, query) };
+    const agents = await this.agentProfiles(items.map((item) => item.assignedAgentId));
+    return {
+      items: items.map((item) => toSummary(item, unread.get(item.id) ?? 0, agents)),
+      meta: pageMeta(total, query),
+    };
   }
 
   async get(auth: AuthContext, id: bigint) {
     const conversation = await this.load(auth, id);
     const unread = await this.repository.unreadCounts(auth.userId, [id]);
-    return toDetail(conversation, unread.get(id) ?? 0, permissionsFor(auth, conversation));
+    const agents = await this.agentProfiles([conversation.assignedAgentId]);
+    return toDetail(conversation, unread.get(id) ?? 0, permissionsFor(auth, conversation), agents);
   }
 
   /**
@@ -72,6 +88,10 @@ export class ConversationService {
       await tx.addCustomerParticipant(conversation.id, input.customerId);
       return { id: conversation.id, created: true };
     });
+    if (created) {
+      await bestEffort("realtime", () => this.realtime.conversationEvent(id, "created"));
+      await bestEffort("new-conversation notifications", () => this.notifyAvailableAgents(auth, id, input));
+    }
     return { conversation: await this.get(auth, id), created };
   }
 
@@ -103,6 +123,13 @@ export class ConversationService {
         actorId: idToString(auth.userId),
         from: conversation.status,
         to,
+      }),
+    );
+    await bestEffort("realtime", () =>
+      this.realtime.conversationEvent(id, "status_changed", {
+        from: conversation.status,
+        to,
+        actorId: idToString(auth.userId),
       }),
     );
     return this.get(auth, id);
@@ -142,7 +169,70 @@ export class ConversationService {
         description: archived ? "Conversation archived" : "Conversation restored",
       });
     });
+    await bestEffort("realtime", () => this.realtime.conversationEvent(id, "updated"));
     return this.get(auth, id);
+  }
+
+  async requireVisible(auth: AuthContext, id: bigint): Promise<AccessibleConversationState> {
+    return this.load(auth, id);
+  }
+
+  /** A conversation is waiting for a human: tell the agents who are online and AVAILABLE (not the one who opened it). */
+  private async notifyAvailableAgents(auth: AuthContext, id: bigint, input: CreateInput) {
+    const agents = (await this.availableAgents.availableAgentIds()).filter((agent) => agent !== auth.userId);
+    const who = input.customerName ?? `customer ${input.customerId}`;
+    await Promise.all(
+      agents.map((agentId) =>
+        this.notifications.notifyAgent({
+          agentId,
+          type: "NEW_CONVERSATION",
+          title: "New conversation needs attention",
+          body: `${who} is waiting for an agent`,
+          conversationId: id,
+        }),
+      ),
+    );
+  }
+
+  /** Agent names from Backend 1. If it is unreachable the conversations still load, just without the profile. */
+  private async agentProfiles(ids: (bigint | null)[]): Promise<Map<string, AgentProfile>> {
+    const wanted = [...new Set(ids.filter((id): id is bigint => id !== null))];
+    if (wanted.length === 0) return new Map();
+    try {
+      return new Map((await this.directory.getAgents(wanted)).map((agent) => [agent.id, agent]));
+    } catch (error) {
+      logger.warn({ err: error }, "agent profiles unavailable");
+      return new Map();
+    }
+  }
+
+  /** Typing indicators come only from whoever may send in the conversation (same rule as sending). */
+  async assertCanType(auth: AuthContext, id: bigint) {
+    const conversation = await this.load(auth, id);
+    if (!permissionsFor(auth, conversation).canSendMessage) {
+      throw new ForbiddenError("Only the agent who owns an open conversation can send typing indicators");
+    }
+  }
+
+  /**
+   * Public state of a conversation plus who may see it, for realtime events. Not caller-specific (no unread count,
+   * no permissions): each recipient's own view is derived on their client or by REST.
+   */
+  async snapshot(id: bigint) {
+    const found = await this.repository.findForEvent(id);
+    if (!found) return null;
+    const agents = await this.agentProfiles([found.conversation.assignedAgentId]);
+    const { unreadCount: _omit, ...conversation } = toSummary(found.conversation, 0, agents);
+    const event: ConversationEventDto = conversation;
+    return {
+      conversation: event,
+      audience: {
+        handoffStatus: found.conversation.handoffStatus,
+        assignedAgentId:
+          found.conversation.assignedAgentId === null ? null : idToString(found.conversation.assignedAgentId),
+        viewerIds: found.viewerIds.map(idToString),
+      },
+    };
   }
 
   /** Loads a conversation the caller may see; hidden ones look like missing ones so existence is not leaked. */
@@ -185,7 +275,11 @@ const released = { handoffStatus: "NONE", conversationMode: "AI", assignedAgentI
 const nullableId = (value: bigint | null) => (value === null ? null : idToString(value));
 const iso = (value: Date | null) => (value === null ? null : value.toISOString());
 
-function toSummary(row: ConversationWithTags, unreadCount: number): ConversationSummaryDto {
+function toSummary(
+  row: ConversationWithTags,
+  unreadCount: number,
+  agents: Map<string, AgentProfile>,
+): ConversationSummaryDto {
   return {
     id: idToString(row.id),
     customerId: nullableId(row.customerId),
@@ -198,6 +292,7 @@ function toSummary(row: ConversationWithTags, unreadCount: number): Conversation
     conversationMode: row.conversationMode,
     handoffStatus: row.handoffStatus,
     assignedAgentId: nullableId(row.assignedAgentId),
+    assignedAgent: row.assignedAgentId === null ? null : (agents.get(row.assignedAgentId.toString()) ?? null),
     isArchived: row.isArchived,
     lastMessageAt: row.lastMessageAt.toISOString(),
     lastMessagePreview: row.lastMessagePreview,
@@ -214,9 +309,10 @@ function toDetail(
   row: ConversationWithTags,
   unreadCount: number,
   permissions: ConversationPermissions,
+  agents: Map<string, AgentProfile>,
 ): ConversationDetailDto {
   return {
-    ...toSummary(row, unreadCount),
+    ...toSummary(row, unreadCount, agents),
     summary: row.summary,
     lastSequenceNumber: idToString(row.lastSequenceNumber),
     permissions,

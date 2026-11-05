@@ -1,20 +1,11 @@
 import { Router } from "express";
 import { validate } from "@shared/middleware/validate.middleware.js";
 import { idParams } from "@shared/utils/ids.js";
-import { messageService } from "@modules/messages/index.js";
-import { NotificationRepository, NotificationService } from "@modules/notifications/index.js";
+import { container } from "../../app-container.js";
 import { AssignmentController } from "./assignment.controller.js";
-import { AssignmentRepository } from "./assignment.repository.js";
 import { assignBody, transferBody, unassignBody } from "./assignment.schema.js";
-import { AssignmentService } from "./assignment.service.js";
 
-const controller = new AssignmentController(
-  new AssignmentService(
-    new AssignmentRepository(),
-    new NotificationService(new NotificationRepository()),
-    messageService,
-  ),
-);
+const controller = new AssignmentController(container.assignments);
 
 /** Mounted at /api/conversations next to the conversation routes. */
 export const assignmentRoutes = Router();

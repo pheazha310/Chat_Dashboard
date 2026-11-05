@@ -1,5 +1,6 @@
 import { fromPartial } from "@total-typescript/shoehorn";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { fakeRealtime } from "../../../__tests__/support/realtime.js";
 import type { AuthContext } from "@shared/auth/auth.types.js";
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "@shared/errors/AppError.js";
 import type { NotificationService } from "@modules/notifications/index.js";
@@ -28,9 +29,11 @@ const repo = {
   unreadState: vi.fn(),
 };
 const notifications = { notifyAgent: vi.fn() };
+const realtime = fakeRealtime();
 const service = new MessageService(
   fromPartial<MessageRepository>(repo),
   fromPartial<NotificationService>(notifications),
+  realtime,
 );
 
 const owner: AuthContext = { userId: 1n, role: "AGENT" };
@@ -65,6 +68,7 @@ const msg = (patch: Partial<MessageRow> = {}): MessageRow =>
 
 beforeEach(() => {
   vi.resetAllMocks();
+  for (const mock of Object.values(realtime)) mock.mockResolvedValue(undefined);
   repo.inTransaction.mockImplementation((fn: (tx: unknown) => unknown) => fn(repo));
   repo.lock.mockResolvedValue(conv());
   repo.isViewer.mockResolvedValue(false);
@@ -89,6 +93,18 @@ describe("send", () => {
         preview: "hello",
       }),
     );
+  });
+
+  it("announces a new message to everyone except the sending socket, and not again on a retry", async () => {
+    await service.send(owner, 10n, input, "conn-1");
+    expect(realtime.messageCreated).toHaveBeenCalledWith(expect.objectContaining({ id: "50", conversationId: "10" }), {
+      conversationUpdated: true,
+      origin: "conn-1",
+    });
+    realtime.messageCreated.mockClear();
+    repo.findByClientId.mockResolvedValue(msg());
+    await service.send(owner, 10n, input, "conn-1");
+    expect(realtime.messageCreated).not.toHaveBeenCalled();
   });
 
   it("returns the original message on a retry instead of inserting again", async () => {
@@ -169,6 +185,14 @@ describe("receiveFromCustomer", () => {
     await expect(service.receiveFromCustomer({ ...input, customerId: 999n })).rejects.toBeInstanceOf(NotFoundError);
   });
 
+  it("announces the customer message to viewers of the conversation", async () => {
+    repo.append.mockResolvedValue(msg({ senderType: "CUSTOMER", senderId: 100n }));
+    await service.receiveFromCustomer(input);
+    expect(realtime.messageCreated).toHaveBeenCalledWith(expect.objectContaining({ senderType: "CUSTOMER" }), {
+      conversationUpdated: true,
+    });
+  });
+
   it("still succeeds when the notification fails", async () => {
     notifications.notifyAgent.mockRejectedValue(new Error("down"));
     await expect(service.receiveFromCustomer(input)).resolves.toMatchObject({ created: true });
@@ -178,6 +202,7 @@ describe("receiveFromCustomer", () => {
 describe("post (system messages)", () => {
   it("appends a SYSTEM message without touching the preview", async () => {
     await service.post(10n, "Agent 1 took over", { event: "takeover" });
+    expect(realtime.messageCreated).toHaveBeenCalledWith(expect.objectContaining({ id: "50" }));
     expect(repo.append).toHaveBeenCalledWith(
       expect.objectContaining({
         senderType: "SYSTEM",
@@ -233,6 +258,7 @@ describe("markRead", () => {
     repo.latest.mockResolvedValue(msg({ id: 9n, sequenceNumber: 9n }));
     repo.readPosition.mockResolvedValue(4n);
     repo.unreadState.mockResolvedValue({ position: 9n, unread: 0, markedUnread: false });
+    repo.receiptReadRange.mockResolvedValue([60n, 61n]);
   });
 
   it("advances to the latest message and records receipts for the newly read range", async () => {
@@ -240,12 +266,15 @@ describe("markRead", () => {
     expect(repo.advanceRead).toHaveBeenCalledWith(10n, 1n, 9n, 9n);
     expect(repo.receiptReadRange).toHaveBeenCalledWith(10n, 1n, 4n, 9n);
     expect(state).toEqual({ conversationId: "10", lastReadSequenceNumber: "9", markedUnread: false, unreadCount: 0 });
+    expect(realtime.readState).toHaveBeenCalledWith(1n, state); // the agent's other tabs
+    expect(realtime.messageStatus).toHaveBeenCalledWith(10n, [60n, 61n], "READ");
   });
 
   it("does not create receipts when nothing new was read (an older tab)", async () => {
     repo.findById.mockResolvedValue(msg({ id: 3n, sequenceNumber: 3n }));
     await service.markRead(owner, 10n, 3n);
     expect(repo.receiptReadRange).not.toHaveBeenCalled();
+    expect(realtime.messageStatus).toHaveBeenCalledWith(10n, [], "READ"); // nothing newly read: the notifier ignores it
   });
 
   it("404s for a message outside the conversation, and does nothing for an empty one", async () => {
@@ -274,6 +303,7 @@ describe("markUnread / markDelivered", () => {
     repo.findById.mockResolvedValue(msg({ senderType: "CUSTOMER", senderId: 100n }));
     await service.markDelivered(owner, 10n, 50n);
     expect(repo.receiptDelivered).toHaveBeenCalledWith(50n, 1n);
+    expect(realtime.messageStatus).not.toHaveBeenCalled(); // status did not advance (mock returns undefined)
     repo.findById.mockResolvedValue(msg({ senderType: "AGENT" }));
     await expect(service.markDelivered(owner, 10n, 50n)).rejects.toBeInstanceOf(BadRequestError);
     repo.findById.mockResolvedValue(null);

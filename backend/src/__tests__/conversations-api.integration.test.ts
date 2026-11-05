@@ -1,6 +1,7 @@
 import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { assertTestDatabase } from "./support/container.js";
 
 /** HTTP-level check of auth, validation, envelopes and status codes. Needs TEST_DATABASE_URL (see the flow test). */
 const url = process.env.TEST_DATABASE_URL;
@@ -14,7 +15,9 @@ describe.skipIf(!url)("/api/conversations over HTTP", () => {
   beforeAll(async () => {
     process.env.DATABASE_URL = url as string;
     process.env.AUTH_MODE = "dev";
+    process.env.EVENT_BUS = "memory";
     db = (await import("@config/database.js")).prisma;
+    await assertTestDatabase(db);
     const { app } = await import("../app.js");
     server = app.listen(0);
     await new Promise((resolve) => server.once("listening", resolve));
@@ -128,7 +131,8 @@ describe.skipIf(!url)("/api/conversations over HTTP", () => {
     expect(retry.status).toBe(200);
     expect(retry.body.data.id).toBe(sent.body.data.id);
 
-    const { messageService } = await import("../modules/messages/index.js");
+    const { container } = await import("../app-container.js");
+    const messageService = container.messages;
     await messageService.receiveFromCustomer({ customerId: 300n, conversationId: 1n, clientId: "k1", text: "Thanks" });
     await messageService.receiveFromCustomer({
       customerId: 300n,
@@ -161,5 +165,155 @@ describe.skipIf(!url)("/api/conversations over HTTP", () => {
     expect((await call(`/1/messages/${customerMessage}/delivered`, agent1, "POST")).body.data.status).toBe("READ");
     expect((await call(`/1/messages/${sent.body.data.id}/delivered`, agent1, "POST")).status).toBe(400);
     expect((await call("/1/messages/999/delivered", agent1, "POST")).status).toBe(404);
+  });
+
+  describe("notifications", () => {
+    const sup = "dev:9:SUPERVISOR";
+    const agent3 = "dev:3:AGENT";
+    const root = () => base.replace("/conversations", "");
+    const api = async (path: string, token: string, method = "GET", body?: unknown) => {
+      const response = await fetch(`${root()}${path}`, {
+        method,
+        headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      });
+      return { status: response.status, body: (await response.json()) as Record<string, any> };
+    };
+
+    it("delivers, counts and marks read per recipient, and never exposes someone else's", async () => {
+      await call("", agent1, "POST", { customerId: "300", applicationId: "55", customerName: "Dara Sok" });
+      expect((await call("/1/assign", sup, "POST", { agentId: "3" })).status).toBe(200);
+
+      const mine = await api("/notifications", agent3);
+      expect(mine.body.data).toHaveLength(1);
+      expect(mine.body.data[0]).toMatchObject({ type: "ASSIGNED", read: false, conversationId: "1" });
+      expect(mine.body.meta).toMatchObject({ total: 1, unreadCount: 1 });
+      expect((await api("/notifications/unread-count", agent3)).body.data).toEqual({ unreadCount: 1 });
+      expect((await api("/notifications", agent1)).body.data).toEqual([]);
+      expect((await api("/notifications/unread-count", agent1)).body.data).toEqual({ unreadCount: 0 });
+
+      const id = mine.body.data[0].id as string;
+      expect((await api(`/notifications/${id}/read`, agent1, "PATCH")).status).toBe(404); // not theirs
+      expect((await api("/notifications/abc/read", agent3, "PATCH")).status).toBe(400);
+      expect((await api(`/notifications/${id}/read`, agent3, "PATCH")).body.data.read).toBe(true);
+      expect((await api(`/notifications/${id}/read`, agent3, "PATCH")).status).toBe(200); // idempotent
+      expect((await api("/notifications?unread=true", agent3)).body.data).toEqual([]);
+      expect((await api("/notifications/unread-count", agent3)).body.data.unreadCount).toBe(0);
+      expect((await api("/notifications", "garbage")).status).toBe(401);
+    });
+
+    it("marks everything read and stores preferences, with every switch on by default", async () => {
+      await call("", agent1, "POST", { customerId: "300", applicationId: "55" });
+      await call("/1/assign", sup, "POST", { agentId: "3" });
+      await call("/1/transfer", sup, "POST", { agentId: "4" });
+      await call("/1/transfer", sup, "POST", { agentId: "3" });
+      expect((await api("/notifications/unread-count", agent3)).body.data.unreadCount).toBe(3); // assigned, moved away, back
+      expect((await api("/notifications/read-all", agent3, "POST")).body.data).toEqual({ updated: 3, unreadCount: 0 });
+
+      expect((await api("/notifications/preferences", agent3)).body.data).toEqual({
+        newMessage: true,
+        assignment: true,
+        transfer: true,
+        mention: true,
+        sound: true,
+        browser: true,
+      });
+      expect((await api("/notifications/preferences", agent3, "PUT", {})).status).toBe(400);
+      expect((await api("/notifications/preferences", agent3, "PUT", { sound: "yes" })).status).toBe(400);
+      const changed = await api("/notifications/preferences", agent3, "PUT", { transfer: false, browser: false });
+      expect(changed.body.data).toMatchObject({ transfer: false, browser: false, assignment: true });
+      expect((await api("/notifications/preferences", agent3)).body.data.transfer).toBe(false); // persisted
+      expect((await api("/notifications/preferences", agent1)).body.data.transfer).toBe(true); // per agent
+
+      await call("/1/transfer", sup, "POST", { agentId: "4" });
+      await call("/1/transfer", sup, "POST", { agentId: "3" });
+      const unreadTypes = (await api("/notifications?unread=true", agent3)).body.data.map(
+        (n: { type: string }) => n.type,
+      );
+      expect(unreadTypes).toEqual([]); // transfer switched off: nothing stored for agent 3
+    });
+
+    it("mutes a conversation only for someone who can see it", async () => {
+      await call("", agent1, "POST", { customerId: "300", applicationId: "55" });
+      await call("/1/assign", sup, "POST", { agentId: "3" });
+      expect((await call("/1/mute", agent2, "PUT", { muted: true })).status).toBe(404);
+      expect((await call("/1/mute", agent3, "PUT", { muted: "yes" })).status).toBe(400);
+      expect((await call("/1/mute", agent3, "PUT", { muted: true })).body.data).toEqual({
+        conversationId: "1",
+        muted: true,
+      });
+      expect(await db.conversationNotificationSetting.count({ where: { agentId: 3n, isMuted: true } })).toBe(1);
+      expect((await call("/1/mute", agent3, "PUT", { muted: false })).body.data.muted).toBe(false);
+    });
+  });
+
+  describe("customer information", () => {
+    const sup = "dev:9:SUPERVISOR";
+    const owner = "dev:3:AGENT";
+
+    it("shows the profile by role, hides the conversation from other agents, and says where the data came from", async () => {
+      await call("", agent1, "POST", { customerId: "300", applicationId: "55", customerName: "Dara Sok" });
+      await call("/1/assign", owner, "POST", {});
+
+      const own = (await call("/1/customer", owner)).body.data;
+      expect(own).toMatchObject({
+        id: "300",
+        source: "dev-stub",
+        email: "customer-300@example.test",
+        nationalId: null,
+      });
+      expect(own.restricted).toEqual(["nationalId", "occupation", "salary"]);
+      const boss = (await call("/1/customer", sup)).body.data;
+      expect(boss).toMatchObject({ nationalId: "DEV-300", restricted: [] });
+
+      expect((await call("/1/customer", agent2)).status).toBe(404); // cannot see the conversation, so no customer data
+      expect((await call("/1/customer", "garbage")).status).toBe(401);
+      expect((await call("/999/customer", owner)).status).toBe(404);
+    });
+
+    it("lists the customer's other conversations and the participants with names", async () => {
+      await call("", agent1, "POST", { customerId: "300", applicationId: "55" });
+      await call("/1/assign", owner, "POST", {});
+      await call("", agent1, "POST", { customerId: "300", applicationId: "56" });
+      await call("", agent1, "POST", { customerId: "301", applicationId: "57" }); // someone else's customer
+      await call("/1/status", owner, "PATCH", { status: "RESOLVED" });
+      await call("/2/status", sup, "PATCH", { status: "CLOSED" });
+
+      const others = await call("/1/customer/conversations", owner);
+      expect(others.status).toBe(200);
+      expect(others.body.data.map((c: { id: string }) => c.id)).toEqual(["2"]); // closed ones included, current and others' excluded
+      expect(others.body.data[0]).toMatchObject({ status: "CLOSED", customerId: "300" });
+      expect(others.body.meta.total).toBe(1);
+
+      await call("/1/status", sup, "PATCH", { status: "OPEN" });
+      await call("/1/assign", owner, "POST", {});
+      const people = (await call("/1/participants", owner)).body.data;
+      const names = people.map((p: { participantType: string; profile: { name: string } | null }) => [
+        p.participantType,
+        p.profile?.name,
+      ]);
+      expect(names).toEqual(
+        expect.arrayContaining([
+          ["CUSTOMER", "Customer 300"],
+          ["AGENT", "Agent 3"],
+        ]),
+      );
+      expect(
+        people.find(
+          (p: { participantType: string; participantId: string; leftAt: unknown }) =>
+            p.participantType === "AGENT" && p.participantId === "3" && p.leftAt === null,
+        )?.role,
+      ).toBe("OWNER");
+      expect((await call("/1/participants", agent2)).status).toBe(404);
+    });
+
+    it("shows the assigned agent's name in the inbox", async () => {
+      await call("", agent1, "POST", { customerId: "300", applicationId: "55" });
+      await call("/1/assign", owner, "POST", {});
+      const [item] = (await call("", sup)).body.data;
+      expect(item).toMatchObject({ assignedAgentId: "3", assignedAgent: { id: "3", name: "Agent 3" } });
+      expect((await call("?customerId=300", sup)).body.data).toHaveLength(1);
+      expect((await call("?customerId=999", sup)).body.data).toHaveLength(0);
+    });
   });
 });

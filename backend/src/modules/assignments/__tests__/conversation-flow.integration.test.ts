@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { assertTestDatabase, createTestContainer } from "../../../__tests__/support/container.js";
 import type { AuthContext } from "@shared/auth/auth.types.js";
 import { ConflictError, NotFoundError } from "@shared/errors/AppError.js";
 
@@ -19,23 +20,16 @@ const supervisor: AuthContext = { userId: 9n, role: "SUPERVISOR" };
 
 describe.skipIf(!url)("conversation flows on PostgreSQL", () => {
   let db: typeof import("@config/database.js").prisma;
-  let conversations: import("../../conversations/conversation.service.js").ConversationService;
-  let assignments: import("../assignment.service.js").AssignmentService;
+  let conversations: import("../../../container.js").Container["conversations"];
+  let assignments: import("../../../container.js").Container["assignments"];
 
   beforeAll(async () => {
     process.env.DATABASE_URL = url as string;
     db = (await import("@config/database.js")).prisma;
-    const { ConversationRepository } = await import("../../conversations/conversation.repository.js");
-    const { ConversationService } = await import("../../conversations/conversation.service.js");
-    const { AssignmentRepository } = await import("../assignment.repository.js");
-    const { AssignmentService } = await import("../assignment.service.js");
-    const { NotificationRepository, NotificationService } = await import("@modules/notifications/index.js");
-    const { MessageRepository } = await import("@modules/messages/message.repository.js");
-    const { MessageService } = await import("@modules/messages/message.service.js");
-    const notifications = new NotificationService(new NotificationRepository());
-    const messages = new MessageService(new MessageRepository(), notifications);
-    conversations = new ConversationService(new ConversationRepository(), messages);
-    assignments = new AssignmentService(new AssignmentRepository(), notifications, messages);
+    await assertTestDatabase(db);
+    const container = await createTestContainer();
+    conversations = container.conversations;
+    assignments = container.assignments;
   });
 
   afterAll(async () => {

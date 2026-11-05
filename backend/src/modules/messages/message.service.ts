@@ -1,6 +1,7 @@
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "@shared/errors/AppError.js";
 import type { AuthContext } from "@shared/auth/auth.types.js";
 import { canView, permissionsFor } from "@shared/policy/conversation-access.js";
+import type { RealtimeNotifier } from "@shared/ports/realtime.js";
 import type { SystemMessagePort } from "@shared/ports/system-message.js";
 import { bestEffort } from "@shared/utils/best-effort.js";
 import { idToString } from "@shared/utils/ids.js";
@@ -18,14 +19,16 @@ export class MessageService implements SystemMessagePort {
   constructor(
     private readonly repository: MessageRepository,
     private readonly notifications: NotificationService,
+    private readonly realtime: RealtimeNotifier,
   ) {}
 
   /**
    * An agent sends a message. Safe to retry: the same `clientId` returns the original message (`created: false`)
    * instead of inserting a duplicate, even for simultaneous retries (the conversation row lock serializes them).
+   * `origin` is the WebSocket connection that sent it, if any.
    */
-  async send(auth: AuthContext, conversationId: bigint, input: SendInput) {
-    return this.repository.inTransaction(async (tx) => {
+  async send(auth: AuthContext, conversationId: bigint, input: SendInput, origin?: string) {
+    const result = await this.repository.inTransaction(async (tx) => {
       const conversation = await this.lockVisible(tx, auth, conversationId);
 
       const existing = await tx.findByClientId(conversationId, input.clientId);
@@ -55,6 +58,13 @@ export class MessageService implements SystemMessagePort {
       });
       return { message: toMessage(message), created: true };
     });
+    if (result.created) {
+      // `origin` is the socket that sent it: it gets an ack, everyone else (including its owner's other tabs) message.new.
+      await bestEffort("realtime", () =>
+        this.realtime.messageCreated(result.message, { conversationUpdated: true, ...(origin ? { origin } : {}) }),
+      );
+    }
+    return result;
   }
 
   /**
@@ -110,14 +120,18 @@ export class MessageService implements SystemMessagePort {
         });
       });
     }
-    return { message: toMessage(message), created };
+    const dto = toMessage(message);
+    if (created) {
+      await bestEffort("realtime", () => this.realtime.messageCreated(dto, { conversationUpdated: true }));
+    }
+    return { message: dto, created };
   }
 
   /** SYSTEM message (takeover, transfer, status change). Does not change the inbox preview or last-activity time. */
   async post(conversationId: bigint, text: string, metadata?: Record<string, unknown>) {
-    await this.repository.inTransaction(async (tx) => {
-      if (!(await tx.lock(conversationId))) return;
-      await tx.append({
+    const stored = await this.repository.inTransaction(async (tx) => {
+      if (!(await tx.lock(conversationId))) return null;
+      return tx.append({
         conversationId,
         clientId: null,
         senderType: "SYSTEM",
@@ -128,6 +142,7 @@ export class MessageService implements SystemMessagePort {
         preview: null,
       });
     });
+    if (stored) await bestEffort("realtime", () => this.realtime.messageCreated(toMessage(stored)));
   }
 
   /**
@@ -156,20 +171,24 @@ export class MessageService implements SystemMessagePort {
    */
   async markRead(auth: AuthContext, conversationId: bigint, upToMessageId?: bigint): Promise<ReadState> {
     await this.requireVisible(auth, conversationId);
-    await this.repository.inTransaction(async (tx) => {
+    const nowRead = await this.repository.inTransaction(async (tx) => {
       const target =
         upToMessageId === undefined
           ? await tx.latest(conversationId)
           : await tx.findById(conversationId, upToMessageId);
       if (upToMessageId !== undefined && !target) throw new NotFoundError("Message not found in this conversation");
-      if (!target) return; // empty conversation: nothing to read
+      if (!target) return []; // empty conversation: nothing to read
       const previous = await tx.readPosition(conversationId, auth.userId);
       await tx.advanceRead(conversationId, auth.userId, target.sequenceNumber, target.id);
-      if (target.sequenceNumber > previous) {
-        await tx.receiptReadRange(conversationId, auth.userId, previous, target.sequenceNumber);
-      }
+      return target.sequenceNumber > previous
+        ? tx.receiptReadRange(conversationId, auth.userId, previous, target.sequenceNumber)
+        : [];
     });
-    return this.readState(auth, conversationId);
+    const state = await this.readState(auth, conversationId);
+    // The agent's other sessions learn the new unread count; everyone who sees the chat learns which messages are READ.
+    await bestEffort("realtime", () => this.realtime.readState(auth.userId, state));
+    await bestEffort("realtime", () => this.realtime.messageStatus(conversationId, nowRead, "READ"));
+    return state;
   }
 
   async markUnread(auth: AuthContext, conversationId: bigint): Promise<ReadState> {
@@ -177,7 +196,9 @@ export class MessageService implements SystemMessagePort {
       const conversation = await this.lockVisible(tx, auth, conversationId);
       await tx.markUnread(conversation.id, auth.userId);
     });
-    return this.readState(auth, conversationId);
+    const state = await this.readState(auth, conversationId);
+    await bestEffort("realtime", () => this.realtime.readState(auth.userId, state));
+    return state;
   }
 
   /** The agent's client received a customer message. Agents can only record receipts for themselves. */
@@ -186,7 +207,10 @@ export class MessageService implements SystemMessagePort {
     const message = await this.repository.findById(conversationId, messageId);
     if (!message) throw new NotFoundError("Message not found in this conversation");
     if (message.senderType !== "CUSTOMER") throw new BadRequestError("Only customer messages have agent receipts");
-    await this.repository.receiptDelivered(messageId, auth.userId);
+    const advanced = await this.repository.receiptDelivered(messageId, auth.userId);
+    if (advanced) {
+      await bestEffort("realtime", () => this.realtime.messageStatus(conversationId, [messageId], "DELIVERED"));
+    }
     const updated = await this.repository.findById(conversationId, messageId);
     return toMessage(updated as MessageRow);
   }

@@ -4,6 +4,9 @@ import { authenticate } from "@shared/middleware/auth.middleware.js";
 import { assignmentRoutes } from "@modules/assignments/index.js";
 import { conversationRoutes } from "@modules/conversations/index.js";
 import { messageRoutes } from "@modules/messages/index.js";
+import { customerRoutes } from "@modules/customers/index.js";
+import { conversationMuteRoutes, notificationRoutes } from "@modules/notifications/index.js";
+import { presenceRoutes } from "@modules/presence/index.js";
 import { healthRoutes } from "@modules/health/index.js";
 import { buildOpenApiDocument } from "./openapi.js";
 
@@ -18,4 +21,14 @@ apiRouter.get("/openapi.json", (_req, res) => {
 
 apiRouter.use("/health", healthRoutes);
 // Every conversation route requires a verified dashboard user (agent, supervisor or admin).
-apiRouter.use("/conversations", authenticate(authClient), conversationRoutes, assignmentRoutes, messageRoutes);
+apiRouter.use(
+  "/conversations",
+  authenticate(authClient),
+  conversationRoutes,
+  assignmentRoutes,
+  messageRoutes,
+  customerRoutes,
+  conversationMuteRoutes,
+);
+apiRouter.use("/presence", authenticate(authClient), presenceRoutes);
+apiRouter.use("/notifications", authenticate(authClient), notificationRoutes);

@@ -1,0 +1,12 @@
+import { env } from "@config/env.js";
+import { redis } from "@config/redis.js";
+import { createDirectory } from "@shared/directory/directory.js";
+import { createContainer } from "./container.js";
+import { MemoryEventBus, RedisEventBus } from "./websocket/websocket.bus.js";
+
+/** The running application's services, shared by the REST routes and the WebSocket gateway. */
+export const container = createContainer(
+  env.EVENT_BUS === "redis" ? new RedisEventBus(env.REDIS_URL) : new MemoryEventBus(),
+  redis,
+  createDirectory(),
+);

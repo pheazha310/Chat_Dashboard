@@ -1,5 +1,7 @@
 import { fromPartial } from "@total-typescript/shoehorn";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { fakeRealtime } from "../../../__tests__/support/realtime.js";
+import type { NotificationService } from "@modules/notifications/index.js";
 import type { AuthContext } from "@shared/auth/auth.types.js";
 import { ConflictError, ForbiddenError, NotFoundError } from "@shared/errors/AppError.js";
 import type { ConversationRepository } from "../conversation.repository.js";
@@ -9,11 +11,16 @@ import type { AccessibleConversation } from "../conversation.types.js";
 vi.mock("@config/logger.js", () => ({ logger: { warn: vi.fn() } }));
 
 const systemMessages = { post: vi.fn() };
+const realtime = fakeRealtime();
+const directory = { source: "test", getAgents: vi.fn(), getCustomer: vi.fn() };
+const notifications = { notifyAgent: vi.fn() };
+const availableAgents = { availableAgentIds: vi.fn() };
 const repo = {
   listInbox: vi.fn(),
   unreadCounts: vi.fn(),
   unreadConversationIds: vi.fn(),
   findForAccess: vi.fn(),
+  findForEvent: vi.fn(),
   findByApplication: vi.fn(),
   lockCustomer: vi.fn(),
   create: vi.fn(),
@@ -25,7 +32,14 @@ const repo = {
   listActivities: vi.fn(),
   inTransaction: vi.fn(),
 };
-const service = new ConversationService(fromPartial<ConversationRepository>(repo), systemMessages);
+const service = new ConversationService(
+  fromPartial<ConversationRepository>(repo),
+  systemMessages,
+  realtime,
+  directory,
+  fromPartial<NotificationService>(notifications),
+  availableAgents,
+);
 
 const agent: AuthContext = { userId: 1n, role: "AGENT" };
 const other: AuthContext = { userId: 2n, role: "AGENT" };
@@ -61,6 +75,10 @@ const row = (patch: Partial<AccessibleConversation> = {}): AccessibleConversatio
 
 beforeEach(() => {
   vi.resetAllMocks();
+  for (const mock of Object.values(realtime)) mock.mockResolvedValue(undefined);
+  directory.getAgents.mockResolvedValue([{ id: "1", name: "Sarah Chen", avatarUrl: null }]);
+  availableAgents.availableAgentIds.mockResolvedValue([]);
+  notifications.notifyAgent.mockResolvedValue(true);
   repo.inTransaction.mockImplementation((fn: (tx: unknown) => unknown) => fn(repo));
   repo.unreadCounts.mockResolvedValue(new Map());
   repo.transitionStatus.mockResolvedValue(true);
@@ -85,6 +103,48 @@ describe("list", () => {
     repo.listInbox.mockResolvedValue({ items: [], total: 0 });
     await service.list(agent, { filter: "unread", page: 1, size: 25 });
     expect(repo.unreadConversationIds).toHaveBeenCalledWith(1n);
+  });
+});
+
+describe("assigned agent profile", () => {
+  it("adds name and avatar from Backend 1 to the inbox and detail, in one batched lookup", async () => {
+    repo.listInbox.mockResolvedValue({ items: [row(), row({ id: 11n })], total: 2 });
+    const result = await service.list(agent, { filter: "all", page: 1, size: 25 });
+    expect(result.items[0]?.assignedAgent).toEqual({ id: "1", name: "Sarah Chen", avatarUrl: null });
+    expect(directory.getAgents).toHaveBeenCalledTimes(1);
+    expect(directory.getAgents).toHaveBeenCalledWith([1n]);
+    repo.findForAccess.mockResolvedValue(row());
+    expect((await service.get(agent, 10n)).assignedAgent?.name).toBe("Sarah Chen");
+  });
+
+  it("does not call Backend 1 when nobody is assigned, and still loads when it is down", async () => {
+    repo.listInbox.mockResolvedValue({
+      items: [row({ assignedAgentId: null, handoffStatus: "NEEDS_HUMAN" })],
+      total: 1,
+    });
+    expect((await service.list(agent, { filter: "all", page: 1, size: 25 })).items[0]?.assignedAgent).toBeNull();
+    expect(directory.getAgents).not.toHaveBeenCalled();
+
+    directory.getAgents.mockRejectedValue(new Error("backend 1 down"));
+    repo.listInbox.mockResolvedValue({ items: [row()], total: 1 });
+    const item = (await service.list(agent, { filter: "all", page: 1, size: 25 })).items[0];
+    expect(item).toMatchObject({ assignedAgentId: "1", assignedAgent: null });
+  });
+
+  it("includes the profile in realtime snapshots", async () => {
+    repo.findForEvent.mockResolvedValue({ conversation: row(), viewerIds: [4n] });
+    const snapshot = await service.snapshot(10n);
+    expect(snapshot?.conversation.assignedAgent?.name).toBe("Sarah Chen");
+    expect(snapshot?.audience).toEqual({ handoffStatus: "ASSIGNED", assignedAgentId: "1", viewerIds: ["4"] });
+    expect(snapshot?.conversation).not.toHaveProperty("unreadCount");
+  });
+});
+
+describe("requireVisible", () => {
+  it("returns the state for visible conversations and 404s hidden ones", async () => {
+    repo.findForAccess.mockResolvedValue(row());
+    await expect(service.requireVisible(agent, 10n)).resolves.toMatchObject({ id: 10n, customerId: 100n });
+    await expect(service.requireVisible(other, 10n)).rejects.toBeInstanceOf(NotFoundError);
   });
 });
 
@@ -129,6 +189,25 @@ describe("create", () => {
       }),
     );
     expect(repo.addCustomerParticipant).toHaveBeenCalledWith(10n, 100n);
+    expect(realtime.conversationEvent).toHaveBeenCalledWith(10n, "created");
+  });
+
+  it("notifies online AVAILABLE agents, except the one who opened it", async () => {
+    repo.findByApplication.mockResolvedValue(null);
+    repo.create.mockResolvedValue(row());
+    repo.findForAccess.mockResolvedValue(row({ handoffStatus: "NEEDS_HUMAN", assignedAgentId: null }));
+    availableAgents.availableAgentIds.mockResolvedValue([1n, 2n, 3n]);
+    await service.create(agent, { ...input, customerName: "Maya Chen" });
+    expect(notifications.notifyAgent).toHaveBeenCalledTimes(2);
+    expect(notifications.notifyAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentId: 2n,
+        type: "NEW_CONVERSATION",
+        conversationId: 10n,
+        body: "Maya Chen is waiting for an agent",
+      }),
+    );
+    expect(notifications.notifyAgent).not.toHaveBeenCalledWith(expect.objectContaining({ agentId: 1n }));
   });
 
   it("returns the existing open conversation for the application instead of duplicating", async () => {
@@ -137,6 +216,8 @@ describe("create", () => {
     const result = await service.create(agent, input);
     expect(result.created).toBe(false);
     expect(repo.create).not.toHaveBeenCalled();
+    expect(realtime.conversationEvent).not.toHaveBeenCalled(); // nothing changed
+    expect(notifications.notifyAgent).not.toHaveBeenCalled();
   });
 
   it("rejects an application that belongs to another customer", async () => {

@@ -1,3 +1,4 @@
+import { useSessionStore } from "@/shared/api/session";
 import type { WebSocketLike } from "../client";
 import type { Envelope, ServerEventMap } from "../protocol";
 import { MockLendingServer, type MockConnection } from "./server";
@@ -22,6 +23,7 @@ export class MockSocket implements WebSocketLike, MockConnection {
       this.readyState = OPEN;
       liveSockets.add(this);
       mockServer.attach(this);
+      useSessionStore.getState().set({ userId: "agent-1", role: "AGENT" });
       this.onopen?.();
     }, 250);
   }

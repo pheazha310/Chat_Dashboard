@@ -2,6 +2,7 @@ import { fromPartial } from "@total-typescript/shoehorn";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuthContext } from "@shared/auth/auth.types.js";
 import { ConflictError, ForbiddenError, NotFoundError } from "@shared/errors/AppError.js";
+import { fakeRealtime } from "../../../__tests__/support/realtime.js";
 import type { NotificationService } from "@modules/notifications/index.js";
 import type { AssignmentRepository } from "../assignment.repository.js";
 import { AssignmentService } from "../assignment.service.js";
@@ -10,6 +11,7 @@ import type { ConversationState } from "../assignment.types.js";
 vi.mock("@config/logger.js", () => ({ logger: { warn: vi.fn() } }));
 
 const systemMessages = { post: vi.fn() };
+const realtime = fakeRealtime();
 
 const repo = {
   findState: vi.fn(),
@@ -28,6 +30,7 @@ const service = new AssignmentService(
   fromPartial<AssignmentRepository>(repo),
   fromPartial<NotificationService>(notifications),
   systemMessages,
+  realtime,
 );
 
 const agent: AuthContext = { userId: 1n, role: "AGENT" };
@@ -64,6 +67,7 @@ beforeEach(() => {
   repo.createOwner.mockResolvedValue(assignmentRow);
   notifications.notifyAgent.mockResolvedValue(true);
   systemMessages.post.mockResolvedValue(undefined);
+  realtime.conversationEvent.mockClear();
 });
 
 describe("assign", () => {
@@ -77,6 +81,12 @@ describe("assign", () => {
     expect(repo.joinAsOwner).toHaveBeenCalledWith(10n, 1n);
     expect(repo.addActivity).toHaveBeenCalledWith(expect.objectContaining({ activityType: "ASSIGNED" }));
     expect(result.action).toBe("TAKEOVER");
+    expect(realtime.conversationEvent).toHaveBeenCalledWith(
+      10n,
+      "assigned",
+      expect.objectContaining({ agentId: "1", assignedBy: "1", action: "TAKEOVER" }),
+      [],
+    );
     expect(systemMessages.post).toHaveBeenCalledWith(
       10n,
       "Agent 1 took over the conversation",
@@ -118,6 +128,8 @@ describe("assign", () => {
     repo.findState.mockResolvedValue(owned(2n));
     await service.assign(supervisor, 10n, { agentId: 3n });
     expect(repo.leaveParticipant).toHaveBeenCalledWith(10n, 2n);
+    // The previous owner no longer sees the chat, so they are named explicitly to be told it moved.
+    expect(realtime.conversationEvent).toHaveBeenCalledWith(10n, "transferred", expect.anything(), [2n]);
     expect(repo.addActivity).toHaveBeenCalledWith(expect.objectContaining({ activityType: "TRANSFERRED" }));
     expect(notifications.notifyAgent).toHaveBeenCalledWith(
       expect.objectContaining({ agentId: 3n, type: "TRANSFERRED" }),
@@ -173,6 +185,7 @@ describe("unassign", () => {
     expect(repo.leaveParticipant).toHaveBeenCalledWith(10n, 2n);
     expect(repo.addActivity).toHaveBeenCalledWith(expect.objectContaining({ activityType: "UNASSIGNED" }));
     expect(result).toEqual({ conversationId: "10", assignedAgentId: null });
+    expect(realtime.conversationEvent).toHaveBeenCalledWith(10n, "updated", expect.anything(), [2n]);
     expect(notifications.notifyAgent).toHaveBeenCalledWith(expect.objectContaining({ agentId: 2n }));
   });
 

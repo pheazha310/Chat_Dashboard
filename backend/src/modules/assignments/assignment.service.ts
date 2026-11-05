@@ -1,5 +1,6 @@
 import { ConflictError, ForbiddenError, NotFoundError } from "@shared/errors/AppError.js";
 import { isSupervisor, type AuthContext } from "@shared/auth/auth.types.js";
+import type { RealtimeNotifier } from "@shared/ports/realtime.js";
 import type { SystemMessagePort } from "@shared/ports/system-message.js";
 import { bestEffort } from "@shared/utils/best-effort.js";
 import { idToString } from "@shared/utils/ids.js";
@@ -16,6 +17,7 @@ export class AssignmentService {
     private readonly repository: AssignmentRepository,
     private readonly notifications: NotificationService,
     private readonly systemMessages: SystemMessagePort,
+    private readonly realtime: RealtimeNotifier,
   ) {}
 
   /** Self-assign (takeover) when `agentId` is omitted; assign to another agent (supervisors only) otherwise. */
@@ -77,6 +79,14 @@ export class AssignmentService {
         previousAgentId: previous === null ? null : idToString(previous),
       }),
     );
+    await bestEffort("realtime", () =>
+      this.realtime.conversationEvent(
+        state.id,
+        "updated",
+        { event: "unassigned", previousAgentId: previous === null ? null : idToString(previous) },
+        previous === null ? [] : [previous],
+      ),
+    );
     if (previous !== null && previous !== auth.userId) {
       await this.notify(previous, "TRANSFERRED", "Conversation unassigned", state.id);
     }
@@ -137,6 +147,19 @@ export class AssignmentService {
         agentId: idToString(target),
         previousAgentId: previous === null ? null : idToString(previous),
       }),
+    );
+    await bestEffort("realtime", () =>
+      this.realtime.conversationEvent(
+        state.id,
+        type === "ASSIGNED" ? "assigned" : "transferred",
+        {
+          agentId: idToString(target),
+          previousAgentId: previous === null ? null : idToString(previous),
+          assignedBy: idToString(auth.userId),
+          action,
+        },
+        previous === null ? [] : [previous],
+      ),
     );
     if (target !== auth.userId)
       await this.notify(target, type, `A conversation was ${type.toLowerCase()} to you`, state.id);

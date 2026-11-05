@@ -7,6 +7,10 @@ export const listQuery = pageQuery.extend({
   status: z.enum(["OPEN", "RESOLVED", "CLOSED"]).optional(),
   priority: z.enum(["HIGH", "MEDIUM", "LOW"]).optional(),
   tag: idSchema.optional(),
+  /** One customer's conversations (history); includes archived ones unless `filter=archived`. */
+  customerId: idSchema.optional(),
+  /** Leave one conversation out (e.g. the current one when listing a customer's other conversations). */
+  excludeId: idSchema.optional(),
   q: z.string().trim().min(1).max(100).optional(),
 });
 export type ListQuery = z.infer<typeof listQuery>;

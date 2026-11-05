@@ -1,4 +1,4 @@
-export type MessageSide = "customer" | "assistant" | "agent";
+export type MessageSide = "customer" | "assistant" | "agent" | "system";
 export type DeliveryStatus = "sending" | "sent" | "delivered" | "read" | "failed";
 export type HandoffStatus = "ai" | "needs-human" | "assigned";
 export type ActivityTone = "blue" | "cyan" | "red";
@@ -7,7 +7,16 @@ export type NotificationType = "new-conversation" | "handoff" | "callback" | "me
 
 /// Application lifecycle status (consolidates ApplicationStatus from
 /// ApplicationsTable.tsx and the status string on ConversationDto.application).
-export type ApplicationStatus = "New" | "Reviewing" | "Completed" | "Failed" | "Paid Off" | "in progress" | "overdue";
+export type ApplicationStatus =
+  | "New"
+  | "Reviewing"
+  | "Completed"
+  | "Failed"
+  | "Paid Off"
+  | "in progress"
+  | "overdue"
+  /** The chat backend does not know loan data (Backend 1 owns it), so conversations from it carry this. */
+  | "Unknown";
 
 export type ChatMessageDto = {
   id: string;
@@ -17,6 +26,10 @@ export type ChatMessageDto = {
   createdAt: string;
   status?: DeliveryStatus;
   senderId?: string;
+  /** The id the sending client generated; lets an optimistic message be matched to its server copy. */
+  clientId?: string;
+  /** Position in the conversation (a decimal string); orders messages and is the sync cursor. */
+  sequence?: string;
 };
 
 export type ActivityDto = {
@@ -54,6 +67,7 @@ export type ConversationDto = {
   activity: ActivityDto[];
   summary: string;
   summaryImage?: string;
+  archived?: boolean;
 };
 
 export type AgentDto = {
@@ -103,6 +117,13 @@ export type ServerEventMap = {
     messages: Record<string, ChatMessageDto[]>;
     agents?: AgentDto[];
     notifications?: NotificationDto[];
+    /**
+     * True when `messages` holds only what the client was missing (everything after its cursors). The client merges
+     * instead of replacing its message lists.
+     */
+    partial?: boolean;
+    /** Conversations with more missed messages than fit in one sync; the client pages the rest. */
+    incomplete?: string[];
   };
   "message.new": { message: ChatMessageDto };
   "message.ack": { message: ChatMessageDto };
@@ -113,6 +134,12 @@ export type ServerEventMap = {
   };
   "conversation.updated": { conversation: ConversationDto };
   "conversation.assigned": { conversationId: string; agent: AgentDto };
+  /** The conversation is no longer visible to this agent (someone else took it). */
+  "conversation.removed": { conversationId: string };
+  /** The authoritative unread count for the agent changed (read in another tab, marked unread, ...). */
+  "conversation.unread": { conversationId: string; unread: number };
+  /** A sent message could not be stored. `clientId` identifies the optimistic message. */
+  "message.failed": { conversationId: string; clientId: string; reason?: string };
   typing: { conversationId: string; side: MessageSide; active: boolean };
   notice: { text: string };
   notification: { notification: NotificationDto };
@@ -120,9 +147,14 @@ export type ServerEventMap = {
 
 /** Events the client sends to the server. */
 export type ClientEventMap = {
-  "sync.request": Record<string, never>;
+  /**
+   * `cursors` maps a conversation to the sequence number of the newest message the client holds, so a reconnect
+   * brings back only what was missed. `selectedConversationId` gets its latest messages if it has no cursor.
+   */
+  "sync.request": { cursors?: Record<string, string>; selectedConversationId?: string };
   "message.send": { conversationId: string; clientId: string; text: string };
   "conversation.read": { conversationId: string };
+  "conversation.unread": { conversationId: string };
   "conversation.takeover": { conversationId: string };
   "callback.request": { conversationId: string };
 };
@@ -148,16 +180,19 @@ const isConversation = (value: unknown): value is ConversationDto =>
   Array.isArray(value.activity) &&
   isString(value.summary) &&
   (value.summaryImage === undefined || isString(value.summaryImage)) &&
-  (value.customerId === undefined || isString(value.customerId));
+  (value.customerId === undefined || isString(value.customerId)) &&
+  (value.archived === undefined || typeof value.archived === "boolean");
 const isMessage = (value: unknown): value is ChatMessageDto =>
   isRecord(value) &&
   isString(value.id) &&
   isString(value.conversationId) &&
-  (value.side === "customer" || value.side === "assistant" || value.side === "agent") &&
+  (value.side === "customer" || value.side === "assistant" || value.side === "agent" || value.side === "system") &&
   isString(value.text) &&
   isString(value.createdAt) &&
   (value.status === undefined || ["sending", "sent", "delivered", "read", "failed"].includes(String(value.status))) &&
-  (value.senderId === undefined || isString(value.senderId));
+  (value.senderId === undefined || isString(value.senderId)) &&
+  (value.clientId === undefined || isString(value.clientId)) &&
+  (value.sequence === undefined || isString(value.sequence));
 const isNotification = (value: unknown): value is NotificationDto =>
   isRecord(value) &&
   isString(value.id) &&
@@ -176,7 +211,9 @@ export function isServerEvent(type: string, payload: unknown): payload is Server
         Array.isArray(payload.conversations) &&
         payload.conversations.every(isConversation) &&
         isRecord(payload.messages) &&
-        Object.values(payload.messages).every((messages) => Array.isArray(messages) && messages.every(isMessage))
+        Object.values(payload.messages).every((messages) => Array.isArray(messages) && messages.every(isMessage)) &&
+        (payload.partial === undefined || typeof payload.partial === "boolean") &&
+        (payload.incomplete === undefined || (Array.isArray(payload.incomplete) && payload.incomplete.every(isString)))
       );
     case "message.new":
     case "message.ack":
@@ -191,6 +228,16 @@ export function isServerEvent(type: string, payload: unknown): payload is Server
       return isConversation(payload.conversation);
     case "conversation.assigned":
       return isString(payload.conversationId) && isAgent(payload.agent);
+    case "conversation.removed":
+      return isString(payload.conversationId);
+    case "conversation.unread":
+      return isString(payload.conversationId) && typeof payload.unread === "number" && payload.unread >= 0;
+    case "message.failed":
+      return (
+        isString(payload.conversationId) &&
+        isString(payload.clientId) &&
+        (payload.reason === undefined || isString(payload.reason))
+      );
     case "typing":
       return (
         isString(payload.conversationId) &&

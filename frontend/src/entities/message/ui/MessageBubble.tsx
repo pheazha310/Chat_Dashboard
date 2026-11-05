@@ -25,6 +25,16 @@ export default function MessageBubble({
     .filter(Boolean)
     .join(" • ");
 
+  if (side === "system") {
+    // Takeovers, transfers and status changes: a quiet note in the thread, not a chat bubble.
+    return (
+      <div className="message-block system">
+        <p className="system-note">{message.text}</p>
+        <time>{formatClock(message.createdAt)}</time>
+      </div>
+    );
+  }
+
   return (
     <div className={`message-block ${side} ${status === "failed" ? "failed" : ""}`}>
       <div className="message-line">

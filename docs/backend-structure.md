@@ -11,6 +11,7 @@ backend/
     ├── server.ts            http server, websocket attach, graceful shutdown
     ├── app.ts               express app: helmet, cors, request context, pino-http, json, /api, notFound, errorHandler
     ├── routes.ts            mounts every module router under /api
+    ├── container.ts         builds every service once (composition root); app-container.ts is the running app's instance
     ├── config/              env.ts (zod-validated env), cors.ts, database.ts (Prisma singleton), redis.ts,
     │                        logger.ts (pino), request-context.ts (AsyncLocalStorage requestId)
     ├── modules/
@@ -18,13 +19,19 @@ backend/
     │   ├── conversations/   inbox, detail, create, status changes, archive, activities
     │   ├── assignments/     assign (takeover), transfer, unassign, history
     │   ├── messages/        send (idempotent), history/sync cursors, read/unread, receipts, SYSTEM messages
-    │   └── notifications/   service + repository only so far (no routes yet; used by assignments)
-    ├── websocket/           websocket.server.ts (/ws, Redis chat:events fan-out, heartbeat)
+    │   ├── presence/        agent availability (Redis live state + Postgres history), REST + used by the socket
+    │   ├── realtime/        turns committed changes into audience-targeted events on the event bus (service only)
+    │   ├── customers/       customer profile (redacted by role), other conversations, participants (Backend 1 via Directory)
+    │   └── notifications/   list, unread count, mark read, preferences, per-conversation mute; also creates notifications for other modules
+    ├── websocket/           server (transport, heartbeat), auth (first-frame token), handler (event → service),
+    │                        events (zod schemas), rooms (per-socket audience filter), bus (Redis / in-memory)
     └── shared/
         ├── auth/            AuthClient port, DevAuthClient (dev/test only), createAuthClient
         ├── errors/          AppError.ts (AppError + subclasses)
         ├── middleware/      auth, validate (+ `parsed()`), error-handler, not-found, request-context
-        ├── ports/           SystemMessagePort (lets modules post SYSTEM messages without importing messages)
+        ├── directory/       DevDirectory (dev/test stand-in for Backend 1), CachedDirectory (agent names), createDirectory
+        ├── ports/           interfaces between modules and the outside: SystemMessagePort, RealtimeNotifier, Directory (Backend 1),
+        │                    ConversationAccess, AvailableAgents
         ├── policy/          conversation-access.ts: who can view/do what (used by two modules, so shared)
         └── utils/           ids (BigInt <-> string), pagination (page + cursor), best-effort (post-commit side effects)
 ```
@@ -69,12 +76,11 @@ Rules: no `req`/`res` below controllers; a module never imports another module's
 
 ## Planned modules (map to existing Prisma models; create when the behaviour is designed)
 
-Built: `conversations`, `assignments`, `messages`, `notifications` (service only). Still to build:
+Built: `conversations`, `assignments`, `messages`, `notifications`, `presence`, `customers`, `realtime`. Still to build:
 
 | Module        | Prisma models                                | Notes                             |
 | ------------- | -------------------------------------------- | --------------------------------- |
 | `presence`    | `AgentPresenceHistory` (live state in Redis) | typing + availability             |
-| `customers`   | none (Backend 1 data via a client)           | needs the Backend 1 API contract  |
 | `attachments` | `Attachment`, `MessageAttachment`            | storage backend undecided         |
 | `ai-handoff`  | `AiHandoff`, `ConversationEscalation`        | AI worker is out of scope for now |
 
@@ -85,7 +91,11 @@ design yet**: propose them and update the schema, protocol and docs first.
 
 ## Websocket
 
-`websocket.server.ts` is the transport. When handlers are added, split into
-`websocket.auth.ts` (connection auth), `websocket.handler.ts` (dispatch: ws event → service),
-`websocket.events.ts` and `websocket.rooms.ts`, and keep the contract in sync with
-`frontend/src/shared/api/ws/protocol.ts`.
+`src/websocket/` is the gateway. It has no business rules: `websocket.handler.ts` validates a frame with the same zod
+schemas as REST and calls the same services; services report committed changes to `RealtimeService`, which publishes
+audience-targeted events to the `EventBus`; `websocket.rooms.ts` delivers each event only to the sockets that pass the
+shared `canView` rule. The contract is in [websocket-events.md](websocket-events.md).
+
+`container.ts` exists because REST and the gateway must share one set of service instances (and the realtime/service
+cycle needs a single place to be tied). Modules never import it; only `*.routes.ts` (through `app-container.ts`) and the
+gateway do. Wiring a new service means adding it there.

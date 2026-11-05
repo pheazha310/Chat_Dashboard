@@ -1,1 +1,1 @@
-export { messageRoutes, messageService } from "./message.routes.js";
+export { messageRoutes } from "./message.routes.js";

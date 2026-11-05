@@ -39,6 +39,7 @@ const summaryShape = {
   conversationMode: z.enum(["AI", "HUMAN"]),
   handoffStatus: z.enum(["NONE", "NEEDS_HUMAN", "ASSIGNED"]),
   assignedAgentId: nullableString,
+  assignedAgent: z.object({ id: z.string(), name: z.string(), avatarUrl: nullableString }).nullable(),
   isArchived: z.boolean(),
   lastMessageAt: z.string(),
   lastMessagePreview: nullableString,

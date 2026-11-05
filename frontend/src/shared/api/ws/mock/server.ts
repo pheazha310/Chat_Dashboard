@@ -60,6 +60,10 @@ export class MockLendingServer {
         return this.handleSend(payload.conversationId, payload.clientId, payload.text);
       case "conversation.read":
         return this.update(payload.conversationId, { unread: 0 });
+      case "conversation.unread": {
+        const conversation = this.find(payload.conversationId);
+        return this.update(payload.conversationId, { unread: Math.max(1, conversation?.unread ?? 0) });
+      }
       case "conversation.takeover": {
         const conversation = this.find(payload.conversationId);
         if (conversation) {

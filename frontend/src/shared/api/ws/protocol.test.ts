@@ -54,6 +54,12 @@ describe("isServerEvent", () => {
       },
     ],
     ["sync", { conversations: [conversation], messages: { a: [message] } }],
+    ["sync", { conversations: [], messages: {}, partial: true, incomplete: ["a"] }],
+    ["message.new", { message: { ...message, side: "system", clientId: "c1", sequence: "4" } }],
+    ["conversation.updated", { conversation: { ...conversation, archived: true } }],
+    ["conversation.removed", { conversationId: "a" }],
+    ["conversation.unread", { conversationId: "a", unread: 2 }],
+    ["message.failed", { conversationId: "a", clientId: "c1", reason: "Not the owner" }],
   ])("accepts a valid %s payload", (type, payload) => {
     expect(isServerEvent(type, payload)).toBe(true);
   });
@@ -82,6 +88,13 @@ describe("isServerEvent", () => {
     ],
     ["typing", { conversationId: "a", side: "customer", active: "yes" }],
     ["sync", { conversations: [{}], messages: {} }],
+    ["sync", { conversations: [], messages: {}, partial: "yes" }],
+    ["sync", { conversations: [], messages: {}, incomplete: [1] }],
+    ["conversation.removed", {}],
+    ["conversation.unread", { conversationId: "a", unread: -1 }],
+    ["conversation.unread", { conversationId: "a", unread: "2" }],
+    ["message.failed", { conversationId: "a" }],
+    ["message.new", { message: { ...message, sequence: 4 } }],
     ["sync", { conversations: [], messages: { a: [{ id: 1 }] } }],
     ["unknown.event", {}],
   ])("rejects an invalid %s payload", (type, payload) => {

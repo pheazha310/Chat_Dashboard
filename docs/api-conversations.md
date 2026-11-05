@@ -1,4 +1,4 @@
-# Conversations, assignments and messages API
+# Conversations, assignments, messages, notifications and customer API
 
 Base path `/api/conversations`. Responses use the envelopes in [api-response-contracts.md](api-response-contracts.md).
 Ids are strings (PostgreSQL `BIGINT`). Timestamps are ISO 8601.
@@ -51,6 +51,51 @@ messages `READ`. Unread = customer messages after the agent's position; `/unread
 **SYSTEM messages** (`senderType: "SYSTEM"`, `type: "SYSTEM"`, `metadata.event`) are posted for takeover, assignment,
 transfer, unassign and status changes. They take a sequence number but do not change the inbox preview or last-activity
 time and never count as unread.
+
+### Presence
+
+| Method | Path           | Body                                    | Notes                                                                                            |
+| ------ | -------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| GET    | `/presence`    |                                         | Agents with an open WebSocket and their status. Offline agents are not listed. (`/api/presence`) |
+| PUT    | `/presence/me` | `{ status: AVAILABLE \| BUSY \| AWAY }` | Remembered for the next connection; broadcast as `presence.updated` while online.                |
+
+Realtime delivery of all of the above is described in [websocket-events.md](websocket-events.md).
+
+### Notifications
+
+Always the caller's own; another agent's notification is `404`. Realtime: `notification.new`, `notification.read`
+([websocket-events.md](websocket-events.md)).
+
+| Method | Path                          | Body / query                                | Notes                                                                            |
+| ------ | ----------------------------- | ------------------------------------------- | -------------------------------------------------------------------------------- |
+| GET    | `/notifications`              | `unread=true`, `page`, `size`               | Newest first. `meta.unreadCount` is the caller's total unread.                   |
+| GET    | `/notifications/unread-count` |                                             | Badge count.                                                                     |
+| PATCH  | `/notifications/:id/read`     |                                             | Idempotent. Other sessions get `notification.read` with the new count.           |
+| POST   | `/notifications/read-all`     |                                             | `{ updated, unreadCount: 0 }`.                                                   |
+| GET    | `/notifications/preferences`  |                                             | `newMessage, assignment, transfer, mention, sound, browser`; all default on.     |
+| PUT    | `/notifications/preferences`  | any subset of those booleans (at least one) | Switching a type off stops it being stored. `sound`/`browser` are client hints.  |
+| PUT    | `/conversations/:id/mute`     | `{ muted: boolean }`                        | Stops new-message notifications for that conversation. Assignments still notify. |
+
+Types generated: `NEW_MESSAGE` (to the owner of a conversation a customer wrote in), `NEW_CONVERSATION` (to online
+AVAILABLE agents when a conversation starts waiting for a human), `ASSIGNED`, `TRANSFERRED`. Others exist in the schema
+but have no trigger yet (`MENTION`, `CALLBACK`, `CALL`, `HANDOFF`, `SYSTEM`).
+
+### Customer information
+
+All anchored to a conversation the caller can open, so customers cannot be looked up by id alone.
+
+| Method | Path                                        | Notes                                                                                      |
+| ------ | ------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| GET    | `/conversations/:id/customer`               | Profile from Backend 1, redacted by role (below). `503` if Backend 1 is unreachable.       |
+| GET    | `/conversations/:id/customer/conversations` | The customer's other conversations (archived and closed included) that the caller may see. |
+| GET    | `/conversations/:id/participants`           | Current members first, then people who left; names from Backend 1.                         |
+| GET    | `/conversations?customerId=`                | Same list as the inbox, filtered to one customer (also `excludeId`).                       |
+
+Redaction (provisional until Backend 1 defines its permissions): name, avatar and `blacklisted` for anyone who can open
+the conversation; `email`, `phone` for its owner and supervisors; `nationalId`, `occupation`, `salary` for supervisors
+only. Hidden fields are `null` and named in `restricted`. `source: "dev-stub"` marks synthetic placeholder data
+(`BACKEND1_MODE=dev`). The inbox and conversation detail now include `assignedAgent { id, name, avatarUrl }`
+(`null` when unassigned or Backend 1 is unreachable).
 
 Errors: `400` validation (`error.details` lists zod issues), `401` missing/invalid token, `403` role or permission,
 `404` missing or hidden, `409` already in that state, lost a race (two agents claiming at once: one gets 409), or a

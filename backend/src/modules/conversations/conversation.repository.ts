@@ -73,6 +73,17 @@ export class ConversationRepository {
     });
   }
 
+  /** For realtime events: the conversation with tags and the agents added to it as VIEWER. */
+  async findForEvent(id: bigint) {
+    const conversation = await this.db.conversation.findUnique({ where: { id }, include: withTags });
+    if (!conversation) return null;
+    const viewers = await this.db.conversationAssignment.findMany({
+      where: { conversationId: id, endedAt: null, assignmentType: "VIEWER" },
+      select: { agentId: true },
+    });
+    return { conversation, viewerIds: viewers.map((v) => v.agentId) };
+  }
+
   findByApplication(applicationId: bigint): Promise<ConversationWithTags | null> {
     return this.db.conversation.findFirst({ where: { applicationId, status: { not: "CLOSED" } }, include: withTags });
   }
@@ -162,7 +173,11 @@ export function buildInboxWhere(
 ): Prisma.ConversationWhereInput {
   const and: Prisma.ConversationWhereInput[] = [visibilityWhere(auth)];
 
-  and.push({ isArchived: query.filter === "archived" });
+  // A customer's history includes archived conversations; the inbox hides them unless asked.
+  if (query.filter === "archived") and.push({ isArchived: true });
+  else if (query.customerId === undefined) and.push({ isArchived: false });
+  if (query.customerId !== undefined) and.push({ customerId: query.customerId });
+  if (query.excludeId !== undefined) and.push({ id: { not: query.excludeId } });
   if (query.filter === "mine") and.push({ assignedAgentId: auth.userId });
   if (query.filter === "unassigned") and.push({ handoffStatus: "NEEDS_HUMAN" });
   if (query.filter === "unread") and.push({ id: { in: unreadIds } });

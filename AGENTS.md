@@ -29,7 +29,7 @@ Node 22, pnpm 10 (pinned in `.mise.toml` and root `package.json`).
 - Frontend layers and import rules: [FSD.md](FSD.md); UI conventions: [docs/DESIGN_PATTERNS.md](docs/DESIGN_PATTERNS.md)
 - Data model and DB rules: [docs/database-schema.md](docs/database-schema.md), `backend/prisma/schema.prisma`
 - Backend behaviour (flows, permissions, protocol gaps): [docs/chat-logic-design.md](docs/chat-logic-design.md)
-- WebSocket contract: `frontend/src/shared/api/ws/protocol.ts` (`ServerEventMap`, `ClientEventMap`, `isServerEvent`)
+- WebSocket contract: backend [docs/websocket-events.md](docs/websocket-events.md); the frontend's `shared/api/ws/protocol.ts` is its own vocabulary, translated in `shared/api/ws/backend/`
 
 ## Architecture
 
@@ -43,21 +43,23 @@ Node 22, pnpm 10 (pinned in `.mise.toml` and root `package.json`).
   Only repositories query Prisma (the one exception is `server.ts` calling `prisma.$disconnect()` on shutdown). Services own business rules and transactions. Controllers only
   validate input (via the `validate()` middleware) and shape the response. WebSocket handlers play the controller role:
   `ws handler → service → repository`. Modules call each other only through services, never repositories.
-- **Realtime:** `backend/src/websocket/websocket.server.ts` serves `/ws` and fans events out through Redis channel `chat:events`.
-  Frontend uses a built-in mock server unless `VITE_WS_URL` is set.
+- **Realtime:** `backend/src/websocket/` serves `/ws` (clients authenticate with a first `auth` frame). Services report changes
+  to `RealtimeService`, which publishes to an `EventBus` (Redis channel `chat:events`, or in-memory with `EVENT_BUS=memory`);
+  each socket only receives events it may see. Services are built once in `backend/src/container.ts`.
+  Frontend uses a built-in mock server unless `VITE_WS_URL` is set; with it, `BackendSocket` translates to the gateway's
+  contract and REST supplies history and details (see `docs/frontend-integration.md`).
 
 ## Current state (keep docs honest)
 
-- Backend implements `GET /api/health`, the conversations, assignments and messages REST APIs (`docs/api-conversations.md`), a
-  notification service, the WS gateway relay (no auth, no event handlers) and the Prisma schema. The customer channel, presence and
-  typing, customer info, notification endpoints, realtime events and the AI worker are **designed in docs but not built**. Do not describe
+- Backend implements `GET /api/health`, the conversations, assignments, messages, notifications, presence and customer-info REST APIs (`docs/api-conversations.md`), a
+  notification service, the WebSocket gateway (first-frame auth, per-socket audience filtering, Redis/in-memory event bus; contract in `docs/websocket-events.md`), presence and the Prisma schema. The customer channel and the AI worker are **designed in docs but not built**. Do not describe
   them as existing.
 - **Authentication is an external service** (separate repo). This backend only consumes it: it must not issue tokens,
   store passwords, or implement login. The service's API contract (token format, verify/introspect endpoint, user/role
   claims) is **not yet known**; do not invent it. See `authentication-security`.
 - The backend has Vitest (`pnpm test` runs it, with 70/70/70/65 coverage thresholds via `test:coverage`) but no lint or
   format scripts, so also run `pnpm --filter @chat-dashboard/backend build` and `npx prettier --check backend/src`.
-  Integration tests (`*.integration.test.ts`) run against PostgreSQL only when `TEST_DATABASE_URL` points at a database whose name contains "test" (the migration applied); otherwise they are skipped. `packages/` is empty, so the backend cannot import frontend types;
+  Integration tests (`*.integration.test.ts`) run against PostgreSQL only when `TEST_DATABASE_URL` points at a database whose name contains "test" (the migration applied), and the WebSocket ones also need `TEST_REDIS_URL` (a throwaway Redis, it is flushed); otherwise they are skipped. `packages/` is empty, so the backend cannot import frontend types;
   the protocol is currently defined only in the frontend.
 
 ## Rules

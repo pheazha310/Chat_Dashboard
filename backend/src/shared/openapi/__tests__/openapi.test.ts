@@ -38,6 +38,18 @@ describe("OpenAPI document", () => {
         "POST /conversations/{id}/messages/{messageId}/delivered",
         "POST /conversations/{id}/read",
         "POST /conversations/{id}/unread",
+        "GET /presence",
+        "PUT /presence/me",
+        "GET /notifications",
+        "GET /notifications/unread-count",
+        "PATCH /notifications/{id}/read",
+        "POST /notifications/read-all",
+        "GET /notifications/preferences",
+        "PUT /notifications/preferences",
+        "PUT /conversations/{id}/mute",
+        "GET /conversations/{id}/customer",
+        "GET /conversations/{id}/customer/conversations",
+        "GET /conversations/{id}/participants",
       ].sort(),
     );
   });

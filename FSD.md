@@ -8,14 +8,14 @@ The `@/` alias maps to `src/`. For UI conventions (layout, components, accessibi
 
 ## Layer responsibilities
 
-| Layer | Responsibility | Chat dashboard examples |
-| --- | --- | --- |
-| **app** | Composition, global providers, startup wiring such as WebSocket event subscriptions | `App.tsx`, `providers/realtime.ts` |
-| **pages** | Screen-level composition. Assemble widgets and features for a route or view; hold only view state (open panels, active sub-view) | `ChatPage`, `ApplicationsPage` |
-| **widgets** | Substantial page sections that combine several features and entities | `chat-window`, `conversation-sidebar`, `customer-context`, `top-navbar`, `applications-workspace` |
-| **features** | One user-facing action, with its state and UI | `send-message`, `take-over-conversation`, `request-callback`, `search-in-chat`, `share-files`, `select-conversation`, `message-settings` |
-| **entities** | Domain concepts, their state, and presentational components | `conversation`, `message` |
-| **shared** | Reusable UI, API clients, config and utilities with no product knowledge | `shared/ui`, `shared/api/ws`, `shared/config`, `shared/lib` |
+| Layer        | Responsibility                                                                                                                   | Chat dashboard examples                                                                                                                  |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| **app**      | Composition, global providers, startup wiring such as WebSocket event subscriptions                                              | `App.tsx`, `providers/realtime.ts`                                                                                                       |
+| **pages**    | Screen-level composition. Assemble widgets and features for a route or view; hold only view state (open panels, active sub-view) | `ChatPage`, `ApplicationsPage`                                                                                                           |
+| **widgets**  | Substantial page sections that combine several features and entities                                                             | `chat-window`, `conversation-sidebar`, `customer-context`, `top-navbar`, `applications-workspace`                                        |
+| **features** | One user-facing action, with its state and UI                                                                                    | `send-message`, `take-over-conversation`, `request-callback`, `search-in-chat`, `share-files`, `select-conversation`, `message-settings` |
+| **entities** | Domain concepts, their state, and presentational components                                                                      | `conversation`, `message`                                                                                                                |
+| **shared**   | Reusable UI, API clients, config and utilities with no product knowledge                                                         | `shared/ui`, `shared/api/ws`, `shared/config`, `shared/lib`                                                                              |
 
 ## Slice structure
 
@@ -53,14 +53,14 @@ import { ChatWindow } from "@/widgets/chat-window"; // inside an entity
 
 ## Where does new code go?
 
-| You are adding… | Put it in… |
-| --- | --- |
-| A new button or action the agent performs (retry, archive, assign) | a `features/<verb-noun>` slice; export its action and UI from `index.ts` |
-| A field on conversations or messages, or a selector over them | the matching `entities/*/model` |
-| A panel or section that combines several features | a `widgets/*` slice, composed in a page |
-| A new screen | `pages/<name>`, wired in `app/App.tsx` |
-| A new server event | the type in `shared/api/ws/protocol.ts`, the routing in `app/providers/realtime.ts`, and the mock handler in `shared/api/ws/mock` |
-| A generic helper or component used by unrelated features | `shared/lib` or `shared/ui` |
+| You are adding…                                                    | Put it in…                                                                                                                                                                                                         |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| A new button or action the agent performs (retry, archive, assign) | a `features/<verb-noun>` slice; export its action and UI from `index.ts`                                                                                                                                           |
+| A field on conversations or messages, or a selector over them      | the matching `entities/*/model`                                                                                                                                                                                    |
+| A panel or section that combines several features                  | a `widgets/*` slice, composed in a page                                                                                                                                                                            |
+| A new screen                                                       | `pages/<name>`, wired in `app/App.tsx`                                                                                                                                                                             |
+| A new server event                                                 | the type in `shared/api/ws/protocol.ts`, the routing in `app/providers/realtime.ts`, the mock handler in `shared/api/ws/mock`, and (for the real backend) its translation in `shared/api/ws/backend/translator.ts` |
+| A generic helper or component used by unrelated features           | `shared/lib` or `shared/ui`                                                                                                                                                                                        |
 
 ## Testing
 

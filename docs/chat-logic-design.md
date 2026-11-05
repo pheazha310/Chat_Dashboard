@@ -198,8 +198,18 @@ Implemented in `shared/policy/conversation-access.ts`; the API returns the calle
   committed change.
 - **Retention (FR-10):** only soft delete exists (deleted messages are excluded from history). No policy or job is
   defined anywhere, so none is built.
-- **Not yet built:** realtime events (`message.new`, `conversation.assigned` etc.; the gateway still broadcasts raw
-  Redis payloads, so services publish nothing yet), typing and presence, customer info, notification endpoints.
+- **Realtime (built):** services report committed changes through `RealtimeNotifier`; the gateway authenticates sockets
+  with a first-frame token and delivers each event only to sockets that pass `canView`. See
+  [websocket-events.md](websocket-events.md). Event names are dotted (the decision recorded in §7 is closed).
+- **Notifications.** Stored per agent, honouring their preference switches; new-message notifications also honour
+  per-conversation mute. Triggers built: new customer message to the owner, a new waiting conversation to online
+  AVAILABLE agents (not the creator), assigned and transferred. A customer message in a conversation nobody owns
+  notifies no one (it waits in the queue, as designed in §5.1).
+- **Customer data (Backend 1).** Reached only through the `Directory` port (`BACKEND1_MODE=dev` returns labelled
+  synthetic data; `external` is not implemented because the contract is unknown). Sensitive fields are redacted by role
+  with a provisional policy (see api-conversations.md); replace it when Backend 1 defines its permissions.
+- **Not yet built:** the customer channel, customer-level communication activity (per-conversation activity exists),
+  and the frontend integration (the frontend still talks to its mock protocol).
 - **Timezone.** Database sessions are pinned to UTC (`config/database.ts`): the Prisma pg adapter reads `timestamptz`
   as UTC, so a non-UTC server timezone shifted database-generated timestamps by the offset.
 

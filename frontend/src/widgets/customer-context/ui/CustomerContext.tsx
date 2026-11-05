@@ -82,7 +82,7 @@ export default function CustomerContext({
             </div>
           </section>
 
-          {aiSummaries && (
+          {aiSummaries && conversation.summary && (
             <section className="info-card summary-card">
               <div className="card-heading">
                 <h3>AI Summary</h3>
