@@ -174,6 +174,26 @@ Each reader has their own position, so unread is per agent.
 - **Internal notes:** stored in `internal_notes`, never in `messages`, so they cannot be delivered to a
   customer; mentions go to `note_mentions` and create notifications.
 
+## 5.8 As built (conversations and assignments)
+
+Implemented in `shared/policy/conversation-access.ts`; the API returns the caller's `permissions` flags per conversation.
+
+- **Visibility.** Supervisors see everything. An agent sees AI-handled (`NONE`) and waiting (`NEEDS_HUMAN`) conversations,
+  ones they own, and ones where they are an open `VIEWER`. Another agent's `ASSIGNED` conversation is hidden: it
+  returns 404 on every endpoint (never 403) and is excluded from search. This is stricter than the "read-only" wording
+  in the matrix below; relax `canView` and `visibilityWhere` together if read-only access is wanted.
+- **Unassigned filter** = waiting in the shared queue (`handoff_status = NEEDS_HUMAN`).
+- **Unread** per agent = `CUSTOMER` messages after the agent's `last_read_sequence_number`, or at least 1 when
+  `marked_unread`. The `unread` filter loads all such ids for the agent (fine at inbox scale; revisit if it grows).
+- **Resolve/close** release the owner (`handoff NONE`, `AI` mode, OWNER row ended). **Reopen** (any viewer) sets
+  `NEEDS_HUMAN`/`HUMAN` so an agent can take it over.
+- **Archive/restore** is global (`is_archived`), allowed for the owner, a supervisor, or anyone when unassigned.
+- **Create** finds or creates the open conversation per application. The customer/application are **not yet verified
+  with Backend 1** (contract unknown); the target agent of an assign/transfer is likewise unverified.
+- **Not yet built:** `SYSTEM` messages for takeover/transfer (need the messages module) and realtime events
+  (`conversation.assigned` etc.; the gateway still broadcasts raw Redis payloads, so services publish nothing yet).
+  Assignment notifications are stored in `notifications` after the transaction commits (best effort).
+
 ## 6. Permission matrix
 
 | Action       | AI-handled      | Waiting for human | Assigned to me | Assigned to someone else    |

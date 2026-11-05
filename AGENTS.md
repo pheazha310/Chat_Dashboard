@@ -48,14 +48,16 @@ Node 22, pnpm 10 (pinned in `.mise.toml` and root `package.json`).
 
 ## Current state (keep docs honest)
 
-- Backend implements only `GET /api/health`, the WS gateway relay (no auth, no event handlers) and the Prisma schema.
-  Chat services and the AI worker are **designed in docs but not built**. Do not describe them as existing.
+- Backend implements `GET /api/health`, the conversations and assignments REST APIs (`docs/api-conversations.md`), a
+  notification service, the WS gateway relay (no auth, no event handlers) and the Prisma schema. Messages, receipts,
+  presence, customer info, realtime events and the AI worker are **designed in docs but not built**. Do not describe
+  them as existing.
 - **Authentication is an external service** (separate repo). This backend only consumes it: it must not issue tokens,
   store passwords, or implement login. The service's API contract (token format, verify/introspect endpoint, user/role
   claims) is **not yet known**; do not invent it. See `authentication-security`.
 - The backend has Vitest (`pnpm test` runs it, with 70/70/70/65 coverage thresholds via `test:coverage`) but no lint or
   format scripts, so also run `pnpm --filter @chat-dashboard/backend build` and `npx prettier --check backend/src`.
-  Only the health module and shared middleware have tests so far. `packages/` is empty, so the backend cannot import frontend types;
+  Integration tests (`*.integration.test.ts`) run against PostgreSQL only when `TEST_DATABASE_URL` points at a database whose name contains "test" (the migration applied); otherwise they are skipped. `packages/` is empty, so the backend cannot import frontend types;
   the protocol is currently defined only in the frontend.
 
 ## Rules

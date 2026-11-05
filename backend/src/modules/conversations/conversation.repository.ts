@@ -1,0 +1,137 @@
+import { prisma, runInTransaction, type Db } from "@config/database.js";
+import type { Prisma } from "../../../prisma/generated/prisma/client.js";
+import type { AccessibleConversation, ConversationWithTags } from "./conversation.types.js";
+
+const withTags = { conversationTags: { include: { tag: true } } } satisfies Prisma.ConversationInclude;
+
+export class ConversationRepository {
+  constructor(private readonly db: Db = prisma) {}
+
+  inTransaction<T>(fn: (repo: ConversationRepository) => Promise<T>): Promise<T> {
+    return runInTransaction(this.db, (tx) => fn(new ConversationRepository(tx)));
+  }
+
+  async list(
+    where: Prisma.ConversationWhereInput,
+    orderBy: Prisma.ConversationOrderByWithRelationInput[],
+    page: { skip: number; take: number },
+  ) {
+    const [items, total] = await Promise.all([
+      this.db.conversation.findMany({ where, orderBy, ...page, include: withTags }),
+      this.db.conversation.count({ where }),
+    ]);
+    return { items, total };
+  }
+
+  /** Unread = customer messages after the agent's read position (plus a manual "mark unread" flag), per agent. */
+  async unreadCounts(agentId: bigint, conversationIds: bigint[]): Promise<Map<bigint, number>> {
+    const counts = new Map<bigint, number>();
+    if (conversationIds.length === 0) return counts;
+    const rows = await this.db.$queryRaw<{ id: bigint; unread: number }[]>`
+      SELECT m.conversation_id AS id, count(*)::int AS unread
+        FROM messages m
+        LEFT JOIN conversation_reads r
+          ON r.conversation_id = m.conversation_id AND r.reader_type = 'AGENT' AND r.reader_id = ${agentId}
+       WHERE m.conversation_id = ANY(${conversationIds}::bigint[])
+         AND m.sender_type = 'CUSTOMER' AND m.deleted_at IS NULL
+         AND m.sequence_number > COALESCE(r.last_read_sequence_number, 0)
+       GROUP BY m.conversation_id`;
+    for (const row of rows) counts.set(row.id, row.unread);
+    const manual = await this.db.conversationRead.findMany({
+      where: { conversationId: { in: conversationIds }, readerType: "AGENT", readerId: agentId, markedUnread: true },
+      select: { conversationId: true },
+    });
+    for (const { conversationId } of manual) counts.set(conversationId, Math.max(1, counts.get(conversationId) ?? 0));
+    return counts;
+  }
+
+  /** Ids of every conversation with unread messages or a manual unread flag for this agent (the `unread` filter). */
+  async unreadConversationIds(agentId: bigint): Promise<bigint[]> {
+    const rows = await this.db.$queryRaw<{ id: bigint }[]>`
+      SELECT DISTINCT u.id FROM (
+        SELECT m.conversation_id AS id
+          FROM messages m
+          LEFT JOIN conversation_reads r
+            ON r.conversation_id = m.conversation_id AND r.reader_type = 'AGENT' AND r.reader_id = ${agentId}
+         WHERE m.sender_type = 'CUSTOMER' AND m.deleted_at IS NULL
+           AND m.sequence_number > COALESCE(r.last_read_sequence_number, 0)
+        UNION ALL
+        SELECT conversation_id AS id FROM conversation_reads
+         WHERE reader_type = 'AGENT' AND reader_id = ${agentId} AND marked_unread
+      ) u`;
+    return rows.map((row) => row.id);
+  }
+
+  findForAccess(id: bigint, agentId: bigint): Promise<AccessibleConversation | null> {
+    return this.db.conversation.findUnique({
+      where: { id },
+      include: {
+        ...withTags,
+        conversationAssignments: { where: { agentId, endedAt: null }, select: { assignmentType: true } },
+      },
+    });
+  }
+
+  findByApplication(applicationId: bigint): Promise<ConversationWithTags | null> {
+    return this.db.conversation.findFirst({ where: { applicationId, status: { not: "CLOSED" } }, include: withTags });
+  }
+
+  /** Serializes concurrent creates for one customer for the rest of the transaction. */
+  async lockCustomer(customerId: bigint): Promise<void> {
+    await this.db.$executeRaw`SELECT pg_advisory_xact_lock(${customerId})`;
+  }
+
+  create(data: Prisma.ConversationUncheckedCreateInput): Promise<ConversationWithTags> {
+    return this.db.conversation.create({ data, include: withTags });
+  }
+
+  addCustomerParticipant(conversationId: bigint, customerId: bigint) {
+    return this.db.conversationParticipant.create({
+      data: { conversationId, participantType: "CUSTOMER", participantId: customerId, participantRole: "MEMBER" },
+    });
+  }
+
+  /** Conditional on the status the caller observed, so two simultaneous transitions cannot both win. */
+  async transitionStatus(
+    id: bigint,
+    from: string,
+    data: Prisma.ConversationUncheckedUpdateManyInput,
+  ): Promise<boolean> {
+    const { count } = await this.db.conversation.updateMany({ where: { id, status: from }, data });
+    return count === 1;
+  }
+
+  /** Ends the open OWNER row and marks the owner as having left (resolve/close release the agent). */
+  async releaseOwner(conversationId: bigint, agentId: bigint, endedBy: bigint): Promise<void> {
+    const now = new Date();
+    await this.db.conversationAssignment.updateMany({
+      where: { conversationId, endedAt: null, assignmentType: "OWNER" },
+      data: { endedAt: now, endedBy },
+    });
+    await this.db.conversationParticipant.updateMany({
+      where: { conversationId, participantType: "AGENT", participantId: agentId, leftAt: null },
+      data: { leftAt: now },
+    });
+  }
+
+  async setArchived(id: bigint, archived: boolean): Promise<boolean> {
+    const { count } = await this.db.conversation.updateMany({
+      where: { id, isArchived: !archived },
+      data: { isArchived: archived, archivedAt: archived ? new Date() : null },
+    });
+    return count === 1;
+  }
+
+  addActivity(data: Prisma.ConversationActivityUncheckedCreateInput) {
+    return this.db.conversationActivity.create({ data });
+  }
+
+  async listActivities(conversationId: bigint, page: { skip: number; take: number }) {
+    const where = { conversationId };
+    const [items, total] = await Promise.all([
+      this.db.conversationActivity.findMany({ where, orderBy: [{ createdAt: "desc" }, { id: "desc" }], ...page }),
+      this.db.conversationActivity.count({ where }),
+    ]);
+    return { items, total };
+  }
+}

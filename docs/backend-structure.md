@@ -14,11 +14,17 @@ backend/
     ├── config/              env.ts (zod-validated env), cors.ts, database.ts (Prisma singleton), redis.ts,
     │                        logger.ts (pino), request-context.ts (AsyncLocalStorage requestId)
     ├── modules/
-    │   └── health/          routes, controller, service, repository, types, index.ts, __tests__/  (reference module)
+    │   ├── health/          reference module
+    │   ├── conversations/   inbox, detail, create, status changes, archive, activities
+    │   ├── assignments/     assign (takeover), transfer, unassign, history
+    │   └── notifications/   service + repository only so far (no routes yet; used by assignments)
     ├── websocket/           websocket.server.ts (/ws, Redis chat:events fan-out, heartbeat)
     └── shared/
+        ├── auth/            AuthClient port, DevAuthClient (dev/test only), createAuthClient
         ├── errors/          AppError.ts (AppError + subclasses)
-        └── middleware/      validate, error-handler, not-found, request-context (+ __tests__/)
+        ├── middleware/      auth, validate (+ `parsed()`), error-handler, not-found, request-context
+        ├── policy/          conversation-access.ts: who can view/do what (used by two modules, so shared)
+        └── utils/           ids (BigInt <-> string), pagination (page + cursor)
 ```
 
 Import with aliases (`@config/*`, `@modules/*`, `@shared/*`, `@lib/*`); `build` runs `tsc && tsc-alias` so they
@@ -54,19 +60,15 @@ Rules: no `req`/`res` below controllers; a module never imports another module's
 
 ## Planned modules (map to existing Prisma models; create when the behaviour is designed)
 
-| Module          | Prisma models                                         | Notes                                                                 |
-| --------------- | ----------------------------------------------------- | --------------------------------------------------------------------- |
-| `users`         | `User`                                                | profile data only; credentials are owned by the external auth service |
-| `agents`        | `Agent`                                               |                                                                       |
-| `customers`     | `Customer`, `Application`, `ApplicationStatusHistory` |                                                                       |
-| `conversations` | `Conversation`, `ConversationRead`                    | read state lives here until it grows                                  |
-| `messages`      | `Message`                                             | delivery status transitions                                           |
-| `assignments`   | `AgentConversation`                                   |                                                                       |
-| `attachments`   | `SharedFile`                                          |                                                                       |
-| `notifications` | `Notification`                                        |                                                                       |
-| `settings`      | `Setting`                                             |                                                                       |
-| `activity`      | `Activity`                                            |                                                                       |
-| `ai-handoff`    | `Conversation` (`HandoffStatus`)                      | AI worker integration, designed in `chat-logic-design.md`             |
+Built: `conversations`, `assignments`, `notifications` (service only). Still to build:
+
+| Module        | Prisma models                                   | Notes                                      |
+| ------------- | ----------------------------------------------- | ------------------------------------------ |
+| `messages`    | `Message`, `MessageReceipt`, `ConversationRead` | send (idempotent), history, receipts, read |
+| `presence`    | `AgentPresenceHistory` (live state in Redis)    | typing + availability                      |
+| `customers`   | none (Backend 1 data via a client)              | needs the Backend 1 API contract           |
+| `attachments` | `Attachment`, `MessageAttachment`               | storage backend undecided                  |
+| `ai-handoff`  | `AiHandoff`, `ConversationEscalation`           | AI worker is out of scope for now          |
 
 `auth` is **not** a module that issues tokens (external service, contract unknown); once the contract
 is known it becomes a verifier middleware plus an `AuthClient`. Presence, receipts, internal notes,

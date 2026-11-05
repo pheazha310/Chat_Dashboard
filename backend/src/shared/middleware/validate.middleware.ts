@@ -1,5 +1,5 @@
-import type { RequestHandler } from "express";
-import type { ZodType } from "zod";
+import type { Request, RequestHandler } from "express";
+import type { ZodType, output } from "zod";
 import { BadRequestError } from "@shared/errors/AppError.js";
 
 type Schemas = { body?: ZodType; query?: ZodType; params?: ZodType };
@@ -20,3 +20,10 @@ export function validate(schemas: Schemas): RequestHandler {
     next();
   };
 }
+
+/**
+ * The typed result of `validate()`: `validate` replaces req.params/query/body with the parsed value, but Express still
+ * types them loosely. Pass the same schema used on the route so the cast stays tied to it.
+ */
+export const parsed = <S extends ZodType>(req: Request, key: "params" | "query" | "body", _schema: S) =>
+  req[key] as output<S>;
