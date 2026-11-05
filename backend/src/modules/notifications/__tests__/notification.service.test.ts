@@ -4,6 +4,7 @@ import { fakeRealtime } from "../../../__tests__/support/realtime.js";
 import { NotFoundError } from "@shared/errors/AppError.js";
 import type { NotificationRepository } from "../notification.repository.js";
 import { NotificationService } from "../notification.service.js";
+import { uid } from "../../../__tests__/support/ids.js";
 
 const repo = {
   findPreferences: vi.fn(),
@@ -20,18 +21,18 @@ const repo = {
 const access = { requireVisible: vi.fn() };
 const realtime = fakeRealtime();
 const service = new NotificationService(fromPartial<NotificationRepository>(repo), realtime, () => access);
-const base = { agentId: 1n, title: "t", conversationId: 5n };
+const base = { agentId: uid(1), title: "t", conversationId: uid(5) };
 
 beforeEach(() => {
   vi.resetAllMocks();
   repo.findPreferences.mockResolvedValue(null);
   repo.isMuted.mockResolvedValue(false);
   repo.create.mockResolvedValue({
-    id: 7n,
+    id: uid(7),
     notificationType: "ASSIGNED",
     title: "t",
     body: null,
-    conversationId: 5n,
+    conversationId: uid(5),
     messageId: null,
     readAt: null,
     createdAt: new Date("2026-01-01T00:00:00Z"),
@@ -44,8 +45,8 @@ describe("NotificationService.notifyAgent", () => {
     await expect(service.notifyAgent({ ...base, type: "ASSIGNED" })).resolves.toBe(true);
     expect(repo.create).toHaveBeenCalledOnce();
     expect(realtime.notification).toHaveBeenCalledWith(
-      1n,
-      expect.objectContaining({ id: "7", read: false, conversationId: "5" }),
+      uid(1),
+      expect.objectContaining({ id: uid(7), read: false, conversationId: uid(5) }),
     );
   });
 
@@ -65,27 +66,27 @@ describe("NotificationService.notifyAgent", () => {
 });
 
 const row = (patch: Record<string, unknown> = {}) => ({
-  id: 7n,
+  id: uid(7),
   notificationType: "ASSIGNED",
   title: "t",
   body: null,
-  conversationId: 5n,
+  conversationId: uid(5),
   messageId: null,
   readAt: null,
   createdAt: new Date("2026-01-01T00:00:00Z"),
   ...patch,
 });
-const agent = { userId: 1n, role: "AGENT" } as const;
+const agent = { userId: uid(1), role: "AGENT" } as const;
 
 describe("reading notifications", () => {
   it("lists newest first with the caller's total unread in the meta", async () => {
-    repo.list.mockResolvedValue({ items: [row(), row({ id: 6n, readAt: new Date() })], total: 12 });
+    repo.list.mockResolvedValue({ items: [row(), row({ id: uid(6), readAt: new Date() })], total: 12 });
     repo.countUnread.mockResolvedValue(9);
     const result = await service.list(agent, { page: 2, size: 10, unread: false });
-    expect(repo.list).toHaveBeenCalledWith(1n, false, { skip: 10, take: 10 });
+    expect(repo.list).toHaveBeenCalledWith(uid(1), false, { skip: 10, take: 10 });
     expect(result.items.map((n) => [n.id, n.read])).toEqual([
-      ["7", false],
-      ["6", true],
+      [uid(7), false],
+      [uid(6), true],
     ]);
     expect(result.meta).toEqual({ total: 12, page: 2, size: 10, totalPages: 2, unreadCount: 9 });
   });
@@ -93,15 +94,15 @@ describe("reading notifications", () => {
   it("marks one read, idempotently, and tells the agent's other sessions the new count", async () => {
     repo.findOwned.mockResolvedValueOnce(row()).mockResolvedValueOnce(row({ readAt: new Date() }));
     repo.countUnread.mockResolvedValue(3);
-    const result = await service.markRead(agent, 7n);
-    expect(repo.markRead).toHaveBeenCalledWith(7n, 1n);
+    const result = await service.markRead(agent, uid(7));
+    expect(repo.markRead).toHaveBeenCalledWith(uid(7), uid(1));
     expect(result.read).toBe(true);
-    expect(realtime.notificationRead).toHaveBeenCalledWith(1n, { notificationId: "7", unreadCount: 3 });
+    expect(realtime.notificationRead).toHaveBeenCalledWith(uid(1), { notificationId: uid(7), unreadCount: 3 });
   });
 
   it("treats someone else's notification as missing", async () => {
     repo.findOwned.mockResolvedValue(null);
-    await expect(service.markRead(agent, 7n)).rejects.toBeInstanceOf(NotFoundError);
+    await expect(service.markRead(agent, uid(7))).rejects.toBeInstanceOf(NotFoundError);
     expect(repo.markRead).not.toHaveBeenCalled();
     expect(realtime.notificationRead).not.toHaveBeenCalled();
   });
@@ -110,17 +111,17 @@ describe("reading notifications", () => {
     repo.markAllRead.mockResolvedValue(4);
     repo.countUnread.mockResolvedValue(0);
     expect(await service.markAllRead(agent)).toEqual({ updated: 4, unreadCount: 0 });
-    expect(realtime.notificationRead).toHaveBeenCalledWith(1n, { notificationId: null, unreadCount: 0 });
+    expect(realtime.notificationRead).toHaveBeenCalledWith(uid(1), { notificationId: null, unreadCount: 0 });
   });
 });
 
 describe("muting and preferences", () => {
   it("mutes only a conversation the caller can see", async () => {
-    access.requireVisible.mockResolvedValue({ id: 5n });
-    expect(await service.setMuted(agent, 5n, true)).toEqual({ conversationId: "5", muted: true });
-    expect(repo.setMuted).toHaveBeenCalledWith(5n, 1n, true);
+    access.requireVisible.mockResolvedValue({ id: uid(5) });
+    expect(await service.setMuted(agent, uid(5), true)).toEqual({ conversationId: uid(5), muted: true });
+    expect(repo.setMuted).toHaveBeenCalledWith(uid(5), uid(1), true);
     access.requireVisible.mockRejectedValue(new NotFoundError());
-    await expect(service.setMuted(agent, 6n, true)).rejects.toBeInstanceOf(NotFoundError);
+    await expect(service.setMuted(agent, uid(6), true)).rejects.toBeInstanceOf(NotFoundError);
     expect(repo.setMuted).toHaveBeenCalledTimes(1);
   });
 
@@ -136,7 +137,7 @@ describe("muting and preferences", () => {
     });
     repo.upsertPreferences.mockResolvedValue({ newMessageEnabled: false, browserEnabled: false });
     const updated = await service.updatePreferences(agent, { newMessage: false, browser: false });
-    expect(repo.upsertPreferences).toHaveBeenCalledWith(1n, { newMessage: false, browser: false });
+    expect(repo.upsertPreferences).toHaveBeenCalledWith(uid(1), { newMessage: false, browser: false });
     expect(updated).toMatchObject({ newMessage: false, browser: false, assignment: true });
   });
 });

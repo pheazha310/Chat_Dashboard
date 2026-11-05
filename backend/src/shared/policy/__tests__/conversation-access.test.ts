@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { AuthContext } from "@shared/auth/auth.types.js";
 import { canView, permissionsFor, type PolicyInput } from "../conversation-access.js";
+import { uid } from "../../../__tests__/support/ids.js";
 
-const agent: AuthContext = { userId: 1n, role: "AGENT" };
-const other: AuthContext = { userId: 2n, role: "AGENT" };
-const supervisor: AuthContext = { userId: 9n, role: "SUPERVISOR" };
+const agent: AuthContext = { userId: uid(1), role: "AGENT" };
+const other: AuthContext = { userId: uid(2), role: "AGENT" };
+const supervisor: AuthContext = { userId: uid(9), role: "SUPERVISOR" };
 
 const conv = (patch: Partial<PolicyInput> = {}): PolicyInput => ({
   status: "OPEN",
@@ -13,7 +14,7 @@ const conv = (patch: Partial<PolicyInput> = {}): PolicyInput => ({
   isArchived: false,
   ...patch,
 });
-const owned = conv({ handoffStatus: "ASSIGNED", assignedAgentId: 1n });
+const owned = conv({ handoffStatus: "ASSIGNED", assignedAgentId: uid(1) });
 
 describe("canView", () => {
   it("hides another agent's assigned chat unless supervisor or viewer", () => {

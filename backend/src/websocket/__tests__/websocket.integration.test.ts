@@ -3,6 +3,7 @@ import type { AddressInfo } from "node:net";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createTestContainer } from "../../__tests__/support/container.js";
 import { TestClient } from "../../__tests__/support/ws-client.js";
+import { uid } from "../../__tests__/support/ids.js";
 
 /**
  * Real `ws` clients against the real gateway, services, PostgreSQL and event bus.
@@ -19,7 +20,7 @@ describe.skipIf(!url || !redisUrl)("WebSocket gateway", () => {
   let wsUrl: string;
   let db: typeof import("@config/database.js").prisma;
   let c: Awaited<ReturnType<typeof createTestContainer>>;
-  let cid: bigint;
+  let cid: string;
   const open: TestClient[] = [];
 
   beforeAll(async () => {
@@ -51,10 +52,10 @@ describe.skipIf(!url || !redisUrl)("WebSocket gateway", () => {
     await c.redis.flushdb();
     c.events.length = 0;
     const { conversation } = await c.conversations.create(
-      { userId: 1n, role: "AGENT" },
-      { customerId: 100n, applicationId: 7n, customerName: "Maya Chen", priority: "MEDIUM" },
+      { userId: uid(1), role: "AGENT" },
+      { customerId: uid(100), applicationId: uid(7), customerName: "Maya Chen", priority: "MEDIUM" },
     );
-    cid = BigInt(conversation.id);
+    cid = conversation.id;
   });
 
   afterEach(async () => {
@@ -68,15 +69,15 @@ describe.skipIf(!url || !redisUrl)("WebSocket gateway", () => {
     open.push(client);
     await client.ready();
     await client.waitFor("connection.established");
-    client.send("auth", { token: `dev:${userId}:${role}`, ...(reconnect ? { reconnect } : {}) });
+    client.send("auth", { token: `dev:${uid(userId)}:${role}`, ...(reconnect ? { reconnect } : {}) });
     await client.waitFor(reconnect ? "connection.reconnected" : "connection.authenticated");
     client.mark();
     return client;
   }
-  const takeOver = (agent = 1n) => c.assignments.assign({ userId: agent, role: "AGENT" }, cid, {});
+  const takeOver = (agent = uid(1)) => c.assignments.assign({ userId: agent, role: "AGENT" }, cid, {});
   const customerSays = (n: number) =>
     c.messages.receiveFromCustomer({
-      customerId: 100n,
+      customerId: uid(100),
       conversationId: cid,
       clientId: `cust-${n}`,
       text: `hello ${n}`,
@@ -88,8 +89,8 @@ describe.skipIf(!url || !redisUrl)("WebSocket gateway", () => {
       open.push(client);
       await client.ready();
       expect(await client.waitFor("connection.established")).toMatchObject({ authTimeoutMs: 400 });
-      client.send("auth", { token: "dev:7:SUPERVISOR" });
-      expect(await client.waitFor("connection.authenticated")).toMatchObject({ userId: "7", role: "SUPERVISOR" });
+      client.send("auth", { token: `dev:${uid(7)}:SUPERVISOR` });
+      expect(await client.waitFor("connection.authenticated")).toMatchObject({ userId: uid(7), role: "SUPERVISOR" });
     });
 
     it("sends connection.reconnected when the client says it is reconnecting", async () => {
@@ -108,7 +109,7 @@ describe.skipIf(!url || !redisUrl)("WebSocket gateway", () => {
       const early = new TestClient(wsUrl);
       open.push(early);
       await early.ready();
-      early.send("message.send", { conversationId: "1", clientId: "x", text: "hi" });
+      early.send("message.send", { conversationId: uid(1), clientId: "x", text: "hi" });
       expect(await early.waitFor("error")).toMatchObject({ code: "UNAUTHORIZED" });
       expect((await early.waitClosed()).code).toBe(4401);
 
@@ -122,7 +123,7 @@ describe.skipIf(!url || !redisUrl)("WebSocket gateway", () => {
       const customer = new TestClient(wsUrl);
       open.push(customer);
       await customer.ready();
-      customer.send("auth", { token: "dev:5:CUSTOMER" });
+      customer.send("auth", { token: `dev:${uid(5)}:CUSTOMER` });
       expect(await customer.waitFor("error")).toMatchObject({ code: "FORBIDDEN" });
       expect((await customer.waitClosed()).code).toBe(4403);
     });
@@ -138,7 +139,7 @@ describe.skipIf(!url || !redisUrl)("WebSocket gateway", () => {
       expect(await client.waitFor("error", (p) => p.code === "BAD_REQUEST")).toBeDefined();
       client.send("does.not.exist", {});
       expect(await client.waitFor("error", (p) => p.code === "UNKNOWN_EVENT")).toBeDefined();
-      client.send("auth", { token: "dev:1:AGENT" });
+      client.send("auth", { token: `dev:${uid(1)}:AGENT` });
       expect(await client.waitFor("error", (p) => p.code === "CONFLICT")).toBeDefined();
       client.send("typing.start", { conversationId: "abc" });
       expect(
@@ -201,7 +202,7 @@ describe.skipIf(!url || !redisUrl)("WebSocket gateway", () => {
       const owner = await connect(1);
       owner.send("message.send", { conversationId: String(cid), clientId: "e-1", text: "   " });
       expect(await owner.waitFor("message.failed", (p) => p.clientId === "e-1")).toMatchObject({ code: "BAD_REQUEST" });
-      owner.send("message.send", { conversationId: "999", clientId: "n-1", text: "hi" });
+      owner.send("message.send", { conversationId: uid(999), clientId: "n-1", text: "hi" });
       expect(await owner.waitFor("message.failed", (p) => p.clientId === "n-1")).toMatchObject({ code: "NOT_FOUND" });
       expect(await db.message.count({ where: { senderType: "AGENT" } })).toBe(0);
     });
@@ -210,9 +211,9 @@ describe.skipIf(!url || !redisUrl)("WebSocket gateway", () => {
       await takeOver();
       const previous = await connect(1);
       const next = await connect(2);
-      await c.assignments.transfer({ userId: 1n, role: "AGENT" }, cid, { agentId: 2n });
-      expect((await previous.waitFor("conversation.transferred")).agentId).toBe("2"); // told it moved away
-      expect((await next.waitFor("conversation.transferred")).conversation.assignedAgentId).toBe("2");
+      await c.assignments.transfer({ userId: uid(1), role: "AGENT" }, cid, { agentId: uid(2) });
+      expect((await previous.waitFor("conversation.transferred")).agentId).toBe(uid(2)); // told it moved away
+      expect((await next.waitFor("conversation.transferred")).conversation.assignedAgentId).toBe(uid(2));
       previous.mark();
       await customerSays(1);
       await next.waitFor("message.new");
@@ -227,7 +228,7 @@ describe.skipIf(!url || !redisUrl)("WebSocket gateway", () => {
       const supervisor = await connect(9, "SUPERVISOR");
 
       agent1.send("conversation.takeover", { conversationId: String(cid) });
-      expect(await agent1.waitFor("conversation.assigned")).toMatchObject({ agentId: "1", action: "TAKEOVER" });
+      expect(await agent1.waitFor("conversation.assigned")).toMatchObject({ agentId: uid(1), action: "TAKEOVER" });
       expect((await supervisor.waitFor("conversation.assigned")).conversation.handoffStatus).toBe("ASSIGNED");
       expect(await agent2.waitFor("conversation.hidden")).toEqual({ conversationId: String(cid) });
       await agent2.expectNone("conversation.assigned");
@@ -243,21 +244,21 @@ describe.skipIf(!url || !redisUrl)("WebSocket gateway", () => {
       expect(await other.waitFor("error", (p) => p.event === "conversation.set_status")).toMatchObject({
         code: "NOT_FOUND",
       });
-      owner.send("conversation.assign", { conversationId: String(cid), agentId: "2" });
+      owner.send("conversation.assign", { conversationId: String(cid), agentId: uid(2) });
       expect(await owner.waitFor("error", (p) => p.event === "conversation.assign")).toMatchObject({
         code: "FORBIDDEN",
       });
-      owner.send("conversation.transfer", { conversationId: String(cid), agentId: "1" });
+      owner.send("conversation.transfer", { conversationId: String(cid), agentId: uid(1) });
       expect(await owner.waitFor("error", (p) => p.event === "conversation.transfer")).toMatchObject({
         code: "CONFLICT",
       });
 
-      supervisor.send("conversation.assign", { conversationId: String(cid), agentId: "2" });
-      expect(await other.waitFor("conversation.transferred")).toMatchObject({ agentId: "2", assignedBy: "9" });
+      supervisor.send("conversation.assign", { conversationId: String(cid), agentId: uid(2) });
+      expect(await other.waitFor("conversation.transferred")).toMatchObject({ agentId: uid(2), assignedBy: uid(9) });
 
       other.send("conversation.set_status", { conversationId: String(cid), status: "RESOLVED" });
       const changed = await other.waitFor("conversation.status_changed");
-      expect(changed).toMatchObject({ from: "OPEN", to: "RESOLVED", actorId: "2" });
+      expect(changed).toMatchObject({ from: "OPEN", to: "RESOLVED", actorId: uid(2) });
       expect(changed.conversation.status).toBe("RESOLVED");
 
       other.send("conversation.set_status", { conversationId: String(cid), status: "OPEN" });
@@ -271,11 +272,11 @@ describe.skipIf(!url || !redisUrl)("WebSocket gateway", () => {
     it("announces new conversations to the agents who can see them", async () => {
       const agent2 = await connect(2);
       await c.conversations.create(
-        { userId: 1n, role: "AGENT" },
-        { customerId: 200n, applicationId: 8n, priority: "HIGH" },
+        { userId: uid(1), role: "AGENT" },
+        { customerId: uid(200), applicationId: uid(8), priority: "HIGH" },
       );
       expect((await agent2.waitFor("conversation.created")).conversation).toMatchObject({
-        customerId: "200",
+        customerId: uid(200),
         priority: "HIGH",
       });
     });
@@ -283,7 +284,7 @@ describe.skipIf(!url || !redisUrl)("WebSocket gateway", () => {
     it("pushes notification.new only to the agent it is for", async () => {
       const target = await connect(3);
       const bystander = await connect(2);
-      await c.assignments.assign({ userId: 9n, role: "SUPERVISOR" }, cid, { agentId: 3n });
+      await c.assignments.assign({ userId: uid(9), role: "SUPERVISOR" }, cid, { agentId: uid(3) });
       const note = await target.waitFor("notification.new");
       expect(note.notification).toMatchObject({ type: "ASSIGNED", read: false, conversationId: String(cid) });
       await bystander.expectNone("notification.new");
@@ -323,7 +324,7 @@ describe.skipIf(!url || !redisUrl)("WebSocket gateway", () => {
       const owner = await connect(1);
       owner.send("message.delivered", { conversationId: String(cid), messageId: message.id });
       expect(await owner.waitFor("message.status")).toMatchObject({ status: "DELIVERED", messageIds: [message.id] });
-      expect(await db.messageReceipt.count({ where: { recipientId: 1n } })).toBe(1);
+      expect(await db.messageReceipt.count({ where: { recipientId: uid(1) } })).toBe(1);
     });
   });
 
@@ -338,7 +339,7 @@ describe.skipIf(!url || !redisUrl)("WebSocket gateway", () => {
       typist.send("typing.start", { conversationId: String(cid) });
       expect(await otherTab.waitFor("typing")).toMatchObject({
         conversationId: String(cid),
-        userId: "1",
+        userId: uid(1),
         side: "agent",
         active: true,
       });
@@ -381,14 +382,14 @@ describe.skipIf(!url || !redisUrl)("WebSocket gateway", () => {
     it("announces online, status changes and offline, and keeps a status history", async () => {
       const watcher = await connect(2);
       const first = await connect(1);
-      expect(await watcher.waitFor("presence.updated", (p) => p.userId === "1")).toEqual({
-        userId: "1",
+      expect(await watcher.waitFor("presence.updated", (p) => p.userId === uid(1))).toEqual({
+        userId: uid(1),
         status: "AVAILABLE",
       });
 
       first.send("presence.set", { status: "BUSY" });
       expect(await watcher.waitFor("presence.updated", (p) => p.status === "BUSY")).toEqual({
-        userId: "1",
+        userId: uid(1),
         status: "BUSY",
       });
 
@@ -399,11 +400,14 @@ describe.skipIf(!url || !redisUrl)("WebSocket gateway", () => {
 
       first.close();
       expect(await watcher.waitFor("presence.updated", (p) => p.status === "OFFLINE")).toEqual({
-        userId: "1",
+        userId: uid(1),
         status: "OFFLINE",
       });
 
-      const history = await db.agentPresenceHistory.findMany({ where: { agentId: 1n }, orderBy: { id: "asc" } });
+      const history = await db.agentPresenceHistory.findMany({
+        where: { agentId: uid(1) },
+        orderBy: { startedAt: "asc" },
+      });
       expect(history.map((h) => h.status)).toEqual(["AVAILABLE", "BUSY", "OFFLINE"]);
       expect(history.filter((h) => h.endedAt === null)).toHaveLength(1); // exactly one open period
     });
@@ -413,13 +417,13 @@ describe.skipIf(!url || !redisUrl)("WebSocket gateway", () => {
       agent.send("presence.set", { status: "AWAY" });
       agent.send("presence.set", { status: "OFFLINE" });
       expect(await agent.waitFor("error", (p) => p.event === "presence.set")).toMatchObject({ code: "BAD_REQUEST" });
-      expect(await c.presence.snapshot()).toEqual([{ userId: "1", status: "AWAY" }]);
+      expect(await c.presence.snapshot()).toEqual([{ userId: uid(1), status: "AWAY" }]);
       agent.close();
       await new Promise((resolve) => setTimeout(resolve, 150));
       expect(await c.presence.snapshot()).toEqual([]);
       const again = await connect(1);
       expect((await again.waitFor("presence.updated", () => true, 500).catch(() => null)) ?? null).toBeNull(); // own announce is ok
-      expect(await c.presence.snapshot()).toEqual([{ userId: "1", status: "AWAY" }]);
+      expect(await c.presence.snapshot()).toEqual([{ userId: uid(1), status: "AWAY" }]);
     });
   });
 
@@ -427,19 +431,19 @@ describe.skipIf(!url || !redisUrl)("WebSocket gateway", () => {
     it("sync returns the inbox with per-agent unread counts and the selected conversation's latest messages", async () => {
       await takeOver();
       await customerSays(1);
-      await c.messages.send({ userId: 1n, role: "AGENT" }, cid, { clientId: "a-1", text: "reply" });
+      await c.messages.send({ userId: uid(1), role: "AGENT" }, cid, { clientId: "a-1", text: "reply" });
       const client = await connect(1);
       client.send("sync.request", { selectedConversationId: String(cid) });
       const sync = await client.waitFor("sync");
       expect(sync.conversations).toHaveLength(1);
-      expect(sync.conversations[0]).toMatchObject({ id: String(cid), unreadCount: 1, assignedAgentId: "1" });
+      expect(sync.conversations[0]).toMatchObject({ id: String(cid), unreadCount: 1, assignedAgentId: uid(1) });
       expect(sync.meta).toMatchObject({ total: 1 });
       expect(sync.messages[String(cid)].map((m: { content: string }) => m.content)).toEqual([
-        "Agent 1 took over the conversation",
+        `Agent ${uid(1)} took over the conversation`,
         "hello 1",
         "reply",
       ]);
-      expect(sync.presence).toEqual([{ userId: "1", status: "AVAILABLE" }]);
+      expect(sync.presence).toEqual([{ userId: uid(1), status: "AVAILABLE" }]);
       expect(new Date(sync.serverTime).getTime()).toBeGreaterThan(0);
     });
 
@@ -475,7 +479,7 @@ describe.skipIf(!url || !redisUrl)("WebSocket gateway", () => {
         conversationId: cid,
         sequenceNumber: BigInt(n + 10),
         senderType: "CUSTOMER",
-        senderId: 100n,
+        senderId: uid(100),
         content: `bulk ${n}`,
       }));
       await db.message.createMany({ data: rows });
@@ -497,14 +501,14 @@ describe.skipIf(!url || !redisUrl)("WebSocket gateway", () => {
 
   describe("notifications", () => {
     it("notification.read from one tab updates the agent's other sessions with the new count", async () => {
-      await c.assignments.assign({ userId: 9n, role: "SUPERVISOR" }, cid, { agentId: 3n });
+      await c.assignments.assign({ userId: uid(9), role: "SUPERVISOR" }, cid, { agentId: uid(3) });
       const tabA = await connect(3);
       const tabB = await connect(3);
       tabA.send("sync.request", {});
       expect((await tabA.waitFor("sync")).notifications).toEqual({ unreadCount: 1 });
 
-      await c.assignments.transfer({ userId: 9n, role: "SUPERVISOR" }, cid, { agentId: 4n });
-      await c.assignments.transfer({ userId: 9n, role: "SUPERVISOR" }, cid, { agentId: 3n });
+      await c.assignments.transfer({ userId: uid(9), role: "SUPERVISOR" }, cid, { agentId: uid(4) });
+      await c.assignments.transfer({ userId: uid(9), role: "SUPERVISOR" }, cid, { agentId: uid(3) });
       const second = await tabA.waitFor("notification.new", (p) => p.notification.type === "TRANSFERRED");
       tabA.send("notification.read", { notificationId: second.notification.id });
       // assigned, transferred away, transferred back: three unread, minus the one just read
@@ -521,11 +525,11 @@ describe.skipIf(!url || !redisUrl)("WebSocket gateway", () => {
     });
 
     it("cannot read someone else's notification over the socket", async () => {
-      await c.assignments.assign({ userId: 9n, role: "SUPERVISOR" }, cid, { agentId: 3n });
+      await c.assignments.assign({ userId: uid(9), role: "SUPERVISOR" }, cid, { agentId: uid(3) });
       const mine = await connect(3);
       mine.send("sync.request", {});
       await mine.waitFor("sync");
-      const row = await db.notification.findFirstOrThrow({ where: { recipientId: 3n } });
+      const row = await db.notification.findFirstOrThrow({ where: { recipientId: uid(3) } });
       const intruder = await connect(2);
       intruder.send("notification.read", { notificationId: String(row.id) });
       expect(await intruder.waitFor("error", (p) => p.event === "notification.read")).toMatchObject({
@@ -538,13 +542,13 @@ describe.skipIf(!url || !redisUrl)("WebSocket gateway", () => {
       const available = await connect(2);
       const busy = await connect(5);
       busy.send("presence.set", { status: "BUSY" });
-      await busy.waitFor("presence.updated", (p) => p.userId === "5" && p.status === "BUSY");
+      await busy.waitFor("presence.updated", (p) => p.userId === uid(5) && p.status === "BUSY");
       const creator = await connect(1);
       creator.mark();
 
       await c.conversations.create(
-        { userId: 1n, role: "AGENT" },
-        { customerId: 200n, applicationId: 8n, customerName: "Sokha", priority: "HIGH" },
+        { userId: uid(1), role: "AGENT" },
+        { customerId: uid(200), applicationId: uid(8), customerName: "Sokha", priority: "HIGH" },
       );
       const note = await available.waitFor("notification.new", (p) => p.notification.type === "NEW_CONVERSATION");
       expect(note.notification).toMatchObject({

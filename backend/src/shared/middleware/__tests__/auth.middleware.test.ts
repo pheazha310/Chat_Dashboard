@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { ForbiddenError, UnauthorizedError } from "@shared/errors/AppError.js";
 import { DevAuthClient } from "@shared/auth/dev-auth-client.js";
 import { authenticate, bearerToken, requireRole } from "../auth.middleware.js";
+import { uid } from "../../../__tests__/support/ids.js";
 
 const run = (handler: ReturnType<typeof authenticate>, authorization?: string) => {
   const req = fromPartial<Request>({ headers: { authorization } });
@@ -21,9 +22,9 @@ describe("auth middleware", () => {
   });
 
   it("attaches auth for a dashboard role", async () => {
-    const { req, next, done } = run(mw, "Bearer dev:7:SUPERVISOR");
+    const { req, next, done } = run(mw, `Bearer dev:${uid(7)}:SUPERVISOR`);
     await done;
-    expect(req.auth).toEqual({ userId: 7n, role: "SUPERVISOR" });
+    expect(req.auth).toEqual({ userId: uid(7), role: "SUPERVISOR" });
     expect(next).toHaveBeenCalledOnce();
   });
 
@@ -32,12 +33,12 @@ describe("auth middleware", () => {
   });
 
   it("rejects customers on the dashboard", async () => {
-    await expect(run(mw, "Bearer dev:7:CUSTOMER").done).rejects.toBeInstanceOf(ForbiddenError);
+    await expect(run(mw, `Bearer dev:${uid(7)}:CUSTOMER`).done).rejects.toBeInstanceOf(ForbiddenError);
   });
 
   it("requireRole blocks insufficient roles", () => {
     const guard = requireRole("SUPERVISOR");
-    const req = fromPartial<Request>({ auth: { userId: 1n, role: "AGENT" } });
+    const req = fromPartial<Request>({ auth: { userId: uid(1), role: "AGENT" } });
     expect(() => guard(req, fromPartial<Response>({}), vi.fn())).toThrow(ForbiddenError);
   });
 });

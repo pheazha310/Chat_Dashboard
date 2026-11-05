@@ -27,7 +27,7 @@ export class MessageService implements SystemMessagePort {
    * instead of inserting a duplicate, even for simultaneous retries (the conversation row lock serializes them).
    * `origin` is the WebSocket connection that sent it, if any.
    */
-  async send(auth: AuthContext, conversationId: bigint, input: SendInput, origin?: string) {
+  async send(auth: AuthContext, conversationId: string, input: SendInput, origin?: string) {
     const result = await this.repository.inTransaction(async (tx) => {
       const conversation = await this.lockVisible(tx, auth, conversationId);
 
@@ -71,7 +71,7 @@ export class MessageService implements SystemMessagePort {
    * A customer message. Used by the customer channel (not built yet; it needs its own authentication). Reopens a
    * resolved or closed conversation and notifies the owning agent.
    */
-  async receiveFromCustomer(input: { customerId: bigint; conversationId: bigint; clientId: string; text: string }) {
+  async receiveFromCustomer(input: { customerId: string; conversationId: string; clientId: string; text: string }) {
     const { message, created, owner } = await this.repository.inTransaction(async (tx) => {
       const conversation = await tx.lock(input.conversationId);
       if (!conversation || conversation.customerId !== input.customerId) {
@@ -128,7 +128,7 @@ export class MessageService implements SystemMessagePort {
   }
 
   /** SYSTEM message (takeover, transfer, status change). Does not change the inbox preview or last-activity time. */
-  async post(conversationId: bigint, text: string, metadata?: Record<string, unknown>) {
+  async post(conversationId: string, text: string, metadata?: Record<string, unknown>) {
     const stored = await this.repository.inTransaction(async (tx) => {
       if (!(await tx.lock(conversationId))) return null;
       return tx.append({
@@ -149,7 +149,7 @@ export class MessageService implements SystemMessagePort {
    * History, oldest to newest. No cursor returns the latest page; `before` pages back; `after` returns what was
    * missed since a known sequence number (reconnect sync). Soft-deleted messages are excluded.
    */
-  async history(auth: AuthContext, conversationId: bigint, query: CursorQuery) {
+  async history(auth: AuthContext, conversationId: string, query: CursorQuery) {
     await this.requireVisible(auth, conversationId);
     const { items, hasMore } = await this.repository.history(conversationId, query);
     return {
@@ -158,8 +158,8 @@ export class MessageService implements SystemMessagePort {
         limit: query.limit,
         hasMore,
         direction: query.after === undefined ? "older" : "newer",
-        oldestSequence: items[0] ? idToString(items[0].sequenceNumber) : null,
-        newestSequence: items.at(-1) ? idToString(items.at(-1)!.sequenceNumber) : null,
+        oldestSequence: items[0] ? items[0].sequenceNumber.toString() : null,
+        newestSequence: items.at(-1) ? items.at(-1)!.sequenceNumber.toString() : null,
       },
     };
   }
@@ -169,7 +169,7 @@ export class MessageService implements SystemMessagePort {
    * record receipts for the customer messages they just read, and clear "marked unread". The client must call this
    * only while the conversation is actually in view; the server never marks anything read on its own.
    */
-  async markRead(auth: AuthContext, conversationId: bigint, upToMessageId?: bigint): Promise<ReadState> {
+  async markRead(auth: AuthContext, conversationId: string, upToMessageId?: string): Promise<ReadState> {
     await this.requireVisible(auth, conversationId);
     const nowRead = await this.repository.inTransaction(async (tx) => {
       const target =
@@ -191,7 +191,7 @@ export class MessageService implements SystemMessagePort {
     return state;
   }
 
-  async markUnread(auth: AuthContext, conversationId: bigint): Promise<ReadState> {
+  async markUnread(auth: AuthContext, conversationId: string): Promise<ReadState> {
     await this.repository.inTransaction(async (tx) => {
       const conversation = await this.lockVisible(tx, auth, conversationId);
       await tx.markUnread(conversation.id, auth.userId);
@@ -202,7 +202,7 @@ export class MessageService implements SystemMessagePort {
   }
 
   /** The agent's client received a customer message. Agents can only record receipts for themselves. */
-  async markDelivered(auth: AuthContext, conversationId: bigint, messageId: bigint) {
+  async markDelivered(auth: AuthContext, conversationId: string, messageId: string) {
     await this.requireVisible(auth, conversationId);
     const message = await this.repository.findById(conversationId, messageId);
     if (!message) throw new NotFoundError("Message not found in this conversation");
@@ -215,18 +215,18 @@ export class MessageService implements SystemMessagePort {
     return toMessage(updated as MessageRow);
   }
 
-  private async readState(auth: AuthContext, conversationId: bigint): Promise<ReadState> {
+  private async readState(auth: AuthContext, conversationId: string): Promise<ReadState> {
     const { position, unread, markedUnread } = await this.repository.unreadState(conversationId, auth.userId);
     return {
       conversationId: idToString(conversationId),
-      lastReadSequenceNumber: idToString(position),
+      lastReadSequenceNumber: position.toString(),
       markedUnread,
       unreadCount: markedUnread ? Math.max(1, unread) : unread,
     };
   }
 
   /** Locks the conversation and hides it (404) from callers who may not see it. */
-  private async lockVisible(tx: MessageRepository, auth: AuthContext, id: bigint): Promise<LockedConversation> {
+  private async lockVisible(tx: MessageRepository, auth: AuthContext, id: string): Promise<LockedConversation> {
     const conversation = await tx.lock(id);
     if (!conversation || !canView(auth, conversation, await tx.isViewer(id, auth.userId))) {
       throw new NotFoundError(`Conversation ${idToString(id)} not found`);
@@ -234,7 +234,7 @@ export class MessageService implements SystemMessagePort {
     return conversation;
   }
 
-  private async requireVisible(auth: AuthContext, id: bigint) {
+  private async requireVisible(auth: AuthContext, id: string) {
     await this.repository.inTransaction((tx) => this.lockVisible(tx, auth, id));
   }
 }
@@ -245,7 +245,7 @@ const toMessage = (row: MessageRow): MessageDto => ({
   id: idToString(row.id),
   conversationId: idToString(row.conversationId),
   clientId: row.clientId,
-  sequenceNumber: idToString(row.sequenceNumber),
+  sequenceNumber: row.sequenceNumber.toString(),
   senderType: row.senderType,
   senderId: row.senderId === null ? null : idToString(row.senderId),
   type: row.messageType,

@@ -21,7 +21,7 @@ export class AssignmentService {
   ) {}
 
   /** Self-assign (takeover) when `agentId` is omitted; assign to another agent (supervisors only) otherwise. */
-  async assign(auth: AuthContext, conversationId: bigint, input: AssignInput) {
+  async assign(auth: AuthContext, conversationId: string, input: AssignInput) {
     const state = await this.load(auth, conversationId);
     const target = input.agentId ?? auth.userId;
     const permissions = permissionsFor(auth, state);
@@ -41,7 +41,7 @@ export class AssignmentService {
   }
 
   /** The owner (or a supervisor) hands the conversation to another agent. */
-  async transfer(auth: AuthContext, conversationId: bigint, input: { agentId: bigint; note?: string | undefined }) {
+  async transfer(auth: AuthContext, conversationId: string, input: { agentId: string; note?: string | undefined }) {
     const state = await this.load(auth, conversationId);
     if (state.status === "CLOSED") throw new ConflictError("Conversation is closed");
     if (!permissionsFor(auth, state).canTransfer) {
@@ -53,7 +53,7 @@ export class AssignmentService {
   }
 
   /** Releases the conversation back to the shared queue. */
-  async unassign(auth: AuthContext, conversationId: bigint, input: { note?: string | undefined }) {
+  async unassign(auth: AuthContext, conversationId: string, input: { note?: string | undefined }) {
     const state = await this.load(auth, conversationId);
     if (!permissionsFor(auth, state).canUnassign) {
       throw new ForbiddenError("Only the current owner or a supervisor can unassign this conversation");
@@ -93,7 +93,7 @@ export class AssignmentService {
     return { conversationId: idToString(state.id), assignedAgentId: null };
   }
 
-  async history(auth: AuthContext, conversationId: bigint) {
+  async history(auth: AuthContext, conversationId: string) {
     const state = await this.load(auth, conversationId);
     return (await this.repository.history(conversationId)).map(toAssignment);
   }
@@ -101,7 +101,7 @@ export class AssignmentService {
   private async changeOwner(
     auth: AuthContext,
     state: ConversationState,
-    target: bigint,
+    target: string,
     action: string,
     note: string | undefined,
   ) {
@@ -170,7 +170,7 @@ export class AssignmentService {
   }
 
   /** Another agent's assigned conversation looks missing, as in the conversations module, so existence is not leaked. */
-  private async load(auth: AuthContext, id: bigint): Promise<ConversationState> {
+  private async load(auth: AuthContext, id: string): Promise<ConversationState> {
     const state = await this.repository.findState(id);
     const hidden = state?.handoffStatus === "ASSIGNED" && !isSupervisor(auth) && state.assignedAgentId !== auth.userId;
     if (!state || hidden) throw new NotFoundError(`Conversation ${idToString(id)} not found`);
@@ -178,14 +178,14 @@ export class AssignmentService {
   }
 
   /** Best effort: the ownership change is already committed, so a notification failure must not undo or fail it. */
-  private notify(agentId: bigint, type: "ASSIGNED" | "TRANSFERRED", title: string, conversationId: bigint) {
+  private notify(agentId: string, type: "ASSIGNED" | "TRANSFERRED", title: string, conversationId: string) {
     return bestEffort("notification", () => this.notifications.notifyAgent({ agentId, type, title, conversationId }));
   }
 }
 
 // ─── DTO mapping ───────────────────────────────────────────────────────────
 
-const nullableId = (value: bigint | null) => (value === null ? null : idToString(value));
+const nullableId = (value: string | null) => (value === null ? null : idToString(value));
 
 const toAssignment = (row: AssignmentRow): AssignmentDto => ({
   id: idToString(row.id),

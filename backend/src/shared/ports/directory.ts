@@ -26,9 +26,9 @@ export interface CustomerProfile {
 
 export interface Directory {
   /** `null` when Backend 1 has no such customer. Throws when Backend 1 cannot be reached. */
-  getCustomer(customerId: bigint): Promise<CustomerProfile | null>;
+  getCustomer(customerId: string): Promise<CustomerProfile | null>;
   /** Profiles for the ids Backend 1 knows; unknown ids are simply absent. */
-  getAgents(agentIds: bigint[]): Promise<AgentProfile[]>;
+  getAgents(agentIds: string[]): Promise<AgentProfile[]>;
   /** Short label for logs and responses: where the data came from. */
   readonly source: string;
 }

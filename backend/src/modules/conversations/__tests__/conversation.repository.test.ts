@@ -2,12 +2,13 @@ import { describe, expect, it, vi } from "vitest";
 import type { AuthContext } from "@shared/auth/auth.types.js";
 import { buildInboxWhere, visibilityWhere } from "../conversation.repository.js";
 import { listQuery } from "../conversation.schema.js";
+import { uid } from "../../../__tests__/support/ids.js";
 
 // Only the pure query builders are tested here; the repository itself needs a database (integration tests).
 vi.mock("@config/database.js", () => ({ prisma: {}, runInTransaction: vi.fn() }));
 
-const agent: AuthContext = { userId: 1n, role: "AGENT" };
-const supervisor: AuthContext = { userId: 9n, role: "SUPERVISOR" };
+const agent: AuthContext = { userId: uid(1), role: "AGENT" };
+const supervisor: AuthContext = { userId: uid(9), role: "SUPERVISOR" };
 const q = (input: Record<string, string> = {}) => listQuery.parse(input);
 
 describe("visibilityWhere", () => {
@@ -30,16 +31,18 @@ describe("buildInboxWhere", () => {
   });
 
   it("maps the Mine, Unassigned and Unread filters", () => {
-    expect(and(buildInboxWhere(agent, q({ filter: "mine" })))).toContainEqual({ assignedAgentId: 1n });
+    expect(and(buildInboxWhere(agent, q({ filter: "mine" })))).toContainEqual({ assignedAgentId: uid(1) });
     expect(and(buildInboxWhere(agent, q({ filter: "unassigned" })))).toContainEqual({ handoffStatus: "NEEDS_HUMAN" });
-    expect(and(buildInboxWhere(agent, q({ filter: "unread" }), [5n, 6n]))).toContainEqual({ id: { in: [5n, 6n] } });
+    expect(and(buildInboxWhere(agent, q({ filter: "unread" }), [uid(5), uid(6)]))).toContainEqual({
+      id: { in: [uid(5), uid(6)] },
+    });
   });
 
   it("combines status, priority, tag and search", () => {
-    const where = and(buildInboxWhere(agent, q({ status: "OPEN", priority: "HIGH", tag: "3", q: "123" })));
+    const where = and(buildInboxWhere(agent, q({ status: "OPEN", priority: "HIGH", tag: uid(3), q: uid(123) })));
     expect(where).toContainEqual({ status: "OPEN" });
     expect(where).toContainEqual({ priority: "HIGH" });
-    expect(where).toContainEqual({ conversationTags: { some: { tagId: 3n } } });
+    expect(where).toContainEqual({ conversationTags: { some: { tagId: uid(3) } } });
     const search = where.find((w) => json(w).includes("customerName"));
     expect((search?.OR as unknown[]).length).toBe(3); // name, identifier and numeric customer id
   });

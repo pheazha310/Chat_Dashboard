@@ -68,7 +68,7 @@ export class NotificationService {
   }
 
   /** Marks one of the caller's own notifications read (idempotent). Other people's look like missing ones. */
-  async markRead(auth: AuthContext, notificationId: bigint): Promise<NotificationDto> {
+  async markRead(auth: AuthContext, notificationId: string): Promise<NotificationDto> {
     if (!(await this.repository.findOwned(notificationId, auth.userId))) {
       throw new NotFoundError(`Notification ${idToString(notificationId)} not found`);
     }
@@ -85,7 +85,7 @@ export class NotificationService {
   }
 
   /** Mute or unmute new-message notifications for one conversation the caller can see. */
-  async setMuted(auth: AuthContext, conversationId: bigint, muted: boolean) {
+  async setMuted(auth: AuthContext, conversationId: string, muted: boolean) {
     await this.access().requireVisible(auth, conversationId);
     await this.repository.setMuted(conversationId, auth.userId, muted);
     return { conversationId: idToString(conversationId), muted };
@@ -100,7 +100,7 @@ export class NotificationService {
   }
 
   /** Tells the agent's other sessions, with the new count so badges stay right everywhere. */
-  private async announceRead(agentId: bigint, notificationId: string | null) {
+  private async announceRead(agentId: string, notificationId: string | null) {
     await bestEffort("realtime", async () => {
       await this.realtime.notificationRead(agentId, {
         notificationId,

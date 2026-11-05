@@ -4,6 +4,7 @@ import type { AuthContext } from "@shared/auth/auth.types.js";
 import { fakeRealtime } from "../../../__tests__/support/realtime.js";
 import type { PresenceRepository } from "../presence.repository.js";
 import { PresenceService } from "../presence.service.js";
+import { uid } from "../../../__tests__/support/ids.js";
 
 vi.mock("@config/logger.js", () => ({ logger: { warn: vi.fn() } }));
 
@@ -19,7 +20,7 @@ const repo = {
 };
 const realtime = fakeRealtime();
 const service = new PresenceService(fromPartial<PresenceRepository>(repo), realtime);
-const agent: AuthContext = { userId: 1n, role: "AGENT" };
+const agent: AuthContext = { userId: uid(1), role: "AGENT" };
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -32,8 +33,8 @@ describe("PresenceService", () => {
   it("announces AVAILABLE only for the first socket", async () => {
     repo.addSocket.mockResolvedValueOnce(1).mockResolvedValueOnce(2);
     await service.connect(agent, "a");
-    expect(realtime.presenceChanged).toHaveBeenCalledWith(1n, "AVAILABLE");
-    expect(repo.recordPeriod).toHaveBeenCalledWith(1n, "AVAILABLE");
+    expect(realtime.presenceChanged).toHaveBeenCalledWith(uid(1), "AVAILABLE");
+    expect(repo.recordPeriod).toHaveBeenCalledWith(uid(1), "AVAILABLE");
     await service.connect(agent, "b");
     expect(realtime.presenceChanged).toHaveBeenCalledTimes(1);
   });
@@ -42,7 +43,7 @@ describe("PresenceService", () => {
     repo.addSocket.mockResolvedValue(1);
     repo.chosenStatus.mockResolvedValue("BUSY");
     await service.connect(agent, "a");
-    expect(realtime.presenceChanged).toHaveBeenCalledWith(1n, "BUSY");
+    expect(realtime.presenceChanged).toHaveBeenCalledWith(uid(1), "BUSY");
   });
 
   it("announces OFFLINE only when the last socket closes", async () => {
@@ -50,29 +51,29 @@ describe("PresenceService", () => {
     await service.disconnect(agent, "a");
     expect(realtime.presenceChanged).not.toHaveBeenCalled();
     await service.disconnect(agent, "b");
-    expect(repo.markOnline).toHaveBeenCalledWith(1n, false);
-    expect(realtime.presenceChanged).toHaveBeenCalledWith(1n, "OFFLINE");
+    expect(repo.markOnline).toHaveBeenCalledWith(uid(1), false);
+    expect(realtime.presenceChanged).toHaveBeenCalledWith(uid(1), "OFFLINE");
   });
 
   it("broadcasts a chosen status while online, and only remembers it while offline", async () => {
-    repo.onlineWithStatus.mockResolvedValue([{ userId: 1n, chosen: "AWAY" }]);
-    expect(await service.setStatus(agent, { status: "AWAY" })).toEqual({ userId: "1", status: "AWAY" });
-    expect(realtime.presenceChanged).toHaveBeenCalledWith(1n, "AWAY");
+    repo.onlineWithStatus.mockResolvedValue([{ userId: uid(1), chosen: "AWAY" }]);
+    expect(await service.setStatus(agent, { status: "AWAY" })).toEqual({ userId: uid(1), status: "AWAY" });
+    expect(realtime.presenceChanged).toHaveBeenCalledWith(uid(1), "AWAY");
     realtime.presenceChanged.mockClear();
     repo.onlineWithStatus.mockResolvedValue([]);
-    expect(await service.setStatus(agent, { status: "BUSY" })).toEqual({ userId: "1", status: "OFFLINE" });
-    expect(repo.setChosenStatus).toHaveBeenLastCalledWith(1n, "BUSY");
+    expect(await service.setStatus(agent, { status: "BUSY" })).toEqual({ userId: uid(1), status: "OFFLINE" });
+    expect(repo.setChosenStatus).toHaveBeenLastCalledWith(uid(1), "BUSY");
     expect(realtime.presenceChanged).not.toHaveBeenCalled();
   });
 
   it("lists online agents with their chosen status, defaulting to AVAILABLE", async () => {
     repo.onlineWithStatus.mockResolvedValue([
-      { userId: 1n, chosen: "BUSY" },
-      { userId: 2n, chosen: null },
+      { userId: uid(1), chosen: "BUSY" },
+      { userId: uid(2), chosen: null },
     ]);
     expect(await service.snapshot()).toEqual([
-      { userId: "1", status: "BUSY" },
-      { userId: "2", status: "AVAILABLE" },
+      { userId: uid(1), status: "BUSY" },
+      { userId: uid(2), status: "AVAILABLE" },
     ]);
   });
 
@@ -87,6 +88,6 @@ describe("PresenceService", () => {
     repo.addSocket.mockResolvedValue(1);
     repo.recordPeriod.mockRejectedValue(new Error("db down"));
     await service.connect(agent, "a");
-    expect(realtime.presenceChanged).toHaveBeenCalledWith(1n, "AVAILABLE");
+    expect(realtime.presenceChanged).toHaveBeenCalledWith(uid(1), "AVAILABLE");
   });
 });

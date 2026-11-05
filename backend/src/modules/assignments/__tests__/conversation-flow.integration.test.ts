@@ -2,6 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { assertTestDatabase, createTestContainer } from "../../../__tests__/support/container.js";
 import type { AuthContext } from "@shared/auth/auth.types.js";
 import { ConflictError, NotFoundError } from "@shared/errors/AppError.js";
+import { uid } from "../../../__tests__/support/ids.js";
 
 /**
  * Runs the real repositories and services against PostgreSQL with the project's migration applied
@@ -14,9 +15,9 @@ import { ConflictError, NotFoundError } from "@shared/errors/AppError.js";
 const url = process.env.TEST_DATABASE_URL;
 if (url && !/test/i.test(new URL(url).pathname)) throw new Error("TEST_DATABASE_URL must point at a *test* database");
 
-const agent1: AuthContext = { userId: 1n, role: "AGENT" };
-const agent2: AuthContext = { userId: 2n, role: "AGENT" };
-const supervisor: AuthContext = { userId: 9n, role: "SUPERVISOR" };
+const agent1: AuthContext = { userId: uid(1), role: "AGENT" };
+const agent2: AuthContext = { userId: uid(2), role: "AGENT" };
+const supervisor: AuthContext = { userId: uid(9), role: "SUPERVISOR" };
 
 describe.skipIf(!url)("conversation flows on PostgreSQL", () => {
   let db: typeof import("@config/database.js").prisma;
@@ -40,7 +41,7 @@ describe.skipIf(!url)("conversation flows on PostgreSQL", () => {
     await db.$executeRaw`TRUNCATE conversations, notifications, notification_preferences, tags RESTART IDENTITY CASCADE`;
   });
 
-  const create = async (customerId = 100n, applicationId: bigint | undefined = 7n, name = "Maya Chen") =>
+  const create = async (customerId = uid(100), applicationId: string | undefined = uid(7), name = "Maya Chen") =>
     (
       await conversations.create(agent1, {
         customerId,
@@ -51,23 +52,33 @@ describe.skipIf(!url)("conversation flows on PostgreSQL", () => {
       })
     ).conversation;
 
-  const addCustomerMessages = async (conversationId: bigint, count: number) => {
+  const addCustomerMessages = async (conversationId: string, count: number) => {
     for (let n = 1; n <= count; n++) {
       await db.message.create({
-        data: { conversationId, sequenceNumber: BigInt(n), senderType: "CUSTOMER", senderId: 100n, content: `m${n}` },
+        data: {
+          conversationId,
+          sequenceNumber: BigInt(n),
+          senderType: "CUSTOMER",
+          senderId: uid(100),
+          content: `m${n}`,
+        },
       });
     }
     await db.conversation.update({ where: { id: conversationId }, data: { lastSequenceNumber: BigInt(count) } });
   };
 
-  const openOwners = (conversationId: bigint) =>
+  const openOwners = (conversationId: string) =>
     db.conversationAssignment.findMany({ where: { conversationId, endedAt: null, assignmentType: "OWNER" } });
 
   describe("creating", () => {
     it("persists a queued conversation and reuses the open one for the same application", async () => {
       const first = await create();
-      expect(first).toMatchObject({ handoffStatus: "NEEDS_HUMAN", status: "OPEN", customerId: "100" });
-      const again = await conversations.create(agent2, { customerId: 100n, applicationId: 7n, priority: "HIGH" });
+      expect(first).toMatchObject({ handoffStatus: "NEEDS_HUMAN", status: "OPEN", customerId: uid(100) });
+      const again = await conversations.create(agent2, {
+        customerId: uid(100),
+        applicationId: uid(7),
+        priority: "HIGH",
+      });
       expect(again.created).toBe(false);
       expect(again.conversation.id).toBe(first.id);
       expect(await db.conversation.count()).toBe(1);
@@ -77,7 +88,7 @@ describe.skipIf(!url)("conversation flows on PostgreSQL", () => {
     it("serializes concurrent creates for one application into a single conversation", async () => {
       const results = await Promise.all(
         Array.from({ length: 5 }, () =>
-          conversations.create(agent1, { customerId: 100n, applicationId: 7n, priority: "MEDIUM" }),
+          conversations.create(agent1, { customerId: uid(100), applicationId: uid(7), priority: "MEDIUM" }),
         ),
       );
       expect(new Set(results.map((r) => r.conversation.id)).size).toBe(1);
@@ -87,7 +98,7 @@ describe.skipIf(!url)("conversation flows on PostgreSQL", () => {
     it("rejects an application that belongs to another customer", async () => {
       await create();
       await expect(
-        conversations.create(agent1, { customerId: 200n, applicationId: 7n, priority: "LOW" }),
+        conversations.create(agent1, { customerId: uid(200), applicationId: uid(7), priority: "LOW" }),
       ).rejects.toBeInstanceOf(ConflictError);
     });
   });
@@ -95,13 +106,13 @@ describe.skipIf(!url)("conversation flows on PostgreSQL", () => {
   describe("inbox", () => {
     it("computes per-agent unread counts and the unread filter", async () => {
       const { id } = await create();
-      const cid = BigInt(id);
+      const cid = id;
       await addCustomerMessages(cid, 3);
       const query = { filter: "all", page: 1, size: 25 } as const;
 
       expect((await conversations.list(agent1, query)).items[0]?.unreadCount).toBe(3);
       await db.conversationRead.create({
-        data: { conversationId: cid, readerType: "AGENT", readerId: 1n, lastReadSequenceNumber: 2n },
+        data: { conversationId: cid, readerType: "AGENT", readerId: uid(1), lastReadSequenceNumber: 2n },
       });
       expect((await conversations.list(agent1, query)).items[0]?.unreadCount).toBe(1);
       expect((await conversations.list(agent2, query)).items[0]?.unreadCount).toBe(3); // per agent
@@ -115,12 +126,12 @@ describe.skipIf(!url)("conversation flows on PostgreSQL", () => {
     });
 
     it("applies Mine / Unassigned / Archived filters, search, status, priority and tags together", async () => {
-      const a = await create(100n, 7n, "Maya Chen");
-      const b = await create(101n, 8n, "Sokha Lim");
-      await assignments.assign(agent1, BigInt(a.id), {});
+      const a = await create(uid(100), uid(7), "Maya Chen");
+      const b = await create(uid(101), uid(8), "Sokha Lim");
+      await assignments.assign(agent1, a.id, {});
       const tag = await db.tag.create({ data: { name: "vip" } });
-      await db.conversationTag.create({ data: { conversationId: BigInt(b.id), tagId: tag.id } });
-      await db.conversation.update({ where: { id: BigInt(b.id) }, data: { priority: "HIGH" } });
+      await db.conversationTag.create({ data: { conversationId: b.id, tagId: tag.id } });
+      await db.conversation.update({ where: { id: b.id }, data: { priority: "HIGH" } });
       const base = { page: 1, size: 25 } as const;
       const ids = async (auth: AuthContext, q: Parameters<typeof conversations.list>[1]) =>
         (await conversations.list(auth, q)).items.map((i) => i.id);
@@ -128,44 +139,49 @@ describe.skipIf(!url)("conversation flows on PostgreSQL", () => {
       expect(await ids(agent1, { ...base, filter: "mine" })).toEqual([a.id]);
       expect(await ids(agent1, { ...base, filter: "unassigned" })).toEqual([b.id]);
       expect(await ids(agent1, { ...base, filter: "all", q: "sokha" })).toEqual([b.id]);
-      expect(await ids(agent1, { ...base, filter: "all", q: "C-100" })).toEqual([a.id]);
-      expect(await ids(agent1, { ...base, filter: "all", q: "101" })).toEqual([b.id]);
+      expect(await ids(agent1, { ...base, filter: "all", q: `C-${uid(100)}` })).toEqual([a.id]);
+      expect(await ids(agent1, { ...base, filter: "all", q: uid(101) })).toEqual([b.id]);
       expect(await ids(agent1, { ...base, filter: "all", priority: "HIGH", tag: tag.id })).toEqual([b.id]);
       expect(await ids(agent1, { ...base, filter: "all", priority: "LOW" })).toEqual([]);
 
-      await conversations.archive(agent1, BigInt(a.id));
+      await conversations.archive(agent1, a.id);
       expect(await ids(agent1, { ...base, filter: "archived" })).toEqual([a.id]);
       expect(await ids(agent1, { ...base, filter: "all" })).toEqual([b.id]);
-      const restored = await conversations.restore(agent1, BigInt(a.id));
+      const restored = await conversations.restore(agent1, a.id);
       expect(restored.isArchived).toBe(false);
     });
 
     it("orders by recent activity and paginates", async () => {
-      for (let n = 0; n < 3; n++) await create(100n + BigInt(n), 7n + BigInt(n));
-      await db.conversation.update({ where: { id: 1n }, data: { lastMessageAt: new Date(Date.now() + 60_000) } });
+      const made = [];
+      for (let n = 0; n < 3; n++) made.push(await create(uid(100 + n), uid(7 + n)));
+      const [first, second, third] = made as [(typeof made)[number], (typeof made)[number], (typeof made)[number]];
+      await db.conversation.update({ where: { id: first.id }, data: { lastMessageAt: new Date(Date.now() + 60_000) } });
       const page1 = await conversations.list(agent1, { filter: "all", page: 1, size: 2 });
-      expect(page1.items.map((i) => i.id)).toEqual(["1", "3"]);
+      expect(page1.items[0]?.id).toBe(first.id);
+      expect([first.id, second.id, third.id]).toContain(page1.items[1]?.id);
       expect(page1.meta).toEqual({ total: 3, page: 1, size: 2, totalPages: 2 });
-      expect((await conversations.list(agent1, { filter: "all", page: 2, size: 2 })).items.map((i) => i.id)).toEqual([
-        "2",
-      ]);
+      const page2 = await conversations.list(agent1, { filter: "all", page: 2, size: 2 });
+      expect(page2.items).toHaveLength(1);
+      expect(new Set([...page1.items, ...page2.items].map((i) => i.id))).toEqual(
+        new Set([first.id, second.id, third.id]),
+      );
     });
 
     it("hides another agent's assigned conversation from search and detail, but not from a supervisor", async () => {
       const { id } = await create();
-      await assignments.assign(agent1, BigInt(id), {});
+      await assignments.assign(agent1, id, {});
       const q = { filter: "all", page: 1, size: 25, q: "maya" } as const;
       expect((await conversations.list(agent2, q)).items).toHaveLength(0);
-      await expect(conversations.get(agent2, BigInt(id))).rejects.toBeInstanceOf(NotFoundError);
+      await expect(conversations.get(agent2, id)).rejects.toBeInstanceOf(NotFoundError);
       expect((await conversations.list(supervisor, q)).items).toHaveLength(1);
-      expect((await conversations.get(agent1, BigInt(id))).permissions.canSendMessage).toBe(true);
+      expect((await conversations.get(agent1, id)).permissions.canSendMessage).toBe(true);
     });
   });
 
   describe("assignment", () => {
     it("lets exactly one of two simultaneous takeovers win", async () => {
       const { id } = await create();
-      const cid = BigInt(id);
+      const cid = id;
       const results = await Promise.allSettled([
         assignments.assign(agent1, cid, {}),
         assignments.assign(agent2, cid, {}),
@@ -187,10 +203,10 @@ describe.skipIf(!url)("conversation flows on PostgreSQL", () => {
 
     it("keeps full history across assign, transfer and unassign, and keeps the DB mirror consistent", async () => {
       const { id } = await create();
-      const cid = BigInt(id);
+      const cid = id;
       await assignments.assign(agent1, cid, {});
-      await assignments.transfer(agent1, cid, { agentId: 2n, note: "shift change" });
-      expect((await db.conversation.findUniqueOrThrow({ where: { id: cid } })).assignedAgentId).toBe(2n);
+      await assignments.transfer(agent1, cid, { agentId: uid(2), note: "shift change" });
+      expect((await db.conversation.findUniqueOrThrow({ where: { id: cid } })).assignedAgentId).toBe(uid(2));
       await expect(assignments.unassign(agent1, cid, {})).rejects.toThrow(); // agent1 no longer owns it
       await assignments.unassign(agent2, cid, {});
 
@@ -200,39 +216,39 @@ describe.skipIf(!url)("conversation flows on PostgreSQL", () => {
 
       const history = await assignments.history(supervisor, cid);
       expect(history.map((h) => [h.agentId, h.action, h.endedAt !== null])).toEqual([
-        ["2", "TRANSFERRED", true],
-        ["1", "TAKEOVER", true],
+        [uid(2), "TRANSFERRED", true],
+        [uid(1), "TAKEOVER", true],
       ]);
       expect(history[0]?.note).toBe("shift change");
       const activities = await db.conversationActivity.findMany({
         where: { conversationId: cid },
-        orderBy: { id: "asc" },
+        orderBy: { createdAt: "asc" },
       });
       expect(activities.map((a) => a.activityType)).toEqual(["ASSIGNED", "TRANSFERRED", "UNASSIGNED"]);
     });
 
     it("notifies the assignee, honouring notification preferences", async () => {
       const { id } = await create();
-      await assignments.assign(supervisor, BigInt(id), { agentId: 3n });
+      await assignments.assign(supervisor, id, { agentId: uid(3) });
       const notes = await db.notification.findMany();
       expect(notes).toHaveLength(1);
       expect(notes[0]).toMatchObject({
         recipientType: "AGENT",
-        recipientId: 3n,
+        recipientId: uid(3),
         notificationType: "ASSIGNED",
         readAt: null,
       });
 
-      await db.notificationPreference.create({ data: { agentId: 4n, transferEnabled: false } });
-      await assignments.transfer(supervisor, BigInt(id), { agentId: 4n });
-      expect(await db.notification.count({ where: { recipientId: 4n } })).toBe(0);
+      await db.notificationPreference.create({ data: { agentId: uid(4), transferEnabled: false } });
+      await assignments.transfer(supervisor, id, { agentId: uid(4) });
+      expect(await db.notification.count({ where: { recipientId: uid(4) } })).toBe(0);
     });
   });
 
   describe("status changes", () => {
     it("resolve releases the owner, records the change, and reopen puts the chat back in the queue", async () => {
       const { id } = await create();
-      const cid = BigInt(id);
+      const cid = id;
       await assignments.assign(agent1, cid, {});
 
       const resolved = await conversations.changeStatus(agent1, cid, "RESOLVED");
@@ -240,7 +256,7 @@ describe.skipIf(!url)("conversation flows on PostgreSQL", () => {
       expect(resolved.resolvedAt).not.toBeNull();
       expect(await openOwners(cid)).toHaveLength(0);
       expect(
-        (await db.conversationParticipant.findFirst({ where: { participantId: 1n, participantType: "AGENT" } }))
+        (await db.conversationParticipant.findFirst({ where: { participantId: uid(1), participantType: "AGENT" } }))
           ?.leftAt,
       ).not.toBeNull();
 
@@ -253,7 +269,7 @@ describe.skipIf(!url)("conversation flows on PostgreSQL", () => {
       });
       const log = await db.conversationActivity.findMany({
         where: { activityType: "STATUS_CHANGED" },
-        orderBy: { id: "asc" },
+        orderBy: { createdAt: "asc" },
       });
       expect(log.map((a) => a.metadata)).toEqual([
         { from: "OPEN", to: "RESOLVED" },
@@ -266,24 +282,28 @@ describe.skipIf(!url)("conversation flows on PostgreSQL", () => {
         ["SYSTEM", 2n],
         ["SYSTEM", 3n],
       ]);
-      expect(thread[1]?.content).toBe("Agent 1 resolved the conversation");
+      expect(thread[1]?.content).toBe(`Agent ${uid(1)} resolved the conversation`);
       expect(thread[0]?.senderId).toBeNull();
     });
 
     it("closing frees the application for a new conversation", async () => {
       const first = await create();
-      await conversations.changeStatus(supervisor, BigInt(first.id), "CLOSED");
-      const second = await conversations.create(agent1, { customerId: 100n, applicationId: 7n, priority: "MEDIUM" });
+      await conversations.changeStatus(supervisor, first.id, "CLOSED");
+      const second = await conversations.create(agent1, {
+        customerId: uid(100),
+        applicationId: uid(7),
+        priority: "MEDIUM",
+      });
       expect(second.created).toBe(true);
       expect(second.conversation.id).not.toBe(first.id);
     });
 
     it("rejects a second simultaneous resolve", async () => {
       const { id } = await create();
-      await assignments.assign(agent1, BigInt(id), {});
+      await assignments.assign(agent1, id, {});
       const results = await Promise.allSettled([
-        conversations.changeStatus(agent1, BigInt(id), "RESOLVED"),
-        conversations.changeStatus(supervisor, BigInt(id), "RESOLVED"),
+        conversations.changeStatus(agent1, id, "RESOLVED"),
+        conversations.changeStatus(supervisor, id, "RESOLVED"),
       ]);
       expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
       expect(await db.conversationActivity.count({ where: { activityType: "STATUS_CHANGED" } })).toBe(1);

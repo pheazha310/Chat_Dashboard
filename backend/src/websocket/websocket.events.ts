@@ -17,7 +17,7 @@ export const clientEvents = {
     selectedConversationId: idSchema.optional(),
     /** conversationId → last sequenceNumber the client holds; the reply carries everything after it. */
     cursors: z
-      .record(z.string().regex(/^[1-9]\d{0,17}$/), z.string().regex(/^\d{1,18}$/))
+      .record(z.uuid(), z.string().regex(/^\d{1,18}$/))
       .refine((value) => Object.keys(value).length <= 50, "At most 50 cursors")
       .optional(),
   }),

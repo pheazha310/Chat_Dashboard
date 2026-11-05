@@ -12,7 +12,7 @@ Event names are dotted (`message.send`); the colon names in the original brief m
 1. Open `ws://host/ws`. Browsers send an `Origin` header; it must be in `CORS_ORIGIN` or the upgrade is refused (401).
 2. The server sends `connection.established` `{ connectionId, authTimeoutMs }`.
 3. Within `authTimeoutMs` (10 s) the client sends `auth` `{ token, reconnect? }`. The token is verified through the
-   `AuthClient` (Backend 1; `dev:<userId>:<ROLE>` in dev). Only `AGENT`, `SUPERVISOR`, `ADMIN` are accepted.
+   `AuthClient` (Backend 1; `dev:<userUuid>:<ROLE>` in dev). Only `AGENT`, `SUPERVISOR`, `ADMIN` are accepted.
 4. Reply `connection.authenticated` (or `connection.reconnected` when `reconnect: true`) `{ connectionId, userId, role }`.
 5. Failures: `error` then close `4401` (missing/invalid token, timeout, any event before `auth`) or `4403` (role not
    allowed). An oversized frame closes with `1009`; binary frames are refused.
@@ -64,7 +64,7 @@ conversation they could not open. Supervisors see everything. "Owner's sessions"
 | `error`                                               | the socket that caused it                        | `{ code, message, event?, conversationId? }`; codes match the REST error codes                                                 |
 
 `Message`, `conversation` and `Assignment` are the REST DTOs ([api-conversations.md](api-conversations.md),
-`GET /api/openapi.json`).
+`GET /admin/api/v1/openapi.json`).
 
 ### Unread counts
 

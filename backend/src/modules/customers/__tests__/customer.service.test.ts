@@ -5,11 +5,12 @@ import { NotFoundError, ServiceUnavailableError } from "@shared/errors/AppError.
 import type { CustomerProfile } from "@shared/ports/directory.js";
 import type { CustomerRepository } from "../customer.repository.js";
 import { CustomerService, redactCustomer } from "../customer.service.js";
+import { uid } from "../../../__tests__/support/ids.js";
 
 vi.mock("@config/logger.js", () => ({ logger: { warn: vi.fn() } }));
 
 const profile: CustomerProfile = {
-  id: "100",
+  id: uid(100),
   name: "Maya Chen",
   avatarUrl: null,
   blacklisted: false,
@@ -17,12 +18,12 @@ const profile: CustomerProfile = {
   phone: "+855 12 345 678",
   nationalId: "ID-1",
   occupation: "Teacher",
-  salary: "800",
+  salary: uid(800),
 };
-const agent: AuthContext = { userId: 1n, role: "AGENT" };
-const other: AuthContext = { userId: 2n, role: "AGENT" };
-const supervisor: AuthContext = { userId: 9n, role: "SUPERVISOR" };
-const owned = { assignedAgentId: 1n };
+const agent: AuthContext = { userId: uid(1), role: "AGENT" };
+const other: AuthContext = { userId: uid(2), role: "AGENT" };
+const supervisor: AuthContext = { userId: uid(9), role: "SUPERVISOR" };
+const owned = { assignedAgentId: uid(1) };
 
 describe("redactCustomer", () => {
   it("shows the owner contact details but not sensitive data", () => {
@@ -40,7 +41,7 @@ describe("redactCustomer", () => {
 
   it("shows supervisors everything", () => {
     const dto = redactCustomer(profile, supervisor, owned, "test");
-    expect(dto).toMatchObject({ email: "maya@example.test", nationalId: "ID-1", salary: "800" });
+    expect(dto).toMatchObject({ email: "maya@example.test", nationalId: "ID-1", salary: uid(800) });
     expect(dto.restricted).toEqual([]);
   });
 
@@ -59,57 +60,57 @@ describe("CustomerService", () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
-    access.requireVisible.mockResolvedValue({ id: 10n, customerId: 100n, assignedAgentId: 1n });
+    access.requireVisible.mockResolvedValue({ id: uid(10), customerId: uid(100), assignedAgentId: uid(1) });
     directory.getCustomer.mockResolvedValue(profile);
-    directory.getAgents.mockResolvedValue([{ id: "1", name: "Sarah Chen", avatarUrl: null }]);
+    directory.getAgents.mockResolvedValue([{ id: uid(1), name: "Sarah Chen", avatarUrl: null }]);
   });
 
   it("checks access first, then returns the redacted profile with its source", async () => {
-    const dto = await service.customer(other, 10n);
-    expect(access.requireVisible).toHaveBeenCalledWith(other, 10n);
+    const dto = await service.customer(other, uid(10));
+    expect(access.requireVisible).toHaveBeenCalledWith(other, uid(10));
     expect(dto).toMatchObject({ name: "Maya Chen", email: null, source: "test" });
   });
 
   it("never calls Backend 1 for a conversation the caller cannot see", async () => {
     access.requireVisible.mockRejectedValue(new NotFoundError());
-    await expect(service.customer(other, 10n)).rejects.toBeInstanceOf(NotFoundError);
+    await expect(service.customer(other, uid(10))).rejects.toBeInstanceOf(NotFoundError);
     expect(directory.getCustomer).not.toHaveBeenCalled();
   });
 
   it("404s for an internal conversation or an unknown customer, 503s when Backend 1 is down", async () => {
-    access.requireVisible.mockResolvedValue({ id: 10n, customerId: null, assignedAgentId: null });
-    await expect(service.customer(agent, 10n)).rejects.toBeInstanceOf(NotFoundError);
-    access.requireVisible.mockResolvedValue({ id: 10n, customerId: 100n, assignedAgentId: 1n });
+    access.requireVisible.mockResolvedValue({ id: uid(10), customerId: null, assignedAgentId: null });
+    await expect(service.customer(agent, uid(10))).rejects.toBeInstanceOf(NotFoundError);
+    access.requireVisible.mockResolvedValue({ id: uid(10), customerId: uid(100), assignedAgentId: uid(1) });
     directory.getCustomer.mockResolvedValue(null);
-    await expect(service.customer(agent, 10n)).rejects.toBeInstanceOf(NotFoundError);
+    await expect(service.customer(agent, uid(10))).rejects.toBeInstanceOf(NotFoundError);
     directory.getCustomer.mockRejectedValue(new Error("ECONNREFUSED"));
-    await expect(service.customer(agent, 10n)).rejects.toBeInstanceOf(ServiceUnavailableError);
+    await expect(service.customer(agent, uid(10))).rejects.toBeInstanceOf(ServiceUnavailableError);
   });
 
   it("lists the customer's other conversations through the same visibility rules", async () => {
     conversations.list.mockResolvedValue({ items: [], meta: { total: 0, page: 1, size: 25, totalPages: 1 } });
-    await service.otherConversations(agent, 10n, { page: 1, size: 25 });
+    await service.otherConversations(agent, uid(10), { page: 1, size: 25 });
     expect(conversations.list).toHaveBeenCalledWith(agent, {
       page: 1,
       size: 25,
       filter: "all",
-      customerId: 100n,
-      excludeId: 10n,
+      customerId: uid(100),
+      excludeId: uid(10),
     });
   });
 
   it("names participants from Backend 1 and leaves the AI assistant unnamed", async () => {
     const at = new Date("2026-01-01T00:00:00Z");
     repo.participants.mockResolvedValue([
-      { participantType: "AGENT", participantId: 1n, participantRole: "OWNER", joinedAt: at, leftAt: null },
-      { participantType: "CUSTOMER", participantId: 100n, participantRole: "MEMBER", joinedAt: at, leftAt: null },
+      { participantType: "AGENT", participantId: uid(1), participantRole: "OWNER", joinedAt: at, leftAt: null },
+      { participantType: "CUSTOMER", participantId: uid(100), participantRole: "MEMBER", joinedAt: at, leftAt: null },
       { participantType: "ASSISTANT", participantId: null, participantRole: "MEMBER", joinedAt: at, leftAt: at },
     ]);
-    const result = await service.participants(agent, 10n);
+    const result = await service.participants(agent, uid(10));
     expect(result.map((p) => [p.participantType, p.participantId, p.profile?.name ?? null, p.leftAt !== null])).toEqual(
       [
-        ["AGENT", "1", "Sarah Chen", false],
-        ["CUSTOMER", "100", "Maya Chen", false],
+        ["AGENT", uid(1), "Sarah Chen", false],
+        ["CUSTOMER", uid(100), "Maya Chen", false],
         ["ASSISTANT", null, null, true],
       ],
     );
@@ -117,9 +118,9 @@ describe("CustomerService", () => {
 
   it("still lists participants, without names, when Backend 1 is down", async () => {
     repo.participants.mockResolvedValue([
-      { participantType: "AGENT", participantId: 1n, participantRole: "OWNER", joinedAt: new Date(), leftAt: null },
+      { participantType: "AGENT", participantId: uid(1), participantRole: "OWNER", joinedAt: new Date(), leftAt: null },
     ]);
     directory.getAgents.mockRejectedValue(new Error("down"));
-    expect((await service.participants(agent, 10n))[0]?.profile).toBeNull();
+    expect((await service.participants(agent, uid(10)))[0]?.profile).toBeNull();
   });
 });

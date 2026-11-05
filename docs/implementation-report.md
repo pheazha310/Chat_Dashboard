@@ -72,7 +72,7 @@ product behaviour is correct (the notification was stored and delivered); the te
 
 ## 5. Known gaps
 
-1. **Authentication is a stub.** `DevAuthClient` accepts `dev:<userId>:<ROLE>` tokens and is refused in production.
+1. **Authentication is a stub.** `DevAuthClient` accepts `dev:<userUuid>:<ROLE>` tokens and is refused in production.
    The external mode throws "not implemented" because the Backend 1 contract (token verification, claims, user
    directory) has not been provided. Token expiry mid-connection is therefore not enforced.
 2. **Customer channel and AI worker are designed, not built.** `MessageService.receiveFromCustomer` exists and is
@@ -102,6 +102,6 @@ pnpm check
 TEST_DATABASE_URL=postgresql://USER@HOST:PORT/chat_test TEST_REDIS_URL=redis://HOST:PORT pnpm --filter @chat-dashboard/backend test:coverage
 
 # Frontend against a running backend (see frontend-integration.md, "Verifying against the backend")
-VITE_WS_URL=ws://127.0.0.1:4555/ws VITE_AUTH_TOKEN=dev:3:AGENT LIVE_API_URL=http://127.0.0.1:4555/api \
+VITE_WS_URL=ws://127.0.0.1:4555/ws VITE_AUTH_TOKEN=dev:00000000-0000-4000-8000-000000000003:AGENT LIVE_API_URL=http://127.0.0.1:4555/api \
   pnpm --filter @chat-dashboard/frontend test
 ```

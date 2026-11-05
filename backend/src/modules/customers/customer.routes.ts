@@ -7,7 +7,7 @@ import { CustomerController } from "./customer.controller.js";
 
 const controller = new CustomerController(container.customers);
 
-/** Mounted at /api/conversations (authentication is applied at the mount). */
+/** Mounted at /admin/api/v1/conversations (authentication is applied at the mount). */
 export const customerRoutes = Router();
 
 customerRoutes.get("/:id/customer", validate({ params: idParams }), controller.customer);

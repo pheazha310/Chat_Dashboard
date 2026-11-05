@@ -43,7 +43,7 @@ function mayView(visibility: ConversationVisibility, auth: AuthContext): boolean
         status: "OPEN",
         isArchived: false,
         handoffStatus: visibility.handoffStatus,
-        assignedAgentId: visibility.assignedAgentId === null ? null : BigInt(visibility.assignedAgentId),
+        assignedAgentId: visibility.assignedAgentId === null ? null : visibility.assignedAgentId,
       },
       visibility.viewerIds.includes(auth.userId.toString()),
     )

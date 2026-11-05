@@ -7,5 +7,5 @@ export interface ConversationSnapshot {
 }
 
 export interface ConversationSnapshots {
-  snapshot(conversationId: bigint): Promise<ConversationSnapshot | null>;
+  snapshot(conversationId: string): Promise<ConversationSnapshot | null>;
 }

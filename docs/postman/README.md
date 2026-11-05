@@ -1,0 +1,151 @@
+# Postman: every endpoint with its body
+
+Base URL `http://localhost:4000` (no trailing slash). Import `chat-dashboard.postman_collection.json` from this folder
+to get all of these ready-made; the collection variables are `baseUrl`, `token`, `convId`, `msgId`, `notifId`.
+
+Headers on every request except the three marked "no auth":
+
+```
+Authorization: Bearer dev:00000000-0000-4000-8000-000000000003:AGENT
+Content-Type: application/json
+```
+
+Other dev tokens: `dev:00000000-0000-4000-8000-000000000004:AGENT`, `dev:00000000-0000-4000-8000-000000000009:SUPERVISOR` (needs `AUTH_MODE=dev`). IDs are strings. `{id}` is the conversation
+id returned by Create. The database must be reachable: `GET /api/health` should say `"database": "up"`.
+
+## Health and spec (no auth)
+
+| Method | URL                          |
+| ------ | ---------------------------- |
+| GET    | `/api/health`                |
+| GET    | `/admin/api/v1/openapi.json` |
+
+## Conversations
+
+| Method | URL                                                                           | Body  |
+| ------ | ----------------------------------------------------------------------------- | ----- |
+| GET    | `/admin/api/v1/conversations?filter=all&page=1&size=20`                       |       |
+| POST   | `/admin/api/v1/conversations`                                                 | below |
+| GET    | `/admin/api/v1/conversations/{id}`                                            |       |
+| GET    | `/admin/api/v1/conversations/{id}/activities?page=1&size=20`                  |       |
+| PATCH  | `/admin/api/v1/conversations/{id}/status`                                     | below |
+| POST   | `/admin/api/v1/conversations/{id}/archive`                                    | `{}`  |
+| POST   | `/admin/api/v1/conversations/{id}/restore`                                    | `{}`  |
+| GET    | `/admin/api/v1/conversations?customerId=00000000-0000-4000-8000-000000000100` |       |
+
+List filters: `filter` = all, mine, unread, unassigned, archived; optional `status`, `priority`, `tag`, `q`, `customerId`,
+`excludeId`.
+
+Create (201; 200 when the open conversation for that `applicationId` is reused; only `customerId` is required):
+
+```json
+{
+  "customerId": "00000000-0000-4000-8000-000000000100",
+  "applicationId": "00000000-0000-4000-8000-000000005001",
+  "customerName": "Test Customer",
+  "customerIdentifier": "CUS-0100",
+  "subject": "Loan question",
+  "priority": "MEDIUM"
+}
+```
+
+Status (`OPEN`, `RESOLVED` or `CLOSED`; 409 if unchanged):
+
+```json
+{ "status": "RESOLVED" }
+```
+
+## Assignment
+
+| Method | URL                                            | Body                                                                                                                                                            |
+| ------ | ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| POST   | `/admin/api/v1/conversations/{id}/assign`      | `{}` takes over as the caller                                                                                                                                   |
+| POST   | `/admin/api/v1/conversations/{id}/assign`      | supervisor only: `{ "agentId": "00000000-0000-4000-8000-000000000004", "note": "please handle" }` (token `dev:00000000-0000-4000-8000-000000000009:SUPERVISOR`) |
+| POST   | `/admin/api/v1/conversations/{id}/transfer`    | `{ "agentId": "00000000-0000-4000-8000-000000000004", "note": "handover" }`                                                                                     |
+| POST   | `/admin/api/v1/conversations/{id}/unassign`    | `{ "note": "back to queue" }`                                                                                                                                   |
+| GET    | `/admin/api/v1/conversations/{id}/assignments` |                                                                                                                                                                 |
+
+## Messages (only the owner of an open conversation can send)
+
+| Method | URL                                                               | Body                                                              |
+| ------ | ----------------------------------------------------------------- | ----------------------------------------------------------------- |
+| POST   | `/admin/api/v1/conversations/{id}/messages`                       | below                                                             |
+| GET    | `/admin/api/v1/conversations/{id}/messages?limit=50`              |                                                                   |
+| GET    | `/admin/api/v1/conversations/{id}/messages?before={messageId}`    | page back                                                         |
+| GET    | `/admin/api/v1/conversations/{id}/messages?after={sequence}`      | what you missed                                                   |
+| POST   | `/admin/api/v1/conversations/{id}/messages/{messageId}/delivered` | `{}` (customer messages only)                                     |
+| POST   | `/admin/api/v1/conversations/{id}/read`                           | `{}` or `{ "messageId": "00000000-0000-4000-8000-000000000012" }` |
+| POST   | `/admin/api/v1/conversations/{id}/unread`                         | `{}`                                                              |
+
+Send (201; a retry with the same `clientId` returns 200 with the original message; `text` up to 4000 characters):
+
+```json
+{ "clientId": "msg-001", "text": "Hello from Postman", "replyToMessageId": "00000000-0000-4000-8000-000000000012" }
+```
+
+## Notifications
+
+| Method | URL                                                      | Body                             |
+| ------ | -------------------------------------------------------- | -------------------------------- |
+| GET    | `/admin/api/v1/notifications?unread=true&page=1&size=20` |                                  |
+| GET    | `/admin/api/v1/notifications/unread-count`               |                                  |
+| PATCH  | `/admin/api/v1/notifications/{notifId}/read`             | `{}`                             |
+| POST   | `/admin/api/v1/notifications/read-all`                   | `{}`                             |
+| GET    | `/admin/api/v1/notifications/preferences`                |                                  |
+| PUT    | `/admin/api/v1/notifications/preferences`                | below (any subset, at least one) |
+| PUT    | `/admin/api/v1/conversations/{id}/mute`                  | `{ "muted": true }`              |
+
+```json
+{ "newMessage": true, "assignment": true, "transfer": true, "mention": true, "sound": false, "browser": true }
+```
+
+## Presence
+
+| Method | URL                         | Body                                            |
+| ------ | --------------------------- | ----------------------------------------------- |
+| GET    | `/admin/api/v1/presence`    | (lists only agents with an open WebSocket)      |
+| PUT    | `/admin/api/v1/presence/me` | `{ "status": "AVAILABLE" }` (or `BUSY`, `AWAY`) |
+
+## Customer info
+
+| Method | URL                                                       |
+| ------ | --------------------------------------------------------- |
+| GET    | `/admin/api/v1/conversations/{id}/customer`               |
+| GET    | `/admin/api/v1/conversations/{id}/customer/conversations` |
+| GET    | `/admin/api/v1/conversations/{id}/participants`           |
+
+## WebSocket (Postman: New, WebSocket)
+
+Connect to `ws://localhost:4000/ws`. After `connection.established`, send `auth` within 10 seconds:
+
+```json
+{ "type": "auth", "payload": { "token": "dev:00000000-0000-4000-8000-000000000003:AGENT" } }
+```
+
+Then any of these frames:
+
+```json
+{ "type": "sync.request", "payload": { "selectedConversationId": "00000000-0000-4000-8000-000000000012", "cursors": { "12": "5" } } }
+{ "type": "message.send", "payload": { "conversationId": "00000000-0000-4000-8000-000000000012", "clientId": "ws-001", "text": "Hi" } }
+{ "type": "message.delivered", "payload": { "conversationId": "00000000-0000-4000-8000-000000000012", "messageId": "00000000-0000-4000-8000-000000000020" } }
+{ "type": "conversation.read", "payload": { "conversationId": "00000000-0000-4000-8000-000000000012" } }
+{ "type": "conversation.unread", "payload": { "conversationId": "00000000-0000-4000-8000-000000000012" } }
+{ "type": "conversation.takeover", "payload": { "conversationId": "00000000-0000-4000-8000-000000000012" } }
+{ "type": "conversation.assign", "payload": { "conversationId": "00000000-0000-4000-8000-000000000012", "agentId": "00000000-0000-4000-8000-000000000004", "note": "x" } }
+{ "type": "conversation.transfer", "payload": { "conversationId": "00000000-0000-4000-8000-000000000012", "agentId": "00000000-0000-4000-8000-000000000004" } }
+{ "type": "conversation.release", "payload": { "conversationId": "00000000-0000-4000-8000-000000000012", "note": "x" } }
+{ "type": "conversation.set_status", "payload": { "conversationId": "00000000-0000-4000-8000-000000000012", "status": "RESOLVED" } }
+{ "type": "typing.start", "payload": { "conversationId": "00000000-0000-4000-8000-000000000012" } }
+{ "type": "typing.stop", "payload": { "conversationId": "00000000-0000-4000-8000-000000000012" } }
+{ "type": "presence.set", "payload": { "status": "BUSY" } }
+```
+
+Full event list: [../websocket-events.md](../websocket-events.md).
+
+## Checks worth running
+
+- Agent 4 opens a conversation owned by agent 3: expect **404**, not 403.
+- Agent 4 sends a message to it: rejected.
+- No token: **401**.
+- Send the same `clientId` twice: **201**, then **200**.
+- A wrong URL such as `GET /` or `/api/conversations` returns 404 (the staff API is under `/admin/api/v1`).

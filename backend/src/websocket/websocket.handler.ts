@@ -87,7 +87,7 @@ export class WebSocketHandler {
     if (!auth) return;
     for (const [conversation, timer] of connection.typing) {
       clearTimeout(timer);
-      await this.publishTyping(connection, auth, BigInt(conversation), false);
+      await this.publishTyping(connection, auth, conversation, false);
     }
     connection.typing.clear();
     await this.services.presence.disconnect(auth, connection.id);
@@ -194,7 +194,7 @@ export class WebSocketHandler {
       try {
         const page = await messages.history(
           auth,
-          BigInt(id),
+          id,
           after === undefined ? { limit: SYNC_LATEST_FOR_SELECTED } : { limit: SYNC_MESSAGES_PER_CONVERSATION, after },
         );
         missed[id] = page.items;
@@ -218,7 +218,7 @@ export class WebSocketHandler {
     });
   }
 
-  private async typing({ connection, auth }: Context, conversationId: bigint, active: boolean) {
+  private async typing({ connection, auth }: Context, conversationId: string, active: boolean) {
     const key = conversationId.toString();
     const existing = connection.typing.get(key);
     if (!active) {
@@ -240,7 +240,7 @@ export class WebSocketHandler {
     connection.typing.set(key, timer);
   }
 
-  private async publishTyping(connection: Connection, auth: AuthContext, conversationId: bigint, active: boolean) {
+  private async publishTyping(connection: Connection, auth: AuthContext, conversationId: string, active: boolean) {
     try {
       await this.services.realtime.typing(conversationId, auth.userId, active, connection.id);
     } catch (error) {

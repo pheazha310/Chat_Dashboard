@@ -9,7 +9,7 @@ export class AssignmentRepository {
     return runInTransaction(this.db, (tx) => fn(new AssignmentRepository(tx)));
   }
 
-  findState(id: bigint): Promise<ConversationState | null> {
+  findState(id: string): Promise<ConversationState | null> {
     return this.db.conversation.findUnique({
       where: { id },
       select: { id: true, status: true, handoffStatus: true, assignedAgentId: true, isArchived: true },
@@ -20,7 +20,7 @@ export class AssignmentRepository {
    * Makes `agentId` the owner only if the conversation is still in the state the caller decided from. Of two agents
    * clicking at once, one update matches and the other gets false (no read-then-write race).
    */
-  async claim(state: ConversationState, agentId: bigint): Promise<boolean> {
+  async claim(state: ConversationState, agentId: string): Promise<boolean> {
     const { count } = await this.db.conversation.updateMany({
       where: {
         id: state.id,
@@ -42,14 +42,14 @@ export class AssignmentRepository {
     return count === 1;
   }
 
-  async endOwner(conversationId: bigint, endedBy: bigint): Promise<void> {
+  async endOwner(conversationId: string, endedBy: string): Promise<void> {
     await this.db.conversationAssignment.updateMany({
       where: { conversationId, endedAt: null, assignmentType: "OWNER" },
       data: { endedAt: new Date(), endedBy },
     });
   }
 
-  createOwner(data: { conversationId: bigint; agentId: bigint; assignedBy: bigint; action: string; note?: string }) {
+  createOwner(data: { conversationId: string; agentId: string; assignedBy: string; action: string; note?: string }) {
     return this.db.conversationAssignment.create({
       data: {
         conversationId: data.conversationId,
@@ -62,7 +62,7 @@ export class AssignmentRepository {
     });
   }
 
-  async leaveParticipant(conversationId: bigint, agentId: bigint): Promise<void> {
+  async leaveParticipant(conversationId: string, agentId: string): Promise<void> {
     await this.db.conversationParticipant.updateMany({
       where: { conversationId, participantType: "AGENT", participantId: agentId, leftAt: null },
       data: { leftAt: new Date() },
@@ -70,7 +70,7 @@ export class AssignmentRepository {
   }
 
   /** Adds the agent as an OWNER participant, promoting an existing active row (e.g. a viewer) instead of duplicating. */
-  async joinAsOwner(conversationId: bigint, agentId: bigint): Promise<void> {
+  async joinAsOwner(conversationId: string, agentId: string): Promise<void> {
     const { count } = await this.db.conversationParticipant.updateMany({
       where: { conversationId, participantType: "AGENT", participantId: agentId, leftAt: null },
       data: { participantRole: "OWNER" },
@@ -86,7 +86,7 @@ export class AssignmentRepository {
     return this.db.conversationActivity.create({ data });
   }
 
-  history(conversationId: bigint) {
+  history(conversationId: string) {
     return this.db.conversationAssignment.findMany({
       where: { conversationId },
       orderBy: [{ assignedAt: "desc" }, { id: "desc" }],

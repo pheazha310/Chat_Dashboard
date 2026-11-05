@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const config = vi.hoisted(() => ({
-  apiUrl: "http://localhost:4000/api" as string | undefined,
+  apiUrl: "http://localhost:4000/admin/api/v1" as string | undefined,
   token: "dev:3:AGENT" as string | undefined,
 }));
 vi.mock("@/shared/config", () => ({
@@ -18,7 +18,7 @@ const reply = (status: number, body: unknown) =>
   vi.fn().mockResolvedValue({ ok: status < 400, status, json: async () => body });
 
 beforeEach(() => {
-  config.apiUrl = "http://localhost:4000/api";
+  config.apiUrl = "http://localhost:4000/admin/api/v1";
   config.token = "dev:3:AGENT";
 });
 afterEach(() => vi.unstubAllGlobals());
@@ -30,7 +30,7 @@ describe("apiRequest", () => {
     const result = await apiRequest("/conversations", { query: { filter: "mine", page: 2, q: undefined } });
     expect(result).toEqual({ data: [1], meta: { hasMore: false } });
     const [url, init] = fetchMock.mock.calls[0]!;
-    expect(String(url)).toBe("http://localhost:4000/api/conversations?filter=mine&page=2");
+    expect(String(url)).toBe("http://localhost:4000/admin/api/v1/conversations?filter=mine&page=2");
     expect(init.headers).toMatchObject({ authorization: "Bearer dev:3:AGENT" });
     expect(init.method).toBe("GET");
   });
@@ -88,7 +88,7 @@ describe("getMessages", () => {
     vi.stubGlobal("fetch", fetchMock);
     const page = await getMessages("12", { before: "9", limit: 50 });
     expect(String(fetchMock.mock.calls[0]![0])).toBe(
-      "http://localhost:4000/api/conversations/12/messages?before=9&limit=50",
+      "http://localhost:4000/admin/api/v1/conversations/12/messages?before=9&limit=50",
     );
     expect(page.items).toEqual([{ id: "1" }]);
     expect(page.meta).toMatchObject({ hasMore: true, oldestSequence: "4" });

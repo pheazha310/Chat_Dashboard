@@ -2,21 +2,22 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { assertTestDatabase, createTestContainer } from "../../../__tests__/support/container.js";
 import type { AuthContext } from "@shared/auth/auth.types.js";
 import { BadRequestError, ForbiddenError, NotFoundError } from "@shared/errors/AppError.js";
+import { uid } from "../../../__tests__/support/ids.js";
 
 /** Real repositories and services on PostgreSQL. Needs TEST_DATABASE_URL (see conversation-flow.integration.test.ts). */
 const url = process.env.TEST_DATABASE_URL;
 if (url && !/test/i.test(new URL(url).pathname)) throw new Error("TEST_DATABASE_URL must point at a *test* database");
 
-const agent1: AuthContext = { userId: 1n, role: "AGENT" };
-const agent2: AuthContext = { userId: 2n, role: "AGENT" };
-const CUSTOMER = 100n;
+const agent1: AuthContext = { userId: uid(1), role: "AGENT" };
+const agent2: AuthContext = { userId: uid(2), role: "AGENT" };
+const CUSTOMER = uid(100);
 
 describe.skipIf(!url)("messaging on PostgreSQL", () => {
   let db: typeof import("@config/database.js").prisma;
   let conversations: import("../../../container.js").Container["conversations"];
   let assignments: import("../../../container.js").Container["assignments"];
   let messages: import("../../../container.js").Container["messages"];
-  let cid: bigint;
+  let cid: string;
 
   beforeAll(async () => {
     process.env.DATABASE_URL = url as string;
@@ -36,11 +37,11 @@ describe.skipIf(!url)("messaging on PostgreSQL", () => {
     await db.$executeRaw`TRUNCATE conversations, notifications, notification_preferences, tags RESTART IDENTITY CASCADE`;
     const { conversation } = await conversations.create(agent1, {
       customerId: CUSTOMER,
-      applicationId: 7n,
+      applicationId: uid(7),
       customerName: "Maya Chen",
       priority: "MEDIUM",
     });
-    cid = BigInt(conversation.id);
+    cid = conversation.id;
   });
 
   const takeOver = () => assignments.assign(agent1, cid, {});
@@ -61,7 +62,7 @@ describe.skipIf(!url)("messaging on PostgreSQL", () => {
       expect(created).toBe(true);
       expect(message).toMatchObject({
         senderType: "AGENT",
-        senderId: "1",
+        senderId: uid(1),
         type: "TEXT",
         content: "Hello Maya",
         status: "SENT",
@@ -111,18 +112,19 @@ describe.skipIf(!url)("messaging on PostgreSQL", () => {
 
     it("rejects a reply to a message from another conversation", async () => {
       await takeOver();
-      const other = (await conversations.create(agent1, { customerId: 200n, applicationId: 8n, priority: "LOW" }))
-        .conversation;
-      await assignments.assign(agent1, BigInt(other.id), {});
-      const foreign = await messages.send(agent1, BigInt(other.id), { clientId: "f", text: "elsewhere" });
+      const other = (
+        await conversations.create(agent1, { customerId: uid(200), applicationId: uid(8), priority: "LOW" })
+      ).conversation;
+      await assignments.assign(agent1, other.id, {});
+      const foreign = await messages.send(agent1, other.id, { clientId: "f", text: "elsewhere" });
       await expect(
-        messages.send(agent1, cid, { clientId: "r", text: "reply", replyToMessageId: BigInt(foreign.message.id) }),
+        messages.send(agent1, cid, { clientId: "r", text: "reply", replyToMessageId: foreign.message.id }),
       ).rejects.toBeInstanceOf(BadRequestError);
       const ok = await messages.send(agent1, cid, { clientId: "ok", text: "first" });
       const reply = await messages.send(agent1, cid, {
         clientId: "r2",
         text: "reply",
-        replyToMessageId: BigInt(ok.message.id),
+        replyToMessageId: ok.message.id,
       });
       expect(reply.message.replyToMessageId).toBe(ok.message.id);
     });
@@ -164,15 +166,17 @@ describe.skipIf(!url)("messaging on PostgreSQL", () => {
     it("notifies the owning agent of a new message unless the conversation is muted", async () => {
       await takeOver();
       await customerSays(1);
-      expect(await db.notification.count({ where: { notificationType: "NEW_MESSAGE", recipientId: 1n } })).toBe(1);
-      await db.conversationNotificationSetting.create({ data: { conversationId: cid, agentId: 1n, isMuted: true } });
+      expect(await db.notification.count({ where: { notificationType: "NEW_MESSAGE", recipientId: uid(1) } })).toBe(1);
+      await db.conversationNotificationSetting.create({
+        data: { conversationId: cid, agentId: uid(1), isMuted: true },
+      });
       await customerSays(2);
       expect(await db.notification.count({ where: { notificationType: "NEW_MESSAGE" } })).toBe(1);
     });
 
     it("rejects another customer's conversation", async () => {
       await expect(
-        messages.receiveFromCustomer({ customerId: 999n, conversationId: cid, clientId: "z", text: "x" }),
+        messages.receiveFromCustomer({ customerId: uid(999), conversationId: cid, clientId: "z", text: "x" }),
       ).rejects.toBeInstanceOf(NotFoundError);
     });
   });
@@ -199,7 +203,7 @@ describe.skipIf(!url)("messaging on PostgreSQL", () => {
         limit: 50,
         before: BigInt(second.meta.oldestSequence as string),
       });
-      expect(texts(last.items)).toEqual(["Agent 1 took over the conversation", "t1", "t2"]);
+      expect(texts(last.items)).toEqual([`Agent ${uid(1)} took over the conversation`, "t1", "t2"]);
       expect(last.meta.hasMore).toBe(false);
     });
 
@@ -218,7 +222,7 @@ describe.skipIf(!url)("messaging on PostgreSQL", () => {
 
     it("excludes soft-deleted messages and hides the thread from agents who cannot see it", async () => {
       await seed(2);
-      await db.message.updateMany({ where: { content: "t1" }, data: { deletedAt: new Date(), deletedBy: 1n } });
+      await db.message.updateMany({ where: { content: "t1" }, data: { deletedAt: new Date(), deletedBy: uid(1) } });
       expect(texts((await messages.history(agent1, cid, { limit: 50 })).items)).not.toContain("t1");
       await expect(messages.history(agent2, cid, { limit: 50 })).rejects.toBeInstanceOf(NotFoundError);
     });
@@ -233,9 +237,9 @@ describe.skipIf(!url)("messaging on PostgreSQL", () => {
       expect(await unread(agent1)).toBe(3);
       // Per agent: a supervisor has their own position and still sees all three.
       await db.conversationRead.create({
-        data: { conversationId: cid, readerType: "AGENT", readerId: 9n, lastReadSequenceNumber: 0n },
+        data: { conversationId: cid, readerType: "AGENT", readerId: uid(9), lastReadSequenceNumber: 0n },
       });
-      expect(await unread({ userId: 9n, role: "SUPERVISOR" })).toBe(3);
+      expect(await unread({ userId: uid(9), role: "SUPERVISOR" })).toBe(3);
 
       const state = await messages.markRead(agent1, cid);
       expect(state).toMatchObject({ unreadCount: 0, markedUnread: false });
@@ -254,7 +258,7 @@ describe.skipIf(!url)("messaging on PostgreSQL", () => {
       const receipts = await db.messageReceipt.findMany({ orderBy: { messageId: "asc" } });
       expect(receipts).toHaveLength(2);
       for (const r of receipts) {
-        expect(r).toMatchObject({ recipientType: "AGENT", recipientId: 1n });
+        expect(r).toMatchObject({ recipientType: "AGENT", recipientId: uid(1) });
         expect(r.readAt).not.toBeNull();
         expect(r.deliveredAt).not.toBeNull();
       }
@@ -273,7 +277,7 @@ describe.skipIf(!url)("messaging on PostgreSQL", () => {
       await messages.markRead(agent1, cid);
       const state = await messages.markRead(agent1, cid, m1!.id);
       expect(state.unreadCount).toBe(0);
-      const read = await db.conversationRead.findFirstOrThrow({ where: { conversationId: cid, readerId: 1n } });
+      const read = await db.conversationRead.findFirstOrThrow({ where: { conversationId: cid, readerId: uid(1) } });
       expect(read.lastReadSequenceNumber).toBe((await chat())[1]!.sequenceNumber);
     });
 
@@ -309,7 +313,7 @@ describe.skipIf(!url)("messaging on PostgreSQL", () => {
       await expect(messages.markDelivered(agent2, cid, m!.id)).rejects.toBeInstanceOf(NotFoundError); // hidden chat
       await expect(messages.markRead(agent2, cid)).rejects.toBeInstanceOf(NotFoundError);
       const own = await messages.send(agent1, cid, { clientId: "mine", text: "x" });
-      await expect(messages.markDelivered(agent1, cid, BigInt(own.message.id))).rejects.toBeInstanceOf(BadRequestError);
+      await expect(messages.markDelivered(agent1, cid, own.message.id)).rejects.toBeInstanceOf(BadRequestError);
       expect(await db.messageReceipt.count()).toBe(0);
     });
   });

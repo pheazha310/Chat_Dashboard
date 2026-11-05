@@ -10,12 +10,12 @@ export type NotificationType =
   | "SYSTEM";
 
 export interface NotifyAgentInput {
-  agentId: bigint;
+  agentId: string;
   type: NotificationType;
   title: string;
   body?: string;
-  conversationId?: bigint;
-  messageId?: bigint;
+  conversationId?: string;
+  messageId?: string;
 }
 
 export interface NotificationDto {

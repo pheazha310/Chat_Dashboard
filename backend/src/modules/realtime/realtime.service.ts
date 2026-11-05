@@ -28,7 +28,7 @@ export class RealtimeService implements RealtimeNotifier {
     message: { id: string; conversationId: string },
     options: { origin?: string; conversationUpdated?: boolean } = {},
   ) {
-    const snapshot = await this.conversations().snapshot(BigInt(message.conversationId));
+    const snapshot = await this.conversations().snapshot(message.conversationId);
     if (!snapshot) return;
     const audience = conversationAudience(snapshot);
     await this.bus.publish({
@@ -46,7 +46,7 @@ export class RealtimeService implements RealtimeNotifier {
     }
   }
 
-  async messageStatus(conversationId: bigint, messageIds: bigint[], status: "DELIVERED" | "READ") {
+  async messageStatus(conversationId: string, messageIds: string[], status: "DELIVERED" | "READ") {
     if (messageIds.length === 0) return;
     const snapshot = await this.conversations().snapshot(conversationId);
     if (!snapshot) return;
@@ -58,10 +58,10 @@ export class RealtimeService implements RealtimeNotifier {
   }
 
   async conversationEvent(
-    conversationId: bigint,
+    conversationId: string,
     kind: ConversationEventKind,
     extra: Record<string, unknown> = {},
-    alsoNotify: bigint[] = [],
+    alsoNotify: string[] = [],
   ) {
     const snapshot = await this.conversations().snapshot(conversationId);
     if (!snapshot) return;
@@ -82,7 +82,7 @@ export class RealtimeService implements RealtimeNotifier {
     }
   }
 
-  async presenceChanged(userId: bigint, status: string) {
+  async presenceChanged(userId: string, status: string) {
     await this.bus.publish({
       type: "presence.updated",
       payload: { userId: idToString(userId), status },
@@ -90,7 +90,7 @@ export class RealtimeService implements RealtimeNotifier {
     });
   }
 
-  async typing(conversationId: bigint, userId: bigint, active: boolean, origin?: string) {
+  async typing(conversationId: string, userId: string, active: boolean, origin?: string) {
     const snapshot = await this.conversations().snapshot(conversationId);
     if (!snapshot) return;
     await this.bus.publish({
@@ -101,7 +101,7 @@ export class RealtimeService implements RealtimeNotifier {
     });
   }
 
-  async readState(agentId: bigint, state: object) {
+  async readState(agentId: string, state: object) {
     await this.bus.publish({
       type: "conversation.read",
       payload: state,
@@ -109,7 +109,7 @@ export class RealtimeService implements RealtimeNotifier {
     });
   }
 
-  async notificationRead(agentId: bigint, payload: object) {
+  async notificationRead(agentId: string, payload: object) {
     await this.bus.publish({
       type: "notification.read",
       payload,
@@ -117,7 +117,7 @@ export class RealtimeService implements RealtimeNotifier {
     });
   }
 
-  async notification(agentId: bigint, notification: object) {
+  async notification(agentId: string, notification: object) {
     await this.bus.publish({
       type: "notification.new",
       payload: { notification },

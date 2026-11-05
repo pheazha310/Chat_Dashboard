@@ -4,14 +4,14 @@ import type { CursorQuery } from "@shared/utils/pagination.js";
 import type { LockedConversation, MessagePage, MessageRow } from "./message.types.js";
 
 interface AppendInput {
-  conversationId: bigint;
+  conversationId: string;
   clientId: string | null;
   senderType: string;
-  senderId: bigint | null;
+  senderId: string | null;
   messageType: string;
   content: string;
   metadata?: Prisma.InputJsonValue;
-  replyToMessageId?: bigint | null;
+  replyToMessageId?: string | null;
   /** Updates the inbox preview and last-activity time (not for SYSTEM messages). */
   preview: string | null;
 }
@@ -24,26 +24,26 @@ export class MessageRepository {
   }
 
   /** Locks the conversation row until commit, so concurrent senders and retries are processed one at a time. */
-  async lock(id: bigint): Promise<LockedConversation | null> {
+  async lock(id: string): Promise<LockedConversation | null> {
     const rows = await this.db.$queryRaw<LockedConversation[]>`
       SELECT id, customer_id AS "customerId", status, handoff_status AS "handoffStatus",
              assigned_agent_id AS "assignedAgentId", is_archived AS "isArchived"
-        FROM conversations WHERE id = ${id} FOR UPDATE`;
+        FROM conversations WHERE id = ${id}::uuid FOR UPDATE`;
     return rows[0] ?? null;
   }
 
-  async isViewer(conversationId: bigint, agentId: bigint): Promise<boolean> {
+  async isViewer(conversationId: string, agentId: string): Promise<boolean> {
     const count = await this.db.conversationAssignment.count({
       where: { conversationId, agentId, endedAt: null, assignmentType: "VIEWER" },
     });
     return count > 0;
   }
 
-  findByClientId(conversationId: bigint, clientId: string): Promise<MessageRow | null> {
+  findByClientId(conversationId: string, clientId: string): Promise<MessageRow | null> {
     return this.db.message.findUnique({ where: { conversationId_clientId: { conversationId, clientId } } });
   }
 
-  findById(conversationId: bigint, id: bigint): Promise<MessageRow | null> {
+  findById(conversationId: string, id: string): Promise<MessageRow | null> {
     return this.db.message.findFirst({ where: { id, conversationId, deletedAt: null } });
   }
 
@@ -53,12 +53,12 @@ export class MessageRepository {
       input.preview === null
         ? await this.db.$queryRaw<{ seq: bigint; at: Date }[]>`
             UPDATE conversations SET last_sequence_number = last_sequence_number + 1, updated_at = now()
-             WHERE id = ${input.conversationId} RETURNING last_sequence_number AS seq, now() AS at`
+             WHERE id = ${input.conversationId}::uuid RETURNING last_sequence_number AS seq, now() AS at`
         : await this.db.$queryRaw<{ seq: bigint; at: Date }[]>`
             UPDATE conversations
                SET last_sequence_number = last_sequence_number + 1, last_message_at = now(),
                    last_message_preview = ${input.preview}, updated_at = now()
-             WHERE id = ${input.conversationId} RETURNING last_sequence_number AS seq, now() AS at`;
+             WHERE id = ${input.conversationId}::uuid RETURNING last_sequence_number AS seq, now() AS at`;
     const allocated = rows[0];
     if (!allocated) throw new Error("conversation vanished while appending a message");
     const { seq: sequenceNumber, at: createdAt } = allocated;
@@ -80,7 +80,7 @@ export class MessageRepository {
   }
 
   /** A customer message reopens a resolved or closed conversation. */
-  async reopen(conversationId: bigint): Promise<void> {
+  async reopen(conversationId: string): Promise<void> {
     await this.db.conversation.updateMany({
       where: { id: conversationId, status: { not: "OPEN" } },
       data: { status: "OPEN", resolvedAt: null, closedAt: null },
@@ -92,7 +92,7 @@ export class MessageRepository {
   }
 
   /** Oldest-to-newest page. `before` pages back in time, `after` forward (reconnect sync); default is the latest. */
-  async history(conversationId: bigint, query: CursorQuery): Promise<MessagePage> {
+  async history(conversationId: string, query: CursorQuery): Promise<MessagePage> {
     const base = { conversationId, deletedAt: null };
     if (query.after !== undefined) {
       const rows = await this.db.message.findMany({
@@ -111,18 +111,18 @@ export class MessageRepository {
   }
 
   /** The newest message at or before a sequence number (the read marker target). */
-  findAtOrBefore(conversationId: bigint, sequenceNumber: bigint): Promise<MessageRow | null> {
+  findAtOrBefore(conversationId: string, sequenceNumber: bigint): Promise<MessageRow | null> {
     return this.db.message.findFirst({
       where: { conversationId, sequenceNumber: { lte: sequenceNumber } },
       orderBy: { sequenceNumber: "desc" },
     });
   }
 
-  latest(conversationId: bigint): Promise<MessageRow | null> {
+  latest(conversationId: string): Promise<MessageRow | null> {
     return this.db.message.findFirst({ where: { conversationId }, orderBy: { sequenceNumber: "desc" } });
   }
 
-  async readPosition(conversationId: bigint, agentId: bigint): Promise<bigint> {
+  async readPosition(conversationId: string, agentId: string): Promise<bigint> {
     const row = await this.db.conversationRead.findUnique({
       where: { conversationId_readerType_readerId: { conversationId, readerType: "AGENT", readerId: agentId } },
       select: { lastReadSequenceNumber: true },
@@ -132,15 +132,15 @@ export class MessageRepository {
 
   /** Moves the agent's read position forward only (an older tab can never move it back) and clears "marked unread". */
   async advanceRead(
-    conversationId: bigint,
-    agentId: bigint,
+    conversationId: string,
+    agentId: string,
     sequenceNumber: bigint,
-    messageId: bigint | null,
+    messageId: string | null,
   ): Promise<void> {
     await this.db.$executeRaw`
       INSERT INTO conversation_reads (conversation_id, reader_type, reader_id, last_read_message_id,
                                       last_read_sequence_number, last_read_at, marked_unread, created_at, updated_at)
-      VALUES (${conversationId}, 'AGENT', ${agentId}, ${messageId}, ${sequenceNumber}, now(), false, now(), now())
+      VALUES (${conversationId}::uuid, 'AGENT', ${agentId}::uuid, ${messageId}::uuid, ${sequenceNumber}, now(), false, now(), now())
       ON CONFLICT (conversation_id, reader_type, reader_id) DO UPDATE SET
         last_read_message_id = CASE WHEN EXCLUDED.last_read_sequence_number >= conversation_reads.last_read_sequence_number
                                     THEN EXCLUDED.last_read_message_id ELSE conversation_reads.last_read_message_id END,
@@ -152,28 +152,28 @@ export class MessageRepository {
    * Records read receipts for the customer messages the agent just read and marks those messages READ.
    * Returns the ids whose status changed (to announce over the socket later).
    */
-  async receiptReadRange(conversationId: bigint, agentId: bigint, from: bigint, to: bigint): Promise<bigint[]> {
+  async receiptReadRange(conversationId: string, agentId: string, from: bigint, to: bigint): Promise<string[]> {
     await this.db.$executeRaw`
       INSERT INTO message_receipts (message_id, recipient_type, recipient_id, delivered_at, read_at, created_at)
-      SELECT m.id, 'AGENT', ${agentId}, now(), now(), now() FROM messages m
-       WHERE m.conversation_id = ${conversationId} AND m.sequence_number > ${from} AND m.sequence_number <= ${to}
+      SELECT m.id, 'AGENT', ${agentId}::uuid, now(), now(), now() FROM messages m
+       WHERE m.conversation_id = ${conversationId}::uuid AND m.sequence_number > ${from} AND m.sequence_number <= ${to}
          AND m.sender_type = 'CUSTOMER' AND m.deleted_at IS NULL
       ON CONFLICT (message_id, recipient_type, recipient_id) DO UPDATE SET
         delivered_at = COALESCE(message_receipts.delivered_at, EXCLUDED.delivered_at),
         read_at = COALESCE(message_receipts.read_at, EXCLUDED.read_at)`;
-    const rows = await this.db.$queryRaw<{ id: bigint }[]>`
+    const rows = await this.db.$queryRaw<{ id: string }[]>`
       UPDATE messages SET status = 'READ', updated_at = now()
-       WHERE conversation_id = ${conversationId} AND sequence_number > ${from} AND sequence_number <= ${to}
+       WHERE conversation_id = ${conversationId}::uuid AND sequence_number > ${from} AND sequence_number <= ${to}
          AND sender_type = 'CUSTOMER' AND deleted_at IS NULL AND status <> 'READ'
       RETURNING id`;
     return rows.map((row) => row.id);
   }
 
   /** Delivery receipt for one customer message; status only moves forward (SENT to DELIVERED). */
-  async receiptDelivered(messageId: bigint, agentId: bigint): Promise<boolean> {
+  async receiptDelivered(messageId: string, agentId: string): Promise<boolean> {
     await this.db.$executeRaw`
       INSERT INTO message_receipts (message_id, recipient_type, recipient_id, delivered_at, created_at)
-      VALUES (${messageId}, 'AGENT', ${agentId}, now(), now())
+      VALUES (${messageId}::uuid, 'AGENT', ${agentId}::uuid, now(), now())
       ON CONFLICT (message_id, recipient_type, recipient_id) DO UPDATE SET
         delivered_at = COALESCE(message_receipts.delivered_at, EXCLUDED.delivered_at)`;
     const { count } = await this.db.message.updateMany({
@@ -184,7 +184,7 @@ export class MessageRepository {
   }
 
   /** "Mark as unread": keeps the read position, so only the flag changes. */
-  async markUnread(conversationId: bigint, agentId: bigint): Promise<void> {
+  async markUnread(conversationId: string, agentId: string): Promise<void> {
     await this.db.conversationRead.upsert({
       where: { conversationId_readerType_readerId: { conversationId, readerType: "AGENT", readerId: agentId } },
       // No row yet means position 0 (counts already treat it so), so existing unread messages stay unread.
@@ -199,7 +199,7 @@ export class MessageRepository {
     });
   }
 
-  async unreadState(conversationId: bigint, agentId: bigint) {
+  async unreadState(conversationId: string, agentId: string) {
     const position = await this.readPosition(conversationId, agentId);
     const [unread, read] = await Promise.all([
       this.db.message.count({

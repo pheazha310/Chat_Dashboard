@@ -1,6 +1,6 @@
 /**
  * Where the real backend lives. With no `VITE_WS_URL` the app runs against the in-browser mock server.
- * The REST URL is derived from the WebSocket URL (ws://host:4000/ws -> http://host:4000/api) unless set explicitly.
+ * The REST URL is derived from the WebSocket URL (ws://host:4000/ws -> http://host:4000/admin/api/v1) unless set explicitly.
  */
 export const WS_URL: string | undefined = import.meta.env.VITE_WS_URL || undefined;
 
@@ -9,7 +9,7 @@ export function deriveApiUrl(wsUrl: string | undefined): string | undefined {
   try {
     const url = new URL(wsUrl);
     url.protocol = url.protocol === "wss:" ? "https:" : "http:";
-    url.pathname = "/api";
+    url.pathname = "/admin/api/v1";
     url.search = "";
     return url.toString().replace(/\/$/, "");
   } catch {

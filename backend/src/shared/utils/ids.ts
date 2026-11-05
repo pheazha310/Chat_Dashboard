@@ -1,12 +1,9 @@
 import { z } from "zod";
 
-/** Ids are BigInt in PostgreSQL and strings in JSON (BigInt is not JSON-serializable). */
-export const idToString = (id: bigint) => id.toString();
+/** Ids are UUIDs in PostgreSQL and in JSON, so they pass through unchanged. */
+export const idToString = (id: string) => id;
 
-/** Positive integer id received as a string; parsed to BigInt. */
-export const idSchema = z
-  .string()
-  .regex(/^[1-9]\d{0,17}$/, "Invalid id")
-  .transform((value) => BigInt(value));
+/** UUID id received as a string, normalized to lower case so ids compare and cache consistently. */
+export const idSchema = z.uuid({ error: "Invalid id" }).transform((value) => value.toLowerCase());
 
 export const idParams = z.object({ id: idSchema });

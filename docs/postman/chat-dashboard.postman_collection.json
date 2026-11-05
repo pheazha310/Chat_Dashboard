@@ -1,0 +1,838 @@
+{
+  "info": {
+    "name": "Chat Dashboard - Backend 2 (staff API)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Dev auth only: Bearer dev:<userId>:<ROLE> (AUTH_MODE=dev). Other tokens: dev:00000000-0000-4000-8000-000000000004:AGENT, dev:00000000-0000-4000-8000-000000000009:SUPERVISOR. Run 'Create' first, then 'Take over' before sending messages."
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:4000"
+    },
+    {
+      "key": "token",
+      "value": "dev:00000000-0000-4000-8000-000000000003:AGENT"
+    },
+    {
+      "key": "convId",
+      "value": ""
+    },
+    {
+      "key": "msgId",
+      "value": ""
+    },
+    {
+      "key": "notifId",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "GET /api/health (no auth)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "health"],
+              "query": []
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Conversations",
+      "item": [
+        {
+          "name": "List inbox",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/api/v1/conversations?filter=all&page=1&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "api", "v1", "conversations"],
+              "query": [
+                {
+                  "key": "filter",
+                  "value": "all"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "size",
+                  "value": "20"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/api/v1/conversations",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "api", "v1", "conversations"],
+              "query": []
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerId\": \"00000000-0000-4000-8000-000000000100\",\n  \"applicationId\": \"00000000-0000-4000-8000-000000005001\",\n  \"customerName\": \"Test Customer\",\n  \"subject\": \"Loan question\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "if (j.data && j.data.id) pm.collectionVariables.set('convId', String(j.data.id));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Detail",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/api/v1/conversations/{{convId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "api", "v1", "conversations", "{{convId}}"],
+              "query": []
+            }
+          }
+        },
+        {
+          "name": "Activities",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/api/v1/conversations/{{convId}}/activities",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "api", "v1", "conversations", "{{convId}}", "activities"],
+              "query": []
+            }
+          }
+        },
+        {
+          "name": "Change status",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/api/v1/conversations/{{convId}}/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "api", "v1", "conversations", "{{convId}}", "status"],
+              "query": []
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"RESOLVED\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Archive",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/api/v1/conversations/{{convId}}/archive",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "api", "v1", "conversations", "{{convId}}", "archive"],
+              "query": []
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Restore",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/api/v1/conversations/{{convId}}/restore",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "api", "v1", "conversations", "{{convId}}", "restore"],
+              "query": []
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "By customer",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/api/v1/conversations?customerId=00000000-0000-4000-8000-000000000100",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "api", "v1", "conversations"],
+              "query": [
+                {
+                  "key": "customerId",
+                  "value": "100"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Assignment",
+      "item": [
+        {
+          "name": "Take over (as caller)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/api/v1/conversations/{{convId}}/assign",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "api", "v1", "conversations", "{{convId}}", "assign"],
+              "query": []
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Assign agent 4 (supervisor)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/api/v1/conversations/{{convId}}/assign",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "api", "v1", "conversations", "{{convId}}", "assign"],
+              "query": []
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"agentId\": \"00000000-0000-4000-8000-000000000004\",\n  \"note\": \"please handle\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "dev:00000000-0000-4000-8000-000000000009:SUPERVISOR",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Transfer to agent 4",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/api/v1/conversations/{{convId}}/transfer",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "api", "v1", "conversations", "{{convId}}", "transfer"],
+              "query": []
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"agentId\": \"00000000-0000-4000-8000-000000000004\",\n  \"note\": \"handover\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Unassign",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/api/v1/conversations/{{convId}}/unassign",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "api", "v1", "conversations", "{{convId}}", "unassign"],
+              "query": []
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"note\": \"back to queue\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Assignment history",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/api/v1/conversations/{{convId}}/assignments",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "api", "v1", "conversations", "{{convId}}", "assignments"],
+              "query": []
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Messages",
+      "item": [
+        {
+          "name": "Send (idempotent via clientId)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/api/v1/conversations/{{convId}}/messages",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "api", "v1", "conversations", "{{convId}}", "messages"],
+              "query": []
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientId\": \"{{$guid}}\",\n  \"text\": \"Hello from Postman\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "const m = j.data && (j.data.message || j.data);",
+                  "if (m && m.id) pm.collectionVariables.set('msgId', String(m.id));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "History (latest 50)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/api/v1/conversations/{{convId}}/messages?limit=50",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "api", "v1", "conversations", "{{convId}}", "messages"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "50"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "History after sequence",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/api/v1/conversations/{{convId}}/messages?after=0&limit=50",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "api", "v1", "conversations", "{{convId}}", "messages"],
+              "query": [
+                {
+                  "key": "after",
+                  "value": "0"
+                },
+                {
+                  "key": "limit",
+                  "value": "50"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Mark delivered",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/api/v1/conversations/{{convId}}/messages/{{msgId}}/delivered",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "api", "v1", "conversations", "{{convId}}", "messages", "{{msgId}}", "delivered"],
+              "query": []
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Mark read",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/api/v1/conversations/{{convId}}/read",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "api", "v1", "conversations", "{{convId}}", "read"],
+              "query": []
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Mark unread",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/api/v1/conversations/{{convId}}/unread",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "api", "v1", "conversations", "{{convId}}", "unread"],
+              "query": []
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Notifications",
+      "item": [
+        {
+          "name": "List unread",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/api/v1/notifications?unread=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "api", "v1", "notifications"],
+              "query": [
+                {
+                  "key": "unread",
+                  "value": "true"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "if (j.data && j.data[0]) pm.collectionVariables.set('notifId', String(j.data[0].id));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Unread count",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/api/v1/notifications/unread-count",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "api", "v1", "notifications", "unread-count"],
+              "query": []
+            }
+          }
+        },
+        {
+          "name": "Mark one read",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/api/v1/notifications/{{notifId}}/read",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "api", "v1", "notifications", "{{notifId}}", "read"],
+              "query": []
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Read all",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/api/v1/notifications/read-all",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "api", "v1", "notifications", "read-all"],
+              "query": []
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Get preferences",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/api/v1/notifications/preferences",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "api", "v1", "notifications", "preferences"],
+              "query": []
+            }
+          }
+        },
+        {
+          "name": "Update preferences",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/api/v1/notifications/preferences",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "api", "v1", "notifications", "preferences"],
+              "query": []
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sound\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Mute conversation",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/api/v1/conversations/{{convId}}/mute",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "api", "v1", "conversations", "{{convId}}", "mute"],
+              "query": []
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"muted\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Presence",
+      "item": [
+        {
+          "name": "List online agents",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/api/v1/presence",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "api", "v1", "presence"],
+              "query": []
+            }
+          }
+        },
+        {
+          "name": "Set my status",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/api/v1/presence/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "api", "v1", "presence", "me"],
+              "query": []
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"AVAILABLE\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Customer info",
+      "item": [
+        {
+          "name": "Customer profile",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/api/v1/conversations/{{convId}}/customer",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "api", "v1", "conversations", "{{convId}}", "customer"],
+              "query": []
+            }
+          }
+        },
+        {
+          "name": "Customer's other conversations",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/api/v1/conversations/{{convId}}/customer/conversations",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "api", "v1", "conversations", "{{convId}}", "customer", "conversations"],
+              "query": []
+            }
+          }
+        },
+        {
+          "name": "Participants",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/api/v1/conversations/{{convId}}/participants",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "api", "v1", "conversations", "{{convId}}", "participants"],
+              "query": []
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Spec",
+      "item": [
+        {
+          "name": "OpenAPI JSON (no auth)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/api/v1/openapi.json",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "api", "v1", "openapi.json"],
+              "query": []
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

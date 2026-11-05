@@ -62,18 +62,16 @@ export class PresenceService implements AvailableAgents {
   }
 
   /** Agents who are online and AVAILABLE (not BUSY or AWAY). Empty if presence is unavailable. */
-  async availableAgentIds(): Promise<bigint[]> {
+  async availableAgentIds(): Promise<string[]> {
     try {
-      return (await this.snapshot())
-        .filter((entry) => entry.status === "AVAILABLE")
-        .map((entry) => BigInt(entry.userId));
+      return (await this.snapshot()).filter((entry) => entry.status === "AVAILABLE").map((entry) => entry.userId);
     } catch (error) {
       logger.warn({ err: error }, "available agents unavailable");
       return [];
     }
   }
 
-  private async announce(userId: bigint, status: PresenceStatus) {
+  private async announce(userId: string, status: PresenceStatus) {
     await bestEffort("presence history", () => this.repository.recordPeriod(userId, status));
     await bestEffort("realtime", () => this.realtime.presenceChanged(userId, status));
   }

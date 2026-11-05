@@ -1,13 +1,13 @@
 # Conversations, assignments, messages, notifications and customer API
 
-Base path `/api/conversations`. Responses use the envelopes in [api-response-contracts.md](api-response-contracts.md).
-Ids are strings (PostgreSQL `BIGINT`). Timestamps are ISO 8601.
+Base path `/admin/api/v1/conversations` (the staff namespace; health stays at `/api/health`). Responses use the envelopes in [api-response-contracts.md](api-response-contracts.md).
+Ids are UUID strings. Timestamps are ISO 8601.
 
-**Machine-readable spec:** `GET /api/openapi.json` (OpenAPI 3.1, generated from the code; this page is the narrative).
+**Machine-readable spec:** `GET /admin/api/v1/openapi.json` (OpenAPI 3.1, generated from the code; this page is the narrative).
 
 **Authentication:** every route needs `Authorization: Bearer <token>` from Backend 1. Only `AGENT`, `SUPERVISOR` and
 `ADMIN` are accepted (customers get 403). Until the Backend 1 contract is provided, `AUTH_MODE=dev` accepts
-`dev:<userId>:<ROLE>` tokens (rejected in production).
+`dev:<userUuid>:<ROLE>` tokens (rejected in production).
 
 **Authorization:** see "As built" in [chat-logic-design.md](chat-logic-design.md). A conversation the caller may not
 see is always `404`. Each conversation detail includes `permissions` flags computed by the same rules.
@@ -54,10 +54,10 @@ time and never count as unread.
 
 ### Presence
 
-| Method | Path           | Body                                    | Notes                                                                                            |
-| ------ | -------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| GET    | `/presence`    |                                         | Agents with an open WebSocket and their status. Offline agents are not listed. (`/api/presence`) |
-| PUT    | `/presence/me` | `{ status: AVAILABLE \| BUSY \| AWAY }` | Remembered for the next connection; broadcast as `presence.updated` while online.                |
+| Method | Path           | Body                                    | Notes                                                                                                     |
+| ------ | -------------- | --------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| GET    | `/presence`    |                                         | Agents with an open WebSocket and their status. Offline agents are not listed. (`/admin/api/v1/presence`) |
+| PUT    | `/presence/me` | `{ status: AVAILABLE \| BUSY \| AWAY }` | Remembered for the next connection; broadcast as `presence.updated` while online.                         |
 
 Realtime delivery of all of the above is described in [websocket-events.md](websocket-events.md).
 
@@ -101,16 +101,16 @@ Errors: `400` validation (`error.details` lists zod issues), `401` missing/inval
 `404` missing or hidden, `409` already in that state, lost a race (two agents claiming at once: one gets 409), or a
 `clientId` already used by a different sender.
 
-Example: `POST /api/conversations/12/assign` with `{}` as agent 1 →
+Example: `POST /admin/api/v1/conversations/12/assign` with `{}` as agent 1 →
 
 ```json
 {
   "status": "success",
   "data": {
-    "id": "5",
-    "conversationId": "12",
-    "agentId": "1",
-    "assignedBy": "1",
+    "id": "00000000-0000-4000-8000-000000000005",
+    "conversationId": "00000000-0000-4000-8000-000000000012",
+    "agentId": "00000000-0000-4000-8000-000000000001",
+    "assignedBy": "00000000-0000-4000-8000-000000000001",
     "type": "OWNER",
     "action": "TAKEOVER",
     "note": null,

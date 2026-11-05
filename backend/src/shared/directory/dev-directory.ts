@@ -7,7 +7,7 @@ import type { AgentProfile, CustomerProfile, Directory } from "@shared/ports/dir
 export class DevDirectory implements Directory {
   readonly source = "dev-stub";
 
-  async getCustomer(customerId: bigint): Promise<CustomerProfile> {
+  async getCustomer(customerId: string): Promise<CustomerProfile> {
     return {
       id: customerId.toString(),
       name: `Customer ${customerId}`,
@@ -21,7 +21,7 @@ export class DevDirectory implements Directory {
     };
   }
 
-  async getAgents(agentIds: bigint[]): Promise<AgentProfile[]> {
+  async getAgents(agentIds: string[]): Promise<AgentProfile[]> {
     return agentIds.map((id) => ({ id: id.toString(), name: `Agent ${id}`, avatarUrl: null }));
   }
 }

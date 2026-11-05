@@ -49,7 +49,7 @@ export class ConversationService implements ConversationAccess {
     };
   }
 
-  async get(auth: AuthContext, id: bigint) {
+  async get(auth: AuthContext, id: string) {
     const conversation = await this.load(auth, id);
     const unread = await this.repository.unreadCounts(auth.userId, [id]);
     const agents = await this.agentProfiles([conversation.assignedAgentId]);
@@ -95,7 +95,7 @@ export class ConversationService implements ConversationAccess {
     return { conversation: await this.get(auth, id), created };
   }
 
-  async changeStatus(auth: AuthContext, id: bigint, to: ConversationStatus) {
+  async changeStatus(auth: AuthContext, id: string, to: ConversationStatus) {
     const conversation = await this.load(auth, id);
     if (conversation.status === to) throw new ConflictError(`Conversation is already ${to}`);
     const permissions = permissionsFor(auth, conversation);
@@ -135,21 +135,21 @@ export class ConversationService implements ConversationAccess {
     return this.get(auth, id);
   }
 
-  archive(auth: AuthContext, id: bigint) {
+  archive(auth: AuthContext, id: string) {
     return this.setArchived(auth, id, true);
   }
 
-  restore(auth: AuthContext, id: bigint) {
+  restore(auth: AuthContext, id: string) {
     return this.setArchived(auth, id, false);
   }
 
-  async activities(auth: AuthContext, id: bigint, query: PageQuery) {
+  async activities(auth: AuthContext, id: string, query: PageQuery) {
     await this.load(auth, id);
     const { items, total } = await this.repository.listActivities(id, pageArgs(query));
     return { items: items.map(toActivity), meta: pageMeta(total, query) };
   }
 
-  private async setArchived(auth: AuthContext, id: bigint, archived: boolean) {
+  private async setArchived(auth: AuthContext, id: string, archived: boolean) {
     const conversation = await this.load(auth, id);
     const permissions = permissionsFor(auth, conversation);
     if (conversation.isArchived === archived) {
@@ -173,12 +173,12 @@ export class ConversationService implements ConversationAccess {
     return this.get(auth, id);
   }
 
-  async requireVisible(auth: AuthContext, id: bigint): Promise<AccessibleConversationState> {
+  async requireVisible(auth: AuthContext, id: string): Promise<AccessibleConversationState> {
     return this.load(auth, id);
   }
 
   /** A conversation is waiting for a human: tell the agents who are online and AVAILABLE (not the one who opened it). */
-  private async notifyAvailableAgents(auth: AuthContext, id: bigint, input: CreateInput) {
+  private async notifyAvailableAgents(auth: AuthContext, id: string, input: CreateInput) {
     const agents = (await this.availableAgents.availableAgentIds()).filter((agent) => agent !== auth.userId);
     const who = input.customerName ?? `customer ${input.customerId}`;
     await Promise.all(
@@ -195,8 +195,8 @@ export class ConversationService implements ConversationAccess {
   }
 
   /** Agent names from Backend 1. If it is unreachable the conversations still load, just without the profile. */
-  private async agentProfiles(ids: (bigint | null)[]): Promise<Map<string, AgentProfile>> {
-    const wanted = [...new Set(ids.filter((id): id is bigint => id !== null))];
+  private async agentProfiles(ids: (string | null)[]): Promise<Map<string, AgentProfile>> {
+    const wanted = [...new Set(ids.filter((id): id is string => id !== null))];
     if (wanted.length === 0) return new Map();
     try {
       return new Map((await this.directory.getAgents(wanted)).map((agent) => [agent.id, agent]));
@@ -207,7 +207,7 @@ export class ConversationService implements ConversationAccess {
   }
 
   /** Typing indicators come only from whoever may send in the conversation (same rule as sending). */
-  async assertCanType(auth: AuthContext, id: bigint) {
+  async assertCanType(auth: AuthContext, id: string) {
     const conversation = await this.load(auth, id);
     if (!permissionsFor(auth, conversation).canSendMessage) {
       throw new ForbiddenError("Only the agent who owns an open conversation can send typing indicators");
@@ -218,7 +218,7 @@ export class ConversationService implements ConversationAccess {
    * Public state of a conversation plus who may see it, for realtime events. Not caller-specific (no unread count,
    * no permissions): each recipient's own view is derived on their client or by REST.
    */
-  async snapshot(id: bigint) {
+  async snapshot(id: string) {
     const found = await this.repository.findForEvent(id);
     if (!found) return null;
     const agents = await this.agentProfiles([found.conversation.assignedAgentId]);
@@ -236,7 +236,7 @@ export class ConversationService implements ConversationAccess {
   }
 
   /** Loads a conversation the caller may see; hidden ones look like missing ones so existence is not leaked. */
-  private async load(auth: AuthContext, id: bigint): Promise<AccessibleConversation> {
+  private async load(auth: AuthContext, id: string): Promise<AccessibleConversation> {
     const conversation = await this.repository.findForAccess(id, auth.userId);
     const viewer = conversation?.conversationAssignments.some((a) => a.assignmentType === "VIEWER") ?? false;
     if (!conversation || !canView(auth, conversation, viewer)) {
@@ -272,7 +272,7 @@ const released = { handoffStatus: "NONE", conversationMode: "AI", assignedAgentI
 
 // ─── DTO mapping ───────────────────────────────────────────────────────────
 
-const nullableId = (value: bigint | null) => (value === null ? null : idToString(value));
+const nullableId = (value: string | null) => (value === null ? null : idToString(value));
 const iso = (value: Date | null) => (value === null ? null : value.toISOString());
 
 function toSummary(
@@ -314,7 +314,7 @@ function toDetail(
   return {
     ...toSummary(row, unreadCount, agents),
     summary: row.summary,
-    lastSequenceNumber: idToString(row.lastSequenceNumber),
+    lastSequenceNumber: row.lastSequenceNumber.toString(),
     permissions,
   };
 }

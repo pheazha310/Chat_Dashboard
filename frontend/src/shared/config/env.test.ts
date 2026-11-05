@@ -3,9 +3,9 @@ import { deriveApiUrl } from "./env";
 
 describe("deriveApiUrl", () => {
   it.each([
-    ["ws://localhost:4000/ws", "http://localhost:4000/api"],
-    ["wss://chat.example.com/ws", "https://chat.example.com/api"],
-    ["ws://localhost:4000/ws?x=1", "http://localhost:4000/api"],
+    ["ws://localhost:4000/ws", "http://localhost:4000/admin/api/v1"],
+    ["wss://chat.example.com/ws", "https://chat.example.com/admin/api/v1"],
+    ["ws://localhost:4000/ws?x=1", "http://localhost:4000/admin/api/v1"],
   ])("%s -> %s", (ws, api) => {
     expect(deriveApiUrl(ws)).toBe(api);
   });

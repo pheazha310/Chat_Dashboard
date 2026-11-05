@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { idSchema } from "../ids.js";
 import { cursorQuery, pageArgs, pageMeta, pageQuery } from "../pagination.js";
+import { uid } from "../../../__tests__/support/ids.js";
 
 describe("pagination", () => {
   it("applies defaults and computes skip/take", () => {
@@ -22,8 +23,10 @@ describe("pagination", () => {
 });
 
 describe("idSchema", () => {
-  it("parses to bigint and rejects junk", () => {
-    expect(idSchema.parse("123")).toBe(123n);
-    for (const bad of ["0", "-1", "1.5", "abc", "01", "1".repeat(20)]) expect(() => idSchema.parse(bad)).toThrow();
+  it("accepts a UUID (lower-cased) and rejects junk", () => {
+    expect(idSchema.parse(uid(123))).toBe(uid(123));
+    expect(idSchema.parse(uid(123).toUpperCase())).toBe(uid(123));
+    for (const bad of ["0", "123", "-1", "abc", "1".repeat(36), `${uid(1)}x`])
+      expect(() => idSchema.parse(bad)).toThrow();
   });
 });

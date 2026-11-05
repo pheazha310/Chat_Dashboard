@@ -7,6 +7,7 @@ import type { NotificationService } from "@modules/notifications/index.js";
 import type { AssignmentRepository } from "../assignment.repository.js";
 import { AssignmentService } from "../assignment.service.js";
 import type { ConversationState } from "../assignment.types.js";
+import { uid } from "../../../__tests__/support/ids.js";
 
 vi.mock("@config/logger.js", () => ({ logger: { warn: vi.fn() } }));
 
@@ -33,24 +34,24 @@ const service = new AssignmentService(
   realtime,
 );
 
-const agent: AuthContext = { userId: 1n, role: "AGENT" };
-const other: AuthContext = { userId: 2n, role: "AGENT" };
-const supervisor: AuthContext = { userId: 9n, role: "SUPERVISOR" };
+const agent: AuthContext = { userId: uid(1), role: "AGENT" };
+const other: AuthContext = { userId: uid(2), role: "AGENT" };
+const supervisor: AuthContext = { userId: uid(9), role: "SUPERVISOR" };
 
 const state = (patch: Partial<ConversationState> = {}): ConversationState => ({
-  id: 10n,
+  id: uid(10),
   status: "OPEN",
   handoffStatus: "NEEDS_HUMAN",
   assignedAgentId: null,
   isArchived: false,
   ...patch,
 });
-const owned = (owner: bigint) => state({ handoffStatus: "ASSIGNED", assignedAgentId: owner });
+const owned = (owner: string) => state({ handoffStatus: "ASSIGNED", assignedAgentId: owner });
 const assignmentRow = fromPartial<Awaited<ReturnType<AssignmentRepository["createOwner"]>>>({
-  id: 1n,
-  conversationId: 10n,
-  agentId: 1n,
-  assignedBy: 1n,
+  id: uid(1),
+  conversationId: uid(10),
+  agentId: uid(1),
+  assignedBy: uid(1),
   assignmentType: "OWNER",
   assignmentAction: "TAKEOVER",
   note: null,
@@ -73,23 +74,23 @@ beforeEach(() => {
 describe("assign", () => {
   it("lets an agent take over a waiting conversation and records the full history", async () => {
     repo.findState.mockResolvedValue(state());
-    const result = await service.assign(agent, 10n, {});
-    expect(repo.claim).toHaveBeenCalledWith(state(), 1n);
+    const result = await service.assign(agent, uid(10), {});
+    expect(repo.claim).toHaveBeenCalledWith(state(), uid(1));
     expect(repo.createOwner).toHaveBeenCalledWith(
-      expect.objectContaining({ agentId: 1n, assignedBy: 1n, action: "TAKEOVER" }),
+      expect.objectContaining({ agentId: uid(1), assignedBy: uid(1), action: "TAKEOVER" }),
     );
-    expect(repo.joinAsOwner).toHaveBeenCalledWith(10n, 1n);
+    expect(repo.joinAsOwner).toHaveBeenCalledWith(uid(10), uid(1));
     expect(repo.addActivity).toHaveBeenCalledWith(expect.objectContaining({ activityType: "ASSIGNED" }));
     expect(result.action).toBe("TAKEOVER");
     expect(realtime.conversationEvent).toHaveBeenCalledWith(
-      10n,
+      uid(10),
       "assigned",
-      expect.objectContaining({ agentId: "1", assignedBy: "1", action: "TAKEOVER" }),
+      expect.objectContaining({ agentId: uid(1), assignedBy: uid(1), action: "TAKEOVER" }),
       [],
     );
     expect(systemMessages.post).toHaveBeenCalledWith(
-      10n,
-      "Agent 1 took over the conversation",
+      uid(10),
+      `Agent ${uid(1)} took over the conversation`,
       expect.objectContaining({ event: "takeover" }),
     );
     expect(notifications.notifyAgent).not.toHaveBeenCalled(); // no self-notification
@@ -98,114 +99,114 @@ describe("assign", () => {
   it("loses cleanly when another agent claimed it first", async () => {
     repo.findState.mockResolvedValue(state());
     repo.claim.mockResolvedValue(false);
-    await expect(service.assign(agent, 10n, {})).rejects.toBeInstanceOf(ConflictError);
+    await expect(service.assign(agent, uid(10), {})).rejects.toBeInstanceOf(ConflictError);
     expect(repo.createOwner).not.toHaveBeenCalled();
     expect(repo.addActivity).not.toHaveBeenCalled();
   });
 
   it("forbids agents from taking AI-handled conversations and from assigning others, and hides owned ones", async () => {
     repo.findState.mockResolvedValue(state({ handoffStatus: "NONE" }));
-    await expect(service.assign(agent, 10n, {})).rejects.toBeInstanceOf(ForbiddenError);
+    await expect(service.assign(agent, uid(10), {})).rejects.toBeInstanceOf(ForbiddenError);
     repo.findState.mockResolvedValue(state());
-    await expect(service.assign(agent, 10n, { agentId: 3n })).rejects.toBeInstanceOf(ForbiddenError);
-    repo.findState.mockResolvedValue(owned(2n));
-    await expect(service.assign(agent, 10n, {})).rejects.toBeInstanceOf(NotFoundError); // not visible to them
+    await expect(service.assign(agent, uid(10), { agentId: uid(3) })).rejects.toBeInstanceOf(ForbiddenError);
+    repo.findState.mockResolvedValue(owned(uid(2)));
+    await expect(service.assign(agent, uid(10), {})).rejects.toBeInstanceOf(NotFoundError); // not visible to them
     expect(repo.claim).not.toHaveBeenCalled();
   });
 
   it("lets a supervisor assign another agent and notifies them", async () => {
     repo.findState.mockResolvedValue(state());
-    await service.assign(supervisor, 10n, { agentId: 3n, note: "VIP" });
+    await service.assign(supervisor, uid(10), { agentId: uid(3), note: "VIP" });
     expect(repo.createOwner).toHaveBeenCalledWith(
-      expect.objectContaining({ agentId: 3n, assignedBy: 9n, action: "ASSIGNED", note: "VIP" }),
+      expect.objectContaining({ agentId: uid(3), assignedBy: uid(9), action: "ASSIGNED", note: "VIP" }),
     );
     expect(notifications.notifyAgent).toHaveBeenCalledWith(
-      expect.objectContaining({ agentId: 3n, type: "ASSIGNED", conversationId: 10n }),
+      expect.objectContaining({ agentId: uid(3), type: "ASSIGNED", conversationId: uid(10) }),
     );
   });
 
   it("transfers from the previous owner when a supervisor reassigns, notifying both", async () => {
-    repo.findState.mockResolvedValue(owned(2n));
-    await service.assign(supervisor, 10n, { agentId: 3n });
-    expect(repo.leaveParticipant).toHaveBeenCalledWith(10n, 2n);
+    repo.findState.mockResolvedValue(owned(uid(2)));
+    await service.assign(supervisor, uid(10), { agentId: uid(3) });
+    expect(repo.leaveParticipant).toHaveBeenCalledWith(uid(10), uid(2));
     // The previous owner no longer sees the chat, so they are named explicitly to be told it moved.
-    expect(realtime.conversationEvent).toHaveBeenCalledWith(10n, "transferred", expect.anything(), [2n]);
+    expect(realtime.conversationEvent).toHaveBeenCalledWith(uid(10), "transferred", expect.anything(), [uid(2)]);
     expect(repo.addActivity).toHaveBeenCalledWith(expect.objectContaining({ activityType: "TRANSFERRED" }));
     expect(notifications.notifyAgent).toHaveBeenCalledWith(
-      expect.objectContaining({ agentId: 3n, type: "TRANSFERRED" }),
+      expect.objectContaining({ agentId: uid(3), type: "TRANSFERRED" }),
     );
     expect(notifications.notifyAgent).toHaveBeenCalledWith(
-      expect.objectContaining({ agentId: 2n, type: "TRANSFERRED" }),
+      expect.objectContaining({ agentId: uid(2), type: "TRANSFERRED" }),
     );
   });
 
   it("rejects missing, closed and already-assigned conversations", async () => {
     repo.findState.mockResolvedValue(null);
-    await expect(service.assign(agent, 10n, {})).rejects.toBeInstanceOf(NotFoundError);
+    await expect(service.assign(agent, uid(10), {})).rejects.toBeInstanceOf(NotFoundError);
     repo.findState.mockResolvedValue(state({ status: "CLOSED" }));
-    await expect(service.assign(agent, 10n, {})).rejects.toBeInstanceOf(ConflictError);
-    repo.findState.mockResolvedValue(owned(1n));
-    await expect(service.assign(agent, 10n, {})).rejects.toBeInstanceOf(ConflictError);
+    await expect(service.assign(agent, uid(10), {})).rejects.toBeInstanceOf(ConflictError);
+    repo.findState.mockResolvedValue(owned(uid(1)));
+    await expect(service.assign(agent, uid(10), {})).rejects.toBeInstanceOf(ConflictError);
   });
 
   it("does not fail the assignment when the notification or system message fails", async () => {
     repo.findState.mockResolvedValue(state());
     notifications.notifyAgent.mockRejectedValue(new Error("db down"));
     systemMessages.post.mockRejectedValue(new Error("db down"));
-    await expect(service.assign(supervisor, 10n, { agentId: 3n })).resolves.toBeDefined();
+    await expect(service.assign(supervisor, uid(10), { agentId: uid(3) })).resolves.toBeDefined();
   });
 });
 
 describe("transfer", () => {
   it("lets the owner transfer to another agent", async () => {
-    repo.findState.mockResolvedValue(owned(1n));
-    await service.transfer(agent, 10n, { agentId: 3n });
-    expect(repo.createOwner).toHaveBeenCalledWith(expect.objectContaining({ agentId: 3n, action: "TRANSFERRED" }));
+    repo.findState.mockResolvedValue(owned(uid(1)));
+    await service.transfer(agent, uid(10), { agentId: uid(3) });
+    expect(repo.createOwner).toHaveBeenCalledWith(expect.objectContaining({ agentId: uid(3), action: "TRANSFERRED" }));
     expect(notifications.notifyAgent).toHaveBeenCalledWith(
-      expect.objectContaining({ agentId: 3n, type: "TRANSFERRED" }),
+      expect.objectContaining({ agentId: uid(3), type: "TRANSFERRED" }),
     );
   });
 
   it("hides others' chats, requires an owner, and rejects transferring to the owner", async () => {
-    repo.findState.mockResolvedValue(owned(2n));
-    await expect(service.transfer(agent, 10n, { agentId: 3n })).rejects.toBeInstanceOf(NotFoundError);
+    repo.findState.mockResolvedValue(owned(uid(2)));
+    await expect(service.transfer(agent, uid(10), { agentId: uid(3) })).rejects.toBeInstanceOf(NotFoundError);
     repo.findState.mockResolvedValue(state());
-    await expect(service.transfer(agent, 10n, { agentId: 3n })).rejects.toBeInstanceOf(ForbiddenError);
-    repo.findState.mockResolvedValue(owned(1n));
-    await expect(service.transfer(agent, 10n, { agentId: 1n })).rejects.toBeInstanceOf(ConflictError);
+    await expect(service.transfer(agent, uid(10), { agentId: uid(3) })).rejects.toBeInstanceOf(ForbiddenError);
+    repo.findState.mockResolvedValue(owned(uid(1)));
+    await expect(service.transfer(agent, uid(10), { agentId: uid(1) })).rejects.toBeInstanceOf(ConflictError);
   });
 });
 
 describe("unassign", () => {
   it("returns the conversation to the queue and notifies a previous owner removed by a supervisor", async () => {
-    repo.findState.mockResolvedValue(owned(2n));
-    const result = await service.unassign(supervisor, 10n, {});
+    repo.findState.mockResolvedValue(owned(uid(2)));
+    const result = await service.unassign(supervisor, uid(10), {});
     expect(repo.release).toHaveBeenCalled();
-    expect(repo.endOwner).toHaveBeenCalledWith(10n, 9n);
-    expect(repo.leaveParticipant).toHaveBeenCalledWith(10n, 2n);
+    expect(repo.endOwner).toHaveBeenCalledWith(uid(10), uid(9));
+    expect(repo.leaveParticipant).toHaveBeenCalledWith(uid(10), uid(2));
     expect(repo.addActivity).toHaveBeenCalledWith(expect.objectContaining({ activityType: "UNASSIGNED" }));
-    expect(result).toEqual({ conversationId: "10", assignedAgentId: null });
-    expect(realtime.conversationEvent).toHaveBeenCalledWith(10n, "updated", expect.anything(), [2n]);
-    expect(notifications.notifyAgent).toHaveBeenCalledWith(expect.objectContaining({ agentId: 2n }));
+    expect(result).toEqual({ conversationId: uid(10), assignedAgentId: null });
+    expect(realtime.conversationEvent).toHaveBeenCalledWith(uid(10), "updated", expect.anything(), [uid(2)]);
+    expect(notifications.notifyAgent).toHaveBeenCalledWith(expect.objectContaining({ agentId: uid(2) }));
   });
 
   it("hides others' chats, forbids unassigning an unowned one, and conflicts when ownership changed concurrently", async () => {
-    repo.findState.mockResolvedValue(owned(2n));
-    await expect(service.unassign(agent, 10n, {})).rejects.toBeInstanceOf(NotFoundError);
+    repo.findState.mockResolvedValue(owned(uid(2)));
+    await expect(service.unassign(agent, uid(10), {})).rejects.toBeInstanceOf(NotFoundError);
     repo.findState.mockResolvedValue(state());
-    await expect(service.unassign(agent, 10n, {})).rejects.toBeInstanceOf(ForbiddenError);
-    repo.findState.mockResolvedValue(owned(1n));
+    await expect(service.unassign(agent, uid(10), {})).rejects.toBeInstanceOf(ForbiddenError);
+    repo.findState.mockResolvedValue(owned(uid(1)));
     repo.release.mockResolvedValue(false);
-    await expect(service.unassign(agent, 10n, {})).rejects.toBeInstanceOf(ConflictError);
+    await expect(service.unassign(agent, uid(10), {})).rejects.toBeInstanceOf(ConflictError);
   });
 });
 
 describe("history", () => {
   it("hides the history of another agent's conversation from agents", async () => {
-    repo.findState.mockResolvedValue(owned(2n));
-    await expect(service.history(agent, 10n)).rejects.toBeInstanceOf(NotFoundError);
+    repo.findState.mockResolvedValue(owned(uid(2)));
+    await expect(service.history(agent, uid(10))).rejects.toBeInstanceOf(NotFoundError);
     repo.history.mockResolvedValue([assignmentRow]);
-    await expect(service.history(supervisor, 10n)).resolves.toHaveLength(1);
-    await expect(service.history(other, 10n)).resolves.toHaveLength(1); // agent 2 owns it
+    await expect(service.history(supervisor, uid(10))).resolves.toHaveLength(1);
+    await expect(service.history(other, uid(10))).resolves.toHaveLength(1); // agent 2 owns it
   });
 });

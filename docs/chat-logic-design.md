@@ -236,10 +236,9 @@ The current protocol cannot express several cases. Add:
 - The PDF names events `message:send`, `message:new`, `message:sent`, `message:delivered`, `message:read`,
   `typing:start`, `typing:stop`, `conversation:assigned`; the protocol uses dotted names (`message.ack`, ...).
   Pick one naming scheme and change protocol, gateway, frontend and mock together.
-- REST paths in the PDF are under `/api/v1`; the backend mounts under `/api`. Decide before building endpoints.
+- REST paths in the PDF are under `/api/v1`; the chat backend mounts the staff API under `/admin/api/v1` (guest: `/guest/api/v1`, customer: `/customer/api/v1`, not built). `/api/health` is the only path outside it.
 - The DTO `id` is currently the conversation slug (e.g. `maya`), but `conversations` has no `slug` column (ids are
-  integers). Either add a `slug` column or change the protocol to use the numeric id (as a string, since Prisma
-  returns `bigint`).
+  UUIDs). Either add a `slug` column or change the protocol to use the conversation UUID.
 
 ## 8. Differences from the current mock server
 

@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
  * The frontend's real stack (BackendSocket, WsClient, startRealtime, stores, feature actions) against a running
  * backend. Skipped unless all three are set; see docs/frontend-integration.md ("Verifying against the backend").
  *
- *   VITE_WS_URL=ws://127.0.0.1:4555/ws VITE_AUTH_TOKEN=dev:3:AGENT LIVE_API_URL=http://127.0.0.1:4555/api pnpm test
+ *   VITE_WS_URL=ws://127.0.0.1:4555/ws VITE_AUTH_TOKEN=dev:00000000-0000-4000-8000-000000000003:AGENT LIVE_API_URL=http://127.0.0.1:4555/admin/api/v1 pnpm test
  *
  * The backend must run with a throwaway database. The test creates its own conversations (unique application ids)
  * and acts as agent 3; other people (the customer's agent 1, a supervisor, agent 4) act through REST.
@@ -29,10 +29,12 @@ const rest = async (
   });
   return { status: response.status, body: (await response.json()) as Json };
 };
-const AGENT1 = "dev:1:AGENT";
-const ME = "dev:3:AGENT"; // the signed-in agent in this test (VITE_AUTH_TOKEN)
-const AGENT4 = "dev:4:AGENT";
-const SUPERVISOR = "dev:9:SUPERVISOR";
+/** Deterministic UUID for the dev agents (the backend ids are UUIDs): uid(3) is 00000000-0000-4000-8000-000000000003. */
+const uid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const AGENT1 = `dev:${uid(1)}:AGENT`;
+const ME = `dev:${uid(3)}:AGENT`; // the signed-in agent in this test (VITE_AUTH_TOKEN)
+const AGENT4 = `dev:${uid(4)}:AGENT`;
+const SUPERVISOR = `dev:${uid(9)}:SUPERVISOR`;
 
 async function until<T>(read: () => T | undefined | false, what: string, timeoutMs = 5000): Promise<T> {
   const deadline = Date.now() + timeoutMs;
@@ -44,11 +46,10 @@ async function until<T>(read: () => T | undefined | false, what: string, timeout
   }
 }
 
-let nextApplication = Date.now() * 10;
 async function newConversation(name: string): Promise<string> {
   const created = await rest("/conversations", AGENT1, "POST", {
-    customerId: String(nextApplication),
-    applicationId: String(nextApplication++),
+    customerId: crypto.randomUUID(),
+    applicationId: crypto.randomUUID(),
     customerName: name,
     priority: "HIGH",
   });
@@ -85,7 +86,7 @@ describe.skipIf(!live)("frontend against the live backend", () => {
 
   it("uses the real transport and knows who is signed in", () => {
     expect(ws.isMockTransport).toBe(false);
-    expect(session.useSessionStore.getState()).toMatchObject({ userId: "3", role: "AGENT" });
+    expect(session.useSessionStore.getState()).toMatchObject({ userId: uid(3), role: "AGENT" });
   });
 
   it("shows a conversation created elsewhere in the inbox, with the right mapping", async () => {
@@ -111,9 +112,9 @@ describe.skipIf(!live)("frontend against the live backend", () => {
 
     takeOverConversation(id);
     await until(() => conv().byId[id]?.handoff === "assigned", "the takeover to be confirmed");
-    expect(conv().byId[id]?.assignedAgent).toMatchObject({ id: "3", name: "Agent 3" });
+    expect(conv().byId[id]?.assignedAgent).toMatchObject({ id: uid(3), name: `Agent ${uid(3)}` });
     const note = await until(() => msgs(id).find((m) => m.side === "system"), "the system message");
-    expect(note.text).toBe("Agent 3 took over the conversation");
+    expect(note.text).toBe(`Agent ${uid(3)} took over the conversation`);
 
     expect(sendMessage(id, "  Hello Dara  ")).toBe(true);
     const sent = msgs(id).find((m) => m.side === "agent")!;
@@ -126,8 +127,11 @@ describe.skipIf(!live)("frontend against the live backend", () => {
 
     // The same message from the REST history: once, in the same order.
     const history = await rest(`/conversations/${id}/messages`, ME);
-    expect(history.body.data.map((m: Json) => m.content)).toEqual(["Agent 3 took over the conversation", "Hello Dara"]);
-    expect(msgs(id).map((m) => m.text)).toEqual(["Agent 3 took over the conversation", "Hello Dara"]);
+    expect(history.body.data.map((m: Json) => m.content)).toEqual([
+      `Agent ${uid(3)} took over the conversation`,
+      "Hello Dara",
+    ]);
+    expect(msgs(id).map((m) => m.text)).toEqual([`Agent ${uid(3)} took over the conversation`, "Hello Dara"]);
   });
 
   it("loads history when a conversation is opened and pages back", async () => {
@@ -203,7 +207,7 @@ describe.skipIf(!live)("frontend against the live backend", () => {
     await until(() => conv().byId[id]?.handoff === "assigned", "assignment");
     toasts.length = 0;
 
-    expect((await rest(`/conversations/${id}/transfer`, SUPERVISOR, "POST", { agentId: "4" })).status).toBe(200);
+    expect((await rest(`/conversations/${id}/transfer`, SUPERVISOR, "POST", { agentId: uid(4) })).status).toBe(200);
     await until(() => conv().byId[id] === undefined, "the conversation to leave the inbox");
     expect(toasts).toContain("Conversation moved to Agent 4");
     // The notification is its own event and may land just after the removal.
@@ -243,7 +247,7 @@ describe.skipIf(!live)("frontend against the live backend", () => {
     const id = await newConversation("Notify Test");
     await until(() => conv().byId[id], "conversation");
     toasts.length = 0;
-    await rest(`/conversations/${id}/assign`, SUPERVISOR, "POST", { agentId: "3" });
+    await rest(`/conversations/${id}/assign`, SUPERVISOR, "POST", { agentId: uid(3) });
     await until(() => toasts.some((t) => t.includes("A conversation was assigned to you")), "the notification toast");
   });
 

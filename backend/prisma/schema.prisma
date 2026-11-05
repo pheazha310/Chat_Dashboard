@@ -13,28 +13,28 @@ datasource db {
 // This service (Backend 2, the chat backend) owns chat data. Backend 1 tables are documentation
 // references only and are not created in this database. Columns that hold a Backend 1 id
 // (customer_id, application_id, agent_id, user_id, *_by,
-// actor/participant/sender ids) are plain BigInt columns with NO foreign key.
+// actor/participant/sender ids) are plain UUID columns with NO foreign key.
 //
 // No database enums: fixed-value columns are VARCHAR strings whose allowed values are enforced by
 // CHECK constraints in prisma/sql/constraints.sql and listed in docs/database-schema.md.
-// Ids are auto-increment BigInt; convert to string when serializing to JSON.
+// Ids are UUIDs (gen_random_uuid()), including references to Backend 1 ids; they serialize to JSON as-is.
 
 /// CUSTOMER_SUPPORT or INTERNAL. Customer and application are external references.
 model Conversation {
-  id                               BigInt                            @id @default(autoincrement())
-  customerId                       BigInt?                           @map("customer_id") /// External customers.id. Required for CUSTOMER_SUPPORT, NULL for INTERNAL (CHECK)
-  applicationId                    BigInt?                           @map("application_id") /// External loan_applications.id
+  id                               String                            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  customerId                       String?                           @map("customer_id") @db.Uuid /// External customers.id. Required for CUSTOMER_SUPPORT, NULL for INTERNAL (CHECK)
+  applicationId                    String?                           @map("application_id") @db.Uuid /// External loan_applications.id
   customerName                     String?                           @map("customer_name") @db.VarChar(150) /// Snapshot of the Backend 1 customer name so the inbox can be searched and sorted in SQL (FR-07); refresh when Backend 1 reports a change
   customerIdentifier               String?                           @map("customer_identifier") @db.VarChar(100) /// Snapshot of a searchable identifier (customer_code, phone, application_number)
   conversationType                 String                            @default("CUSTOMER_SUPPORT") @map("conversation_type") @db.VarChar(30)
   channel                          String                            @default("web") @db.VarChar(32) /// web or mobile
   createdByType                    String?                           @map("created_by_type") @db.VarChar(30) /// CUSTOMER or AGENT; NULL when created by the system
-  createdById                      BigInt?                           @map("created_by_id") /// External customers.id or agents.id; set exactly when created_by_type is set
+  createdById                      String?                           @map("created_by_id") @db.Uuid /// External customers.id or agents.id; set exactly when created_by_type is set
   status                           String                            @default("OPEN") @db.VarChar(30)
   priority                         String                            @default("MEDIUM") @db.VarChar(20)
   conversationMode                 String                            @default("AI") @map("conversation_mode") @db.VarChar(20)
   handoffStatus                    String                            @default("NONE") @map("handoff_status") @db.VarChar(30)
-  assignedAgentId                  BigInt?                           @map("assigned_agent_id") /// External agents.id. Denormalized current OWNER from conversation_assignments for fast Mine/Unassigned filters; set exactly when handoff_status = ASSIGNED (CHECK)
+  assignedAgentId                  String?                           @map("assigned_agent_id") @db.Uuid /// External agents.id. Denormalized current OWNER from conversation_assignments for fast Mine/Unassigned filters; set exactly when handoff_status = ASSIGNED (CHECK)
   subject                          String?                           @db.VarChar(255)
   summary                          String?                           @db.Text
   isArchived                       Boolean                           @default(false) @map("is_archived")
@@ -77,10 +77,10 @@ model Conversation {
 }
 
 model ConversationParticipant {
-  id              BigInt       @id @default(autoincrement())
-  conversationId  BigInt       @map("conversation_id")
+  id              String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conversationId  String       @map("conversation_id") @db.Uuid
   participantType String       @map("participant_type") @db.VarChar(30) /// CUSTOMER, AGENT, ASSISTANT
-  participantId   BigInt?      @map("participant_id") /// External customers.id or agents.id; NULL exactly when ASSISTANT (CHECK)
+  participantId   String?      @map("participant_id") @db.Uuid /// External customers.id or agents.id; NULL exactly when ASSISTANT (CHECK)
   participantRole String       @default("MEMBER") @map("participant_role") @db.VarChar(30) /// OWNER, VIEWER, MEMBER
   joinedAt        DateTime     @default(now()) @map("joined_at") @db.Timestamptz(6)
   leftAt          DateTime?    @map("left_at") @db.Timestamptz(6)
@@ -92,16 +92,16 @@ model ConversationParticipant {
 }
 
 model ConversationAssignment {
-  id               BigInt       @id @default(autoincrement())
-  conversationId   BigInt       @map("conversation_id")
-  agentId          BigInt       @map("agent_id") /// External agents.id
-  assignedBy       BigInt?      @map("assigned_by") /// External agents.id
+  id               String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conversationId   String       @map("conversation_id") @db.Uuid
+  agentId          String       @map("agent_id") @db.Uuid /// External agents.id
+  assignedBy       String?      @map("assigned_by") @db.Uuid /// External agents.id
   assignmentType   String       @default("OWNER") @map("assignment_type") @db.VarChar(30) /// OWNER or VIEWER
   assignmentAction String       @default("ASSIGNED") @map("assignment_action") @db.VarChar(30) /// TAKEOVER, ASSIGNED, TRANSFERRED, AUTO_ASSIGNED
   note             String?      @db.VarChar(500)
   assignedAt       DateTime     @default(now()) @map("assigned_at") @db.Timestamptz(6)
   endedAt          DateTime?    @map("ended_at") @db.Timestamptz(6)
-  endedBy          BigInt?      @map("ended_by") /// External agents.id; NULL when ended by the system
+  endedBy          String?      @map("ended_by") @db.Uuid /// External agents.id; NULL when ended by the system
   conversation     Conversation @relation(fields: [conversationId], references: [id], onDelete: Restrict)
 
   @@index([conversationId, endedAt])
@@ -110,10 +110,10 @@ model ConversationAssignment {
 }
 
 model ConversationActivity {
-  id             BigInt       @id @default(autoincrement())
-  conversationId BigInt       @map("conversation_id")
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conversationId String       @map("conversation_id") @db.Uuid
   actorType      String       @map("actor_type") @db.VarChar(30)
-  actorId        BigInt?      @map("actor_id") /// External actor ID; null for system
+  actorId        String?      @map("actor_id") @db.Uuid /// External actor ID; null for system
   activityType   String       @map("activity_type") @db.VarChar(50)
   description    String?      @db.Text
   metadata       Json?
@@ -126,22 +126,22 @@ model ConversationActivity {
 }
 
 model Message {
-  id                     BigInt               @id @default(autoincrement())
-  conversationId         BigInt               @map("conversation_id")
+  id                     String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conversationId         String               @map("conversation_id") @db.Uuid
   clientId               String?              @map("client_id") @db.VarChar(100) /// Client-generated ID for duplicate prevention
   sequenceNumber         BigInt               @map("sequence_number")
   senderType             String               @map("sender_type") @db.VarChar(30) /// CUSTOMER, AGENT, ASSISTANT, SYSTEM
-  senderId               BigInt?              @map("sender_id") /// External sender ID, null for system
+  senderId               String?              @map("sender_id") @db.Uuid /// External sender ID, null for system
   messageType            String               @default("TEXT") @map("message_type") @db.VarChar(30)
   content                String?              @db.Text
   metadata               Json? /// Payload for SYSTEM messages, e.g. who took over; call or callback references
-  replyToMessageId       BigInt?              @map("reply_to_message_id") /// Must be in the same conversation (composite FK with conversation_id)
-  forwardedFromMessageId BigInt?              @map("forwarded_from_message_id")
+  replyToMessageId       String?              @map("reply_to_message_id") @db.Uuid /// Must be in the same conversation (composite FK with conversation_id)
+  forwardedFromMessageId String?              @map("forwarded_from_message_id") @db.Uuid
   status                 String               @default("SENT") @db.VarChar(20) /// Sender-facing summary: SENDING, SENT, DELIVERED, READ, FAILED. Per-recipient detail is in message_receipts
   isEdited               Boolean              @default(false) @map("is_edited")
   editedAt               DateTime?            @map("edited_at") @db.Timestamptz(6)
   deletedAt              DateTime?            @map("deleted_at") @db.Timestamptz(6)
-  deletedBy              BigInt?              @map("deleted_by") /// External agents.id
+  deletedBy              String?              @map("deleted_by") @db.Uuid /// External agents.id
   createdAt              DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt              DateTime             @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   conversation           Conversation         @relation(fields: [conversationId], references: [id], onDelete: Restrict)
@@ -169,10 +169,10 @@ model Message {
 }
 
 model MessageReceipt {
-  id            BigInt    @id @default(autoincrement())
-  messageId     BigInt    @map("message_id")
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  messageId     String    @map("message_id") @db.Uuid
   recipientType String    @map("recipient_type") @db.VarChar(30)
-  recipientId   BigInt    @map("recipient_id")
+  recipientId   String    @map("recipient_id") @db.Uuid
   deliveredAt   DateTime? @map("delivered_at") @db.Timestamptz(6)
   readAt        DateTime? @map("read_at") @db.Timestamptz(6)
   createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -184,11 +184,11 @@ model MessageReceipt {
 }
 
 model ConversationRead {
-  id                     BigInt       @id @default(autoincrement())
-  conversationId         BigInt       @map("conversation_id")
+  id                     String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conversationId         String       @map("conversation_id") @db.Uuid
   readerType             String       @map("reader_type") @db.VarChar(30)
-  readerId               BigInt       @map("reader_id")
-  lastReadMessageId      BigInt?      @map("last_read_message_id")
+  readerId               String       @map("reader_id") @db.Uuid
+  lastReadMessageId      String?      @map("last_read_message_id") @db.Uuid
   lastReadSequenceNumber BigInt       @default(0) @map("last_read_sequence_number") /// Unread count = conversations.last_sequence_number - this (approximate: includes own and system messages)
   lastReadAt             DateTime?    @map("last_read_at") @db.Timestamptz(6)
   markedUnread           Boolean      @default(false) @map("marked_unread") /// Agent manually marked the conversation unread (FR-05)
@@ -203,10 +203,10 @@ model ConversationRead {
 }
 
 model MessageEditHistory {
-  id              BigInt   @id @default(autoincrement())
-  messageId       BigInt   @map("message_id")
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  messageId       String   @map("message_id") @db.Uuid
   editorType      String   @map("editor_type") @db.VarChar(30)
-  editorId        BigInt   @map("editor_id")
+  editorId        String   @map("editor_id") @db.Uuid
   previousContent String   @map("previous_content") @db.Text
   editedAt        DateTime @default(now()) @map("edited_at") @db.Timestamptz(6)
   message         Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
@@ -216,10 +216,10 @@ model MessageEditHistory {
 }
 
 model MessageReaction {
-  id        BigInt   @id @default(autoincrement())
-  messageId BigInt   @map("message_id")
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  messageId String   @map("message_id") @db.Uuid
   userType  String   @map("user_type") @db.VarChar(30)
-  userId    BigInt   @map("user_id")
+  userId    String   @map("user_id") @db.Uuid
   emoji     String   @db.VarChar(50)
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
@@ -229,10 +229,10 @@ model MessageReaction {
 }
 
 model Attachment {
-  id                 BigInt              @id @default(autoincrement())
-  conversationId     BigInt              @map("conversation_id") /// Needed for the Media & Files panel and access control; an upload exists before its message
+  id                 String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conversationId     String              @map("conversation_id") @db.Uuid /// Needed for the Media & Files panel and access control; an upload exists before its message
   uploadedByType     String              @map("uploaded_by_type") @db.VarChar(30)
-  uploadedById       BigInt              @map("uploaded_by_id")
+  uploadedById       String              @map("uploaded_by_id") @db.Uuid
   storageKey         String              @unique @map("storage_key") @db.VarChar(500)
   fileName           String              @map("file_name") @db.VarChar(255)
   mimeType           String              @map("mime_type") @db.VarChar(150)
@@ -254,9 +254,9 @@ model Attachment {
 }
 
 model MessageAttachment {
-  messageId      BigInt     @map("message_id")
-  attachmentId   BigInt     @map("attachment_id")
-  conversationId BigInt     @map("conversation_id")
+  messageId      String     @map("message_id") @db.Uuid
+  attachmentId   String     @map("attachment_id") @db.Uuid
+  conversationId String     @map("conversation_id") @db.Uuid
   createdAt      DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
   message        Message    @relation(fields: [messageId, conversationId], references: [id, conversationId], onDelete: Cascade)
   attachment     Attachment @relation(fields: [attachmentId, conversationId], references: [id, conversationId], onDelete: Cascade)
@@ -268,9 +268,9 @@ model MessageAttachment {
 }
 
 model InternalNote {
-  id             BigInt        @id @default(autoincrement())
-  conversationId BigInt        @map("conversation_id")
-  authorAgentId  BigInt        @map("author_agent_id") /// External agents.id
+  id             String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conversationId String        @map("conversation_id") @db.Uuid
+  authorAgentId  String        @map("author_agent_id") @db.Uuid /// External agents.id
   content        String        @db.Text
   createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt      DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -283,9 +283,9 @@ model InternalNote {
 }
 
 model NoteMention {
-  id               BigInt       @id @default(autoincrement())
-  noteId           BigInt       @map("note_id")
-  mentionedAgentId BigInt       @map("mentioned_agent_id") /// External agents.id
+  id               String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  noteId           String       @map("note_id") @db.Uuid
+  mentionedAgentId String       @map("mentioned_agent_id") @db.Uuid /// External agents.id
   createdAt        DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
   note             InternalNote @relation(fields: [noteId], references: [id], onDelete: Cascade)
 
@@ -295,12 +295,12 @@ model NoteMention {
 }
 
 model ConversationEscalation {
-  id             BigInt       @id @default(autoincrement())
-  conversationId BigInt       @map("conversation_id")
-  requestedBy    BigInt       @map("requested_by") /// External agents.id
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conversationId String       @map("conversation_id") @db.Uuid
+  requestedBy    String       @map("requested_by") @db.Uuid /// External agents.id
   reason         String?      @db.Text
   status         String       @default("PENDING") @db.VarChar(30)
-  resolvedBy     BigInt?      @map("resolved_by") /// External agents.id
+  resolvedBy     String?      @map("resolved_by") @db.Uuid /// External agents.id
   createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
   resolvedAt     DateTime?    @map("resolved_at") @db.Timestamptz(6)
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Restrict)
@@ -310,10 +310,10 @@ model ConversationEscalation {
 }
 
 model Tag {
-  id               BigInt            @id @default(autoincrement())
+  id               String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   name             String            @unique @db.VarChar(100)
   color            String?           @db.VarChar(30)
-  createdBy        BigInt?           @map("created_by") /// External agents.id
+  createdBy        String?           @map("created_by") @db.Uuid /// External agents.id
   createdAt        DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
   conversationTags ConversationTag[]
 
@@ -321,8 +321,8 @@ model Tag {
 }
 
 model ConversationTag {
-  conversationId BigInt       @map("conversation_id")
-  tagId          BigInt       @map("tag_id")
+  conversationId String       @map("conversation_id") @db.Uuid
+  tagId          String       @map("tag_id") @db.Uuid
   createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   tag            Tag          @relation(fields: [tagId], references: [id], onDelete: Cascade)
@@ -333,11 +333,11 @@ model ConversationTag {
 }
 
 model Notification {
-  id               BigInt        @id @default(autoincrement())
+  id               String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   recipientType    String        @map("recipient_type") @db.VarChar(30)
-  recipientId      BigInt        @map("recipient_id") /// External Backend 1 ID
-  conversationId   BigInt?       @map("conversation_id")
-  messageId        BigInt?       @map("message_id")
+  recipientId      String        @map("recipient_id") @db.Uuid /// External Backend 1 ID
+  conversationId   String?       @map("conversation_id") @db.Uuid
+  messageId        String?       @map("message_id") @db.Uuid
   notificationType String        @map("notification_type") @db.VarChar(50)
   title            String        @db.VarChar(255)
   body             String?       @db.Text
@@ -354,8 +354,8 @@ model Notification {
 }
 
 model NotificationPreference {
-  id                BigInt   @id @default(autoincrement())
-  agentId           BigInt   @unique @map("agent_id") /// External agents.id
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  agentId           String   @unique @map("agent_id") @db.Uuid /// External agents.id
   newMessageEnabled Boolean  @default(true) @map("new_message_enabled")
   assignmentEnabled Boolean  @default(true) @map("assignment_enabled")
   transferEnabled   Boolean  @default(true) @map("transfer_enabled")
@@ -368,9 +368,9 @@ model NotificationPreference {
 }
 
 model ConversationNotificationSetting {
-  id             BigInt       @id @default(autoincrement())
-  conversationId BigInt       @map("conversation_id")
-  agentId        BigInt       @map("agent_id") /// External agents.id
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conversationId String       @map("conversation_id") @db.Uuid
+  agentId        String       @map("agent_id") @db.Uuid /// External agents.id
   isMuted        Boolean      @default(false) @map("is_muted")
   updatedAt      DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
@@ -382,8 +382,8 @@ model ConversationNotificationSetting {
 
 /// History only. Live presence (Available/Busy/Away/Offline) is kept in Redis.
 model AgentPresenceHistory {
-  id        BigInt    @id @default(autoincrement())
-  agentId   BigInt    @map("agent_id") /// External agents.id
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  agentId   String    @map("agent_id") @db.Uuid /// External agents.id
   status    String    @db.VarChar(30) /// AVAILABLE, BUSY, AWAY, OFFLINE
   startedAt DateTime  @default(now()) @map("started_at") @db.Timestamptz(6)
   endedAt   DateTime? @map("ended_at") @db.Timestamptz(6)
@@ -393,13 +393,13 @@ model AgentPresenceHistory {
 }
 
 model CannedResponse {
-  id        BigInt   @id @default(autoincrement())
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   title     String   @db.VarChar(255)
   content   String   @db.Text
   shortcut  String?  @db.VarChar(50) /// e.g. /greeting
   scope     String   @default("PERSONAL") @db.VarChar(30) /// PERSONAL or TEAM
-  teamId    BigInt?  @map("team_id") /// External team id; set exactly when scope = TEAM (CHECK)
-  createdBy BigInt   @map("created_by") /// External agents.id
+  teamId    String?  @map("team_id") @db.Uuid /// External team id; set exactly when scope = TEAM (CHECK)
+  createdBy String   @map("created_by") @db.Uuid /// External agents.id
   isActive  Boolean  @default(true) @map("is_active")
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -410,14 +410,14 @@ model CannedResponse {
 }
 
 model AutomationRule {
-  id              BigInt          @id @default(autoincrement())
+  id              String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   name            String          @db.VarChar(255)
   triggerType     String          @map("trigger_type") @db.VarChar(50)
   conditions      Json?
   responseContent String          @map("response_content") @db.Text
   priority        Int             @default(0)
   isActive        Boolean         @default(true) @map("is_active")
-  createdBy       BigInt?         @map("created_by") /// External agents.id
+  createdBy       String?         @map("created_by") @db.Uuid /// External agents.id
   createdAt       DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   automationLogs  AutomationLog[]
@@ -427,10 +427,10 @@ model AutomationRule {
 }
 
 model AutomationLog {
-  id              BigInt         @id @default(autoincrement())
-  ruleId          BigInt         @map("rule_id")
-  conversationId  BigInt         @map("conversation_id")
-  messageId       BigInt?        @map("message_id")
+  id              String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ruleId          String         @map("rule_id") @db.Uuid
+  conversationId  String         @map("conversation_id") @db.Uuid
+  messageId       String?        @map("message_id") @db.Uuid
   executionStatus String         @map("execution_status") @db.VarChar(30)
   errorMessage    String?        @map("error_message") @db.Text
   createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -446,13 +446,13 @@ model AutomationLog {
 
 /// At most one PENDING handoff per conversation (partial unique index).
 model AiHandoff {
-  id              BigInt       @id @default(autoincrement())
-  conversationId  BigInt       @map("conversation_id")
+  id              String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conversationId  String       @map("conversation_id") @db.Uuid
   requestedByType String       @map("requested_by_type") @db.VarChar(30)
-  requestedById   BigInt?      @map("requested_by_id")
+  requestedById   String?      @map("requested_by_id") @db.Uuid
   reason          String?      @db.Text
   status          String       @default("PENDING") @db.VarChar(30)
-  acceptedBy      BigInt?      @map("accepted_by") /// External agents.id
+  acceptedBy      String?      @map("accepted_by") @db.Uuid /// External agents.id
   requestedAt     DateTime     @default(now()) @map("requested_at") @db.Timestamptz(6)
   acceptedAt      DateTime?    @map("accepted_at") @db.Timestamptz(6)
   completedAt     DateTime?    @map("completed_at") @db.Timestamptz(6)
@@ -463,8 +463,8 @@ model AiHandoff {
 }
 
 model AiSummary {
-  id             BigInt       @id @default(autoincrement())
-  conversationId BigInt       @map("conversation_id")
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conversationId String       @map("conversation_id") @db.Uuid
   summary        String       @db.Text
   modelVersion   String?      @map("model_version") @db.VarChar(100)
   generatedAt    DateTime     @default(now()) @map("generated_at") @db.Timestamptz(6)
@@ -475,9 +475,9 @@ model AiSummary {
 }
 
 model AiSuggestion {
-  id             BigInt       @id @default(autoincrement())
-  conversationId BigInt       @map("conversation_id")
-  agentId        BigInt       @map("agent_id") /// External agents.id
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conversationId String       @map("conversation_id") @db.Uuid
+  agentId        String       @map("agent_id") @db.Uuid /// External agents.id
   suggestion     String       @db.Text
   status         String       @default("PENDING") @db.VarChar(30)
   finalContent   String?      @map("final_content") @db.Text
@@ -490,11 +490,11 @@ model AiSuggestion {
 }
 
 model CallbackRequest {
-  id              BigInt       @id @default(autoincrement())
-  conversationId  BigInt       @map("conversation_id")
-  customerId      BigInt       @map("customer_id") /// External customers.id
-  assignedAgentId BigInt?      @map("assigned_agent_id") /// External agents.id
-  createdBy       BigInt?      @map("created_by") /// External agents.id
+  id              String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conversationId  String       @map("conversation_id") @db.Uuid
+  customerId      String       @map("customer_id") @db.Uuid /// External customers.id
+  assignedAgentId String?      @map("assigned_agent_id") @db.Uuid /// External agents.id
+  createdBy       String?      @map("created_by") @db.Uuid /// External agents.id
   scheduledAt     DateTime     @map("scheduled_at") @db.Timestamptz(6)
   status          String       @default("PENDING") @db.VarChar(30)
   notes           String?      @db.Text
@@ -513,10 +513,10 @@ model CallbackRequest {
 
 /// Signalling record and call history; media is not stored.
 model Call {
-  id               BigInt            @id @default(autoincrement())
-  conversationId   BigInt            @map("conversation_id")
+  id               String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conversationId   String            @map("conversation_id") @db.Uuid
   initiatedByType  String            @map("initiated_by_type") @db.VarChar(30)
-  initiatedById    BigInt            @map("initiated_by_id")
+  initiatedById    String            @map("initiated_by_id") @db.Uuid
   callType         String            @map("call_type") @db.VarChar(20)
   status           String            @default("INITIATING") @db.VarChar(30)
   startedAt        DateTime?         @map("started_at") @db.Timestamptz(6)
@@ -530,10 +530,10 @@ model Call {
 }
 
 model CallParticipant {
-  id              BigInt    @id @default(autoincrement())
-  callId          BigInt    @map("call_id")
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  callId          String    @map("call_id") @db.Uuid
   participantType String    @map("participant_type") @db.VarChar(30)
-  participantId   BigInt    @map("participant_id")
+  participantId   String    @map("participant_id") @db.Uuid
   joinedAt        DateTime? @map("joined_at") @db.Timestamptz(6)
   leftAt          DateTime? @map("left_at") @db.Timestamptz(6)
   call            Call      @relation(fields: [callId], references: [id], onDelete: Cascade)
@@ -544,14 +544,14 @@ model CallParticipant {
 }
 
 model SpamReport {
-  id             BigInt       @id @default(autoincrement())
-  conversationId BigInt       @map("conversation_id")
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conversationId String       @map("conversation_id") @db.Uuid
   reportedByType String       @map("reported_by_type") @db.VarChar(30)
-  reportedById   BigInt       @map("reported_by_id")
-  messageId      BigInt?      @map("message_id") /// The reported message, if any
+  reportedById   String       @map("reported_by_id") @db.Uuid
+  messageId      String?      @map("message_id") @db.Uuid /// The reported message, if any
   reason         String       @db.Text
   status         String       @default("PENDING") @db.VarChar(30)
-  reviewedBy     BigInt?      @map("reviewed_by") /// External agents.id
+  reviewedBy     String?      @map("reviewed_by") @db.Uuid /// External agents.id
   reviewedAt     DateTime?    @map("reviewed_at") @db.Timestamptz(6)
   resolutionNote String?      @map("resolution_note") @db.VarChar(500)
   createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -566,34 +566,34 @@ model SpamReport {
 
 /// One active block (unblocked_at IS NULL) per customer via a partial unique index.
 model CustomerBlock {
-  id          BigInt    @id @default(autoincrement())
-  customerId  BigInt    @map("customer_id") /// External customers.id
-  blockedBy   BigInt    @map("blocked_by") /// External agents.id
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  customerId  String    @map("customer_id") @db.Uuid /// External customers.id
+  blockedBy   String    @map("blocked_by") @db.Uuid /// External agents.id
   reason      String?   @db.Text
   blockedAt   DateTime  @default(now()) @map("blocked_at") @db.Timestamptz(6)
   unblockedAt DateTime? @map("unblocked_at") @db.Timestamptz(6)
-  unblockedBy BigInt?   @map("unblocked_by") /// External agents.id
+  unblockedBy String?   @map("unblocked_by") @db.Uuid /// External agents.id
 
   @@index([customerId, unblockedAt])
   @@map("customer_blocks")
 }
 
 model BlockedKeyword {
-  id        BigInt   @id @default(autoincrement())
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   keyword   String   @unique @db.VarChar(255)
   isActive  Boolean  @default(true) @map("is_active")
-  createdBy BigInt?  @map("created_by") /// External agents.id
+  createdBy String?  @map("created_by") @db.Uuid /// External agents.id
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   @@map("blocked_keywords")
 }
 
 model ModerationActivity {
-  id         BigInt   @id @default(autoincrement())
-  actorId    BigInt   @map("actor_id") /// External agents.id
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  actorId    String   @map("actor_id") @db.Uuid /// External agents.id
   action     String   @db.VarChar(100)
   targetType String   @map("target_type") @db.VarChar(50)
-  targetId   BigInt   @map("target_id")
+  targetId   String   @map("target_id") @db.Uuid
   metadata   Json?
   createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
@@ -603,8 +603,8 @@ model ModerationActivity {
 }
 
 model PushDevice {
-  id          BigInt    @id @default(autoincrement())
-  userId      BigInt    @map("user_id") /// External users.id (every customer and agent has one)
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId      String    @map("user_id") @db.Uuid /// External users.id (every customer and agent has one)
   platform    String    @db.VarChar(30)
   deviceToken String    @map("device_token") @db.VarChar(512)
   isActive    Boolean   @default(true) @map("is_active")
@@ -618,8 +618,8 @@ model PushDevice {
 }
 
 model WorkspacePreference {
-  id           BigInt   @id @default(autoincrement())
-  agentId      BigInt   @unique @map("agent_id") /// External agents.id
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  agentId      String   @unique @map("agent_id") @db.Uuid /// External agents.id
   layout       Json?
   sidebarWidth Int?     @map("sidebar_width")
   settings     Json?
@@ -629,9 +629,9 @@ model WorkspacePreference {
 }
 
 model WorkspaceOpenConversation {
-  id             BigInt       @id @default(autoincrement())
-  agentId        BigInt       @map("agent_id") /// External agents.id
-  conversationId BigInt       @map("conversation_id")
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  agentId        String       @map("agent_id") @db.Uuid /// External agents.id
+  conversationId String       @map("conversation_id") @db.Uuid
   sortOrder      Int          @default(0) @map("sort_order")
   lastOpenedAt   DateTime     @default(now()) @map("last_opened_at") @db.Timestamptz(6)
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
@@ -642,8 +642,8 @@ model WorkspaceOpenConversation {
 }
 
 model UserChatSetting {
-  id                       BigInt   @id @default(autoincrement())
-  userId                   BigInt   @unique @map("user_id") /// External users.id
+  id                       String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId                   String   @unique @map("user_id") @db.Uuid /// External users.id
   typingSoundEnabled       Boolean  @default(true) @map("typing_sound_enabled")
   notificationSoundEnabled Boolean  @default(true) @map("notification_sound_enabled")
   aiSuggestionsEnabled     Boolean  @default(true) @map("ai_suggestions_enabled")

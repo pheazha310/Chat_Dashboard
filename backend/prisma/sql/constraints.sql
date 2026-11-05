@@ -140,7 +140,7 @@ CREATE UNIQUE INDEX conversations_one_open_per_application
 
 -- A participant is in a conversation at most once at a time.
 CREATE UNIQUE INDEX conversation_participants_one_active
-  ON conversation_participants (conversation_id, participant_type, coalesce(participant_id, 0))
+  ON conversation_participants (conversation_id, participant_type, coalesce(participant_id, '00000000-0000-0000-0000-000000000000'::uuid))
   WHERE left_at IS NULL;
 
 -- At most one pending AI handoff per conversation.
@@ -181,9 +181,9 @@ ALTER TABLE callback_requests ADD CONSTRAINT callback_requests_completed_matches
 
 CREATE FUNCTION assert_conversation_owner_consistent() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
-  conv_id  bigint;
-  actual   bigint;
-  expected bigint;
+  conv_id  uuid;
+  actual   uuid;
+  expected uuid;
 BEGIN
   IF TG_TABLE_NAME = 'conversations' THEN conv_id := NEW.id; ELSE conv_id := NEW.conversation_id; END IF;
 

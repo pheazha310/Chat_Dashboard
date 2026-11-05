@@ -1,5 +1,6 @@
 import { prisma, runInTransaction, type Db } from "@config/database.js";
 import type { Prisma } from "../../../prisma/generated/prisma/client.js";
+import { z } from "zod";
 import { isSupervisor, type AuthContext } from "@shared/auth/auth.types.js";
 import { pageArgs } from "@shared/utils/pagination.js";
 import type { ListQuery } from "./conversation.schema.js";
@@ -15,7 +16,7 @@ export class ConversationRepository {
   }
 
   /** One page of the caller's inbox, newest activity first. `unreadIds` is only used by the `unread` filter. */
-  async listInbox(auth: AuthContext, query: ListQuery, unreadIds: bigint[]) {
+  async listInbox(auth: AuthContext, query: ListQuery, unreadIds: string[]) {
     const where = buildInboxWhere(auth, query, unreadIds);
     const [items, total] = await Promise.all([
       this.db.conversation.findMany({ where, orderBy: inboxOrderBy, ...pageArgs(query), include: withTags }),
@@ -25,15 +26,15 @@ export class ConversationRepository {
   }
 
   /** Unread = customer messages after the agent's read position (plus a manual "mark unread" flag), per agent. */
-  async unreadCounts(agentId: bigint, conversationIds: bigint[]): Promise<Map<bigint, number>> {
-    const counts = new Map<bigint, number>();
+  async unreadCounts(agentId: string, conversationIds: string[]): Promise<Map<string, number>> {
+    const counts = new Map<string, number>();
     if (conversationIds.length === 0) return counts;
-    const rows = await this.db.$queryRaw<{ id: bigint; unread: number }[]>`
+    const rows = await this.db.$queryRaw<{ id: string; unread: number }[]>`
       SELECT m.conversation_id AS id, count(*)::int AS unread
         FROM messages m
         LEFT JOIN conversation_reads r
-          ON r.conversation_id = m.conversation_id AND r.reader_type = 'AGENT' AND r.reader_id = ${agentId}
-       WHERE m.conversation_id = ANY(${conversationIds}::bigint[])
+          ON r.conversation_id = m.conversation_id AND r.reader_type = 'AGENT' AND r.reader_id = ${agentId}::uuid
+       WHERE m.conversation_id = ANY(${conversationIds}::uuid[])
          AND m.sender_type = 'CUSTOMER' AND m.deleted_at IS NULL
          AND m.sequence_number > COALESCE(r.last_read_sequence_number, 0)
        GROUP BY m.conversation_id`;
@@ -47,23 +48,23 @@ export class ConversationRepository {
   }
 
   /** Ids of every conversation with unread messages or a manual unread flag for this agent (the `unread` filter). */
-  async unreadConversationIds(agentId: bigint): Promise<bigint[]> {
-    const rows = await this.db.$queryRaw<{ id: bigint }[]>`
+  async unreadConversationIds(agentId: string): Promise<string[]> {
+    const rows = await this.db.$queryRaw<{ id: string }[]>`
       SELECT DISTINCT u.id FROM (
         SELECT m.conversation_id AS id
           FROM messages m
           LEFT JOIN conversation_reads r
-            ON r.conversation_id = m.conversation_id AND r.reader_type = 'AGENT' AND r.reader_id = ${agentId}
+            ON r.conversation_id = m.conversation_id AND r.reader_type = 'AGENT' AND r.reader_id = ${agentId}::uuid
          WHERE m.sender_type = 'CUSTOMER' AND m.deleted_at IS NULL
            AND m.sequence_number > COALESCE(r.last_read_sequence_number, 0)
         UNION ALL
         SELECT conversation_id AS id FROM conversation_reads
-         WHERE reader_type = 'AGENT' AND reader_id = ${agentId} AND marked_unread
+         WHERE reader_type = 'AGENT' AND reader_id = ${agentId}::uuid AND marked_unread
       ) u`;
     return rows.map((row) => row.id);
   }
 
-  findForAccess(id: bigint, agentId: bigint): Promise<AccessibleConversation | null> {
+  findForAccess(id: string, agentId: string): Promise<AccessibleConversation | null> {
     return this.db.conversation.findUnique({
       where: { id },
       include: {
@@ -74,7 +75,7 @@ export class ConversationRepository {
   }
 
   /** For realtime events: the conversation with tags and the agents added to it as VIEWER. */
-  async findForEvent(id: bigint) {
+  async findForEvent(id: string) {
     const conversation = await this.db.conversation.findUnique({ where: { id }, include: withTags });
     if (!conversation) return null;
     const viewers = await this.db.conversationAssignment.findMany({
@@ -84,20 +85,20 @@ export class ConversationRepository {
     return { conversation, viewerIds: viewers.map((v) => v.agentId) };
   }
 
-  findByApplication(applicationId: bigint): Promise<ConversationWithTags | null> {
+  findByApplication(applicationId: string): Promise<ConversationWithTags | null> {
     return this.db.conversation.findFirst({ where: { applicationId, status: { not: "CLOSED" } }, include: withTags });
   }
 
   /** Serializes concurrent creates for one customer for the rest of the transaction. */
-  async lockCustomer(customerId: bigint): Promise<void> {
-    await this.db.$executeRaw`SELECT pg_advisory_xact_lock(${customerId})`;
+  async lockCustomer(customerId: string): Promise<void> {
+    await this.db.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${customerId}::text, 0))`;
   }
 
   create(data: Prisma.ConversationUncheckedCreateInput): Promise<ConversationWithTags> {
     return this.db.conversation.create({ data, include: withTags });
   }
 
-  addCustomerParticipant(conversationId: bigint, customerId: bigint) {
+  addCustomerParticipant(conversationId: string, customerId: string) {
     return this.db.conversationParticipant.create({
       data: { conversationId, participantType: "CUSTOMER", participantId: customerId, participantRole: "MEMBER" },
     });
@@ -105,7 +106,7 @@ export class ConversationRepository {
 
   /** Conditional on the status the caller observed, so two simultaneous transitions cannot both win. */
   async transitionStatus(
-    id: bigint,
+    id: string,
     from: string,
     data: Prisma.ConversationUncheckedUpdateManyInput,
   ): Promise<boolean> {
@@ -114,7 +115,7 @@ export class ConversationRepository {
   }
 
   /** Ends the open OWNER row and marks the owner as having left (resolve/close release the agent). */
-  async releaseOwner(conversationId: bigint, agentId: bigint, endedBy: bigint): Promise<void> {
+  async releaseOwner(conversationId: string, agentId: string, endedBy: string): Promise<void> {
     const now = new Date();
     await this.db.conversationAssignment.updateMany({
       where: { conversationId, endedAt: null, assignmentType: "OWNER" },
@@ -126,7 +127,7 @@ export class ConversationRepository {
     });
   }
 
-  async setArchived(id: bigint, archived: boolean): Promise<boolean> {
+  async setArchived(id: string, archived: boolean): Promise<boolean> {
     const { count } = await this.db.conversation.updateMany({
       where: { id, isArchived: !archived },
       data: { isArchived: archived, archivedAt: archived ? new Date() : null },
@@ -138,7 +139,7 @@ export class ConversationRepository {
     return this.db.conversationActivity.create({ data });
   }
 
-  async listActivities(conversationId: bigint, page: { skip: number; take: number }) {
+  async listActivities(conversationId: string, page: { skip: number; take: number }) {
     const where = { conversationId };
     const [items, total] = await Promise.all([
       this.db.conversationActivity.findMany({ where, orderBy: [{ createdAt: "desc" }, { id: "desc" }], ...page }),
@@ -169,7 +170,7 @@ export function visibilityWhere(auth: AuthContext): Prisma.ConversationWhereInpu
 export function buildInboxWhere(
   auth: AuthContext,
   query: ListQuery,
-  unreadIds: bigint[] = [],
+  unreadIds: string[] = [],
 ): Prisma.ConversationWhereInput {
   const and: Prisma.ConversationWhereInput[] = [visibilityWhere(auth)];
 
@@ -189,7 +190,7 @@ export function buildInboxWhere(
   if (query.q) {
     const text = { contains: query.q, mode: "insensitive" } as const;
     const or: Prisma.ConversationWhereInput[] = [{ customerName: text }, { customerIdentifier: text }];
-    if (/^[1-9]\d{0,17}$/.test(query.q)) or.push({ customerId: BigInt(query.q) });
+    if (z.uuid().safeParse(query.q).success) or.push({ customerId: query.q.toLowerCase() });
     and.push({ OR: or });
   }
   return { AND: and };

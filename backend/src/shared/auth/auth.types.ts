@@ -6,7 +6,7 @@ export const DASHBOARD_ROLES: readonly Role[] = ["AGENT", "SUPERVISOR", "ADMIN"]
 
 /** Identity resolved from the Backend 1 access token. Ids are Backend 1 ids (no FK in this database). */
 export interface AuthContext {
-  userId: bigint;
+  userId: string;
   role: Role;
 }
 

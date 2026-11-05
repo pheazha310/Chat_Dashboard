@@ -44,8 +44,11 @@ and `customer_identifier` are snapshots kept so the inbox can be searched and so
 
 ## Conventions
 
-- **Ids:** every primary key is an auto-increment `BIGINT` (no UUIDs). Prisma returns `bigint`, which `JSON.stringify`
-  cannot serialize; convert ids to strings at the controller boundary.
+- **Ids:** every primary key is a `UUID` (`@db.Uuid`, default `gen_random_uuid()`, built in since PostgreSQL 13), and
+  so is every column that holds a Backend 1 id (`customer_id`, `agent_id`, `user_id`, `*_by`, ...; still no foreign
+  key). Ids are plain strings in Prisma and JSON. Random UUIDs carry no order: sort by a timestamp or
+  `sequence_number`, never by `id`. The only `BIGINT` columns are counters: `messages.sequence_number`,
+  `conversations.last_sequence_number`, `conversation_reads.last_read_sequence_number` and `attachments.file_size`.
 - **No database enums.** Fixed-value columns are `VARCHAR` strings. Allowed values are enforced by CHECK constraints
   in `constraints.sql` (the **proposed** sets are listed below; adding a value means changing that CHECK).
 - **Polymorphic actors.** Where either a customer or an agent can act, a `*_type` column is paired with a `*_id` column.
@@ -210,7 +213,7 @@ the ack mapping `client_id` to the new id, then record receipts as recipients ac
 ## Open decisions
 
 - **Protocol id.** The WebSocket protocol identifies a conversation by `slug` (for example `maya`); there is no `slug`
-  column. Either add one or change the protocol to use the numeric id as a string.
+  column. Either add one or change the protocol to use the conversation UUID.
 - **Value sets** above are proposals; confirm them.
 - **Archive** is global (one flag per conversation), not per agent.
 - **Retention** (FR-10) needs a scheduled job; no schema support beyond soft delete.

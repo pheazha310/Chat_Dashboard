@@ -22,18 +22,18 @@ export class CachedDirectory implements Directory {
     return this.inner.source;
   }
 
-  getCustomer(customerId: bigint): Promise<CustomerProfile | null> {
+  getCustomer(customerId: string): Promise<CustomerProfile | null> {
     return this.inner.getCustomer(customerId);
   }
 
-  async getAgents(agentIds: bigint[]): Promise<AgentProfile[]> {
+  async getAgents(agentIds: string[]): Promise<AgentProfile[]> {
     const wanted = [...new Set(agentIds.map(String))];
     const missing = wanted.filter((id) => {
       const hit = this.agents.get(id);
       return !hit || hit.expiresAt <= this.now();
     });
     if (missing.length > 0) {
-      const found = new Map((await this.inner.getAgents(missing.map(BigInt))).map((agent) => [agent.id, agent]));
+      const found = new Map((await this.inner.getAgents(missing)).map((agent) => [agent.id, agent]));
       for (const id of missing) {
         this.agents.set(id, { value: found.get(id) ?? null, expiresAt: this.now() + this.ttlMs });
       }

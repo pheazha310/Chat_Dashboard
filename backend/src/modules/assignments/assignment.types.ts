@@ -17,9 +17,9 @@ export interface AssignmentDto {
 
 /** The conversation state an ownership change is decided from, and conditionally updated against. */
 export interface ConversationState {
-  id: bigint;
+  id: string;
   status: string;
   handoffStatus: string;
-  assignedAgentId: bigint | null;
+  assignedAgentId: string | null;
   isArchived: boolean;
 }

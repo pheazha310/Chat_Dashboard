@@ -1,10 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import type { BusEvent } from "@shared/events/event-bus.js";
 import { MemoryEventBus, RedisEventBus } from "../websocket.bus.js";
+import { uid } from "../../__tests__/support/ids.js";
 
 vi.mock("@config/logger.js", () => ({ logger: { warn: vi.fn() } }));
 
-const event: BusEvent = { type: "message.new", payload: { id: "1" }, audience: { kind: "dashboard" }, except: "c1" };
+const event: BusEvent = { type: "message.new", payload: { id: uid(1) }, audience: { kind: "dashboard" }, except: "c1" };
 
 describe("MemoryEventBus", () => {
   it("delivers a JSON copy to every subscriber and stops after unsubscribe", async () => {

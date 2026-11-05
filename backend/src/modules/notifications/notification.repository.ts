@@ -1,17 +1,17 @@
 import { prisma, type Db } from "@config/database.js";
 import type { PreferencesInput } from "./notification.schema.js";
 
-const mine = (agentId: bigint) => ({ recipientType: "AGENT", recipientId: agentId });
+const mine = (agentId: string) => ({ recipientType: "AGENT", recipientId: agentId });
 
 export class NotificationRepository {
   constructor(private readonly db: Db = prisma) {}
 
-  findPreferences(agentId: bigint) {
+  findPreferences(agentId: string) {
     return this.db.notificationPreference.findUnique({ where: { agentId } });
   }
 
   /** Creates the row on first change; unspecified switches keep their defaults (all on). */
-  upsertPreferences(agentId: bigint, input: PreferencesInput) {
+  upsertPreferences(agentId: string, input: PreferencesInput) {
     const data = {
       ...(input.newMessage === undefined ? {} : { newMessageEnabled: input.newMessage }),
       ...(input.assignment === undefined ? {} : { assignmentEnabled: input.assignment }),
@@ -23,7 +23,7 @@ export class NotificationRepository {
     return this.db.notificationPreference.upsert({ where: { agentId }, create: { agentId, ...data }, update: data });
   }
 
-  async isMuted(conversationId: bigint, agentId: bigint): Promise<boolean> {
+  async isMuted(conversationId: string, agentId: string): Promise<boolean> {
     const setting = await this.db.conversationNotificationSetting.findUnique({
       where: { conversationId_agentId: { conversationId, agentId } },
       select: { isMuted: true },
@@ -31,7 +31,7 @@ export class NotificationRepository {
     return setting?.isMuted ?? false;
   }
 
-  setMuted(conversationId: bigint, agentId: bigint, isMuted: boolean) {
+  setMuted(conversationId: string, agentId: string, isMuted: boolean) {
     return this.db.conversationNotificationSetting.upsert({
       where: { conversationId_agentId: { conversationId, agentId } },
       create: { conversationId, agentId, isMuted },
@@ -40,12 +40,12 @@ export class NotificationRepository {
   }
 
   create(data: {
-    agentId: bigint;
+    agentId: string;
     type: string;
     title: string;
     body?: string;
-    conversationId?: bigint;
-    messageId?: bigint;
+    conversationId?: string;
+    messageId?: string;
   }) {
     return this.db.notification.create({
       data: {
@@ -60,7 +60,7 @@ export class NotificationRepository {
     });
   }
 
-  async list(agentId: bigint, unreadOnly: boolean, page: { skip: number; take: number }) {
+  async list(agentId: string, unreadOnly: boolean, page: { skip: number; take: number }) {
     const where = { ...mine(agentId), ...(unreadOnly ? { readAt: null } : {}) };
     const [items, total] = await Promise.all([
       this.db.notification.findMany({ where, orderBy: [{ createdAt: "desc" }, { id: "desc" }], ...page }),
@@ -69,23 +69,23 @@ export class NotificationRepository {
     return { items, total };
   }
 
-  countUnread(agentId: bigint) {
+  countUnread(agentId: string) {
     return this.db.notification.count({ where: { ...mine(agentId), readAt: null } });
   }
 
   /** Scoped to the recipient, so one agent can never read-mark or even see another's notification. */
-  findOwned(id: bigint, agentId: bigint) {
+  findOwned(id: string, agentId: string) {
     return this.db.notification.findFirst({ where: { id, ...mine(agentId) } });
   }
 
-  async markRead(id: bigint, agentId: bigint): Promise<void> {
+  async markRead(id: string, agentId: string): Promise<void> {
     await this.db.notification.updateMany({
       where: { id, ...mine(agentId), readAt: null },
       data: { readAt: new Date() },
     });
   }
 
-  async markAllRead(agentId: bigint): Promise<number> {
+  async markAllRead(agentId: string): Promise<number> {
     const { count } = await this.db.notification.updateMany({
       where: { ...mine(agentId), readAt: null },
       data: { readAt: new Date() },

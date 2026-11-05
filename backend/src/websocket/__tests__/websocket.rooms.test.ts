@@ -2,10 +2,11 @@ import { describe, expect, it, vi } from "vitest";
 import type { AuthContext } from "@shared/auth/auth.types.js";
 import type { Audience } from "@shared/events/event-bus.js";
 import { canReceive, ConnectionRegistry, type Connection } from "../websocket.rooms.js";
+import { uid } from "../../__tests__/support/ids.js";
 
-const agent1: AuthContext = { userId: 1n, role: "AGENT" };
-const agent2: AuthContext = { userId: 2n, role: "AGENT" };
-const supervisor: AuthContext = { userId: 9n, role: "SUPERVISOR" };
+const agent1: AuthContext = { userId: uid(1), role: "AGENT" };
+const agent2: AuthContext = { userId: uid(2), role: "AGENT" };
+const supervisor: AuthContext = { userId: uid(9), role: "SUPERVISOR" };
 
 const conversation = (patch: Partial<Extract<Audience, { kind: "conversation" }>> = {}): Audience => ({
   kind: "conversation",
@@ -15,14 +16,14 @@ const conversation = (patch: Partial<Extract<Audience, { kind: "conversation" }>
   alsoUserIds: [],
   ...patch,
 });
-const assignedTo1 = conversation({ handoffStatus: "ASSIGNED", assignedAgentId: "1" });
+const assignedTo1 = conversation({ handoffStatus: "ASSIGNED", assignedAgentId: uid(1) });
 
 describe("canReceive", () => {
   it("delivers dashboard events to everyone and user events only to the named users", () => {
     expect(canReceive({ kind: "dashboard" }, agent2)).toBe(true);
-    expect(canReceive({ kind: "users", userIds: ["1"] }, agent1)).toBe(true);
-    expect(canReceive({ kind: "users", userIds: ["1"] }, agent2)).toBe(false);
-    expect(canReceive({ kind: "users", userIds: ["1"] }, supervisor)).toBe(false); // supervisors do not read others' notifications
+    expect(canReceive({ kind: "users", userIds: [uid(1)] }, agent1)).toBe(true);
+    expect(canReceive({ kind: "users", userIds: [uid(1)] }, agent2)).toBe(false);
+    expect(canReceive({ kind: "users", userIds: [uid(1)] }, supervisor)).toBe(false); // supervisors do not read others' notifications
   });
 
   it("follows the REST visibility rule for conversation events", () => {
@@ -34,15 +35,15 @@ describe("canReceive", () => {
   });
 
   it("lets viewers in and tells users who just lost access", () => {
-    expect(canReceive({ ...assignedTo1, viewerIds: ["2"] } as Audience, agent2)).toBe(true);
-    expect(canReceive({ ...assignedTo1, alsoUserIds: ["2"] } as Audience, agent2)).toBe(true);
+    expect(canReceive({ ...assignedTo1, viewerIds: [uid(2)] } as Audience, agent2)).toBe(true);
+    expect(canReceive({ ...assignedTo1, alsoUserIds: [uid(2)] } as Audience, agent2)).toBe(true);
   });
 
   it("not_conversation reaches exactly the sockets that cannot see the conversation", () => {
     const hidden: Audience = {
       kind: "not_conversation",
       handoffStatus: "ASSIGNED",
-      assignedAgentId: "1",
+      assignedAgentId: uid(1),
       viewerIds: [],
     };
     expect(canReceive(hidden, agent1)).toBe(false);
@@ -67,10 +68,10 @@ describe("ConnectionRegistry.deliver", () => {
     const anonymous = connection("d");
     [owner, originTab, stranger, anonymous].forEach((c) => registry.add(c));
 
-    registry.deliver({ type: "message.new", payload: { message: { id: "1" } }, audience: assignedTo1, except: "b" });
+    registry.deliver({ type: "message.new", payload: { message: { id: uid(1) } }, audience: assignedTo1, except: "b" });
 
     expect(owner.socket.send).toHaveBeenCalledWith(
-      JSON.stringify({ type: "message.new", payload: { message: { id: "1" } } }),
+      JSON.stringify({ type: "message.new", payload: { message: { id: uid(1) } } }),
     );
     expect(originTab.socket.send).not.toHaveBeenCalled();
     expect(stranger.socket.send).not.toHaveBeenCalled();

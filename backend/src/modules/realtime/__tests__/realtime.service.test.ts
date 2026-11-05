@@ -2,10 +2,11 @@ import { describe, expect, it, vi } from "vitest";
 import type { BusEvent, EventBus } from "@shared/events/event-bus.js";
 import { RealtimeService } from "../realtime.service.js";
 import type { ConversationSnapshot } from "../realtime.types.js";
+import { uid } from "../../../__tests__/support/ids.js";
 
 const snapshot = (handoffStatus: string, assignedAgentId: string | null): ConversationSnapshot => ({
-  conversation: { id: "10", handoffStatus, assignedAgentId } as ConversationSnapshot["conversation"],
-  audience: { handoffStatus, assignedAgentId, viewerIds: ["4"] },
+  conversation: { id: uid(10), handoffStatus, assignedAgentId } as ConversationSnapshot["conversation"],
+  audience: { handoffStatus, assignedAgentId, viewerIds: [uid(4)] },
 });
 
 function setup(found: ConversationSnapshot | null) {
@@ -17,17 +18,20 @@ function setup(found: ConversationSnapshot | null) {
 
 describe("RealtimeService", () => {
   it("publishes a new message to the conversation audience, skipping the origin socket", async () => {
-    const { service, published } = setup(snapshot("ASSIGNED", "1"));
-    await service.messageCreated({ id: "5", conversationId: "10" }, { origin: "conn-1", conversationUpdated: true });
+    const { service, published } = setup(snapshot("ASSIGNED", uid(1)));
+    await service.messageCreated(
+      { id: uid(5), conversationId: uid(10) },
+      { origin: "conn-1", conversationUpdated: true },
+    );
     expect(published.map((e) => e.type)).toEqual(["message.new", "conversation.updated"]);
     expect(published[0]).toMatchObject({
-      payload: { message: { id: "5" } },
+      payload: { message: { id: uid(5) } },
       except: "conn-1",
       audience: {
         kind: "conversation",
         handoffStatus: "ASSIGNED",
-        assignedAgentId: "1",
-        viewerIds: ["4"],
+        assignedAgentId: uid(1),
+        viewerIds: [uid(4)],
         alsoUserIds: [],
       },
     });
@@ -36,47 +40,47 @@ describe("RealtimeService", () => {
 
   it("does nothing for a conversation that no longer exists", async () => {
     const { service, published } = setup(null);
-    await service.messageCreated({ id: "5", conversationId: "10" });
-    await service.conversationEvent(10n, "updated");
-    await service.typing(10n, 1n, true);
+    await service.messageCreated({ id: uid(5), conversationId: uid(10) });
+    await service.conversationEvent(uid(10), "updated");
+    await service.typing(uid(10), uid(1), true);
     expect(published).toEqual([]);
   });
 
   it("names the previous owner so they learn the chat moved, and tells everyone else who lost access", async () => {
-    const { service, published } = setup(snapshot("ASSIGNED", "2"));
-    await service.conversationEvent(10n, "transferred", { agentId: "2" }, [1n]);
+    const { service, published } = setup(snapshot("ASSIGNED", uid(2)));
+    await service.conversationEvent(uid(10), "transferred", { agentId: uid(2) }, [uid(1)]);
     expect(published[0]).toMatchObject({
       type: "conversation.transferred",
-      payload: { conversationId: "10", agentId: "2" },
-      audience: { kind: "conversation", alsoUserIds: ["1"] },
+      payload: { conversationId: uid(10), agentId: uid(2) },
+      audience: { kind: "conversation", alsoUserIds: [uid(1)] },
     });
     expect(published[1]).toMatchObject({
       type: "conversation.hidden",
-      payload: { conversationId: "10" },
-      audience: { kind: "not_conversation", assignedAgentId: "2" },
+      payload: { conversationId: uid(10) },
+      audience: { kind: "not_conversation", assignedAgentId: uid(2) },
     });
   });
 
   it("sends no hidden event when the conversation did not become owned", async () => {
     const { service, published } = setup(snapshot("NEEDS_HUMAN", null));
-    await service.conversationEvent(10n, "updated");
-    await service.conversationEvent(10n, "status_changed", { from: "OPEN", to: "RESOLVED" });
+    await service.conversationEvent(uid(10), "updated");
+    await service.conversationEvent(uid(10), "status_changed", { from: "OPEN", to: "RESOLVED" });
     expect(published.map((e) => e.type)).toEqual(["conversation.updated", "conversation.status_changed"]);
   });
 
   it("targets read state and notifications at one user, presence at everyone, status updates at the audience", async () => {
     const { service, published } = setup(snapshot("NONE", null));
-    await service.readState(1n, { conversationId: "10", unreadCount: 0 });
-    await service.notification(1n, { id: "1" });
-    await service.presenceChanged(1n, "BUSY");
-    await service.messageStatus(10n, [5n, 6n], "READ");
-    await service.messageStatus(10n, [], "READ");
+    await service.readState(uid(1), { conversationId: "10", unreadCount: 0 });
+    await service.notification(uid(1), { id: uid(1) });
+    await service.presenceChanged(uid(1), "BUSY");
+    await service.messageStatus(uid(10), [uid(5), uid(6)], "READ");
+    await service.messageStatus(uid(10), [], "READ");
     expect(published.map((e) => [e.type, e.audience.kind])).toEqual([
       ["conversation.read", "users"],
       ["notification.new", "users"],
       ["presence.updated", "dashboard"],
       ["message.status", "conversation"],
     ]);
-    expect(published[3]?.payload).toEqual({ conversationId: "10", messageIds: ["5", "6"], status: "READ" });
+    expect(published[3]?.payload).toEqual({ conversationId: uid(10), messageIds: [uid(5), uid(6)], status: "READ" });
   });
 });

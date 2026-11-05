@@ -23,8 +23,8 @@ export interface MessageDto {
 
 /** The conversation row as read under lock; carries what the policy and the customer path need. */
 export interface LockedConversation extends PolicyInput {
-  id: bigint;
-  customerId: bigint | null;
+  id: string;
+  customerId: string | null;
 }
 
 export interface MessagePage {

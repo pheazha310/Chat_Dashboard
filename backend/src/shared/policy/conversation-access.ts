@@ -18,7 +18,7 @@ export interface ConversationPermissions {
 export interface PolicyInput {
   status: string;
   handoffStatus: string;
-  assignedAgentId: bigint | null;
+  assignedAgentId: string | null;
   isArchived: boolean;
 }
 

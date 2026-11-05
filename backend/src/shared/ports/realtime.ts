@@ -11,22 +11,22 @@ export interface RealtimeNotifier {
     options?: { origin?: string; conversationUpdated?: boolean },
   ): Promise<void>;
   /** Delivery or read status of customer messages changed. */
-  messageStatus(conversationId: bigint, messageIds: bigint[], status: "DELIVERED" | "READ"): Promise<void>;
+  messageStatus(conversationId: string, messageIds: string[], status: "DELIVERED" | "READ"): Promise<void>;
   /** Conversation state changed. `alsoNotify` lists users who lost access (e.g. the previous owner). */
   conversationEvent(
-    conversationId: bigint,
+    conversationId: string,
     kind: ConversationEventKind,
     extra?: Record<string, unknown>,
-    alsoNotify?: bigint[],
+    alsoNotify?: string[],
   ): Promise<void>;
   /** An agent's read position or unread flag changed; delivered to all of that agent's sessions. */
-  readState(agentId: bigint, state: object): Promise<void>;
+  readState(agentId: string, state: object): Promise<void>;
   /** An agent's effective presence changed (AVAILABLE, BUSY, AWAY or OFFLINE). Sent to every dashboard session. */
-  presenceChanged(userId: bigint, status: string): Promise<void>;
+  presenceChanged(userId: string, status: string): Promise<void>;
   /** An agent started or stopped typing. `origin` is the socket that sent it. */
-  typing(conversationId: bigint, userId: bigint, active: boolean, origin?: string): Promise<void>;
+  typing(conversationId: string, userId: string, active: boolean, origin?: string): Promise<void>;
   /** An agent marked notifications read; delivered to all of that agent's sessions. */
-  notificationRead(agentId: bigint, payload: object): Promise<void>;
+  notificationRead(agentId: string, payload: object): Promise<void>;
   /** A notification was stored for an agent. */
-  notification(agentId: bigint, notification: object): Promise<void>;
+  notification(agentId: string, notification: object): Promise<void>;
 }

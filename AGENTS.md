@@ -39,7 +39,7 @@ Node 22, pnpm 10 (pinned in `.mise.toml` and root `package.json`).
   `<name>.routes.ts → .controller.ts → .service.ts → .repository.ts` (+ `.schema.ts` for zod, `.types.ts`, `.openapi.ts` for every module that exposes routes) and then
   Prisma → PostgreSQL. Cross-cutting code lives in `config/`, `database/`, `websocket/`, `shared/`
   (`errors/`, `middleware/`, `validators/`, `utils/`, `constants/`, `types/`; create a folder when first needed).
-  `src/routes.ts` mounts module routers under `/api`. See [docs/backend-structure.md](docs/backend-structure.md).
+  `src/routes.ts` mounts module routers, served under `/admin/api/v1` (staff namespace; `/guest/api/v1` and `/customer/api/v1` are reserved for other consumers). See [docs/backend-structure.md](docs/backend-structure.md).
   Only repositories query Prisma (the one exception is `server.ts` calling `prisma.$disconnect()` on shutdown). Services own business rules and transactions. Controllers only
   validate input (via the `validate()` middleware) and shape the response. WebSocket handlers play the controller role:
   `ws handler → service → repository`. Modules call each other only through services, never repositories.
@@ -84,7 +84,7 @@ Load the skills that match the task (a feature usually needs several):
 | ------------------------- | --------------------------------------------------------------------- |
 | `frontend-development`    | anything in `frontend/`                                               |
 | `backend-development`     | services, repositories, config in `backend/src/`                      |
-| `api-development`         | REST endpoints under `/api`                                           |
+| `api-development`         | REST endpoints under `/admin/api/v1`                                  |
 | `websocket-development`   | new/changed realtime events (spans protocol, gateway, frontend, mock) |
 | `database-design`         | schema, migrations, constraints                                       |
 | `authentication-security` | auth, sessions, permissions, secrets                                  |

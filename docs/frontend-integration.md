@@ -14,15 +14,15 @@ features) is the same in both, so the mock demo keeps working.
 # 1. backend (needs PostgreSQL with the migration applied, and Redis; see backend/.env.example)
 pnpm dev:backend                      # http://localhost:4000, ws://localhost:4000/ws
 
-# 2. frontend: a Backend 1 token is required; until its contract is known, dev tokens are `dev:<userId>:<ROLE>`
+# 2. frontend: a Backend 1 token is required; until its contract is known, dev tokens are `dev:<userUuid>:<ROLE>`
 cd frontend
-VITE_WS_URL=ws://localhost:4000/ws VITE_AUTH_TOKEN=dev:3:AGENT pnpm dev
+VITE_WS_URL=ws://localhost:4000/ws VITE_AUTH_TOKEN=dev:00000000-0000-4000-8000-000000000003:AGENT pnpm dev
 ```
 
 | Variable          | Meaning                                                                                                                                                                                             |
 | ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `VITE_WS_URL`     | gateway URL. Setting it switches to the backend mode.                                                                                                                                               |
-| `VITE_API_URL`    | REST base URL. Default: the WebSocket URL's host with `/api` (`ws://h:4000/ws` → `http://h:4000/api`).                                                                                              |
+| `VITE_API_URL`    | REST base URL. Default: the WebSocket URL's host with `/admin/api/v1` (`ws://h:4000/ws` → `http://h:4000/admin/api/v1`).                                                                            |
 | `VITE_AUTH_TOKEN` | development access token. In production the host app stores the Backend 1 token in `localStorage["auth.token"]` after sign-in; the sign-in flow itself belongs to Backend 1 and is not in this app. |
 
 Backend `CORS_ORIGIN` must include the frontend origin (default `http://localhost:5173`); the gateway checks it too.
@@ -35,7 +35,7 @@ offline (a console warning explains why).
 widgets ─ features ─ entities ──► wsClient (WsClient: reconnect, queue, validation, unchanged)
                           │                │
                           │                └─► BackendSocket ── BackendTranslator ◄──► gateway /ws
-                          └─► shared/api/rest (apiRequest, getMessages, …) ◄──────────► /api
+                          └─► shared/api/rest (apiRequest, getMessages, …) ◄──────────► /admin/api/v1
 ```
 
 - **`shared/api/ws/backend/backend-socket.ts`** is a `WebSocketLike`, like the mock socket. It sends the `auth` frame,
@@ -110,7 +110,7 @@ unless configured:
 DATABASE_URL=postgresql://…/chat_test REDIS_URL=redis://127.0.0.1:6379 EVENT_BUS=memory PORT=4555 pnpm dev:backend
 
 cd frontend
-VITE_WS_URL=ws://127.0.0.1:4555/ws VITE_AUTH_TOKEN=dev:3:AGENT LIVE_API_URL=http://127.0.0.1:4555/api pnpm test
+VITE_WS_URL=ws://127.0.0.1:4555/ws VITE_AUTH_TOKEN=dev:00000000-0000-4000-8000-000000000003:AGENT LIVE_API_URL=http://127.0.0.1:4555/admin/api/v1 pnpm test
 ```
 
 It creates its own conversations (unique application ids) and never deletes anything, so use a disposable database.

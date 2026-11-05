@@ -46,7 +46,7 @@ export class CustomerService {
   ) {}
 
   /** The customer behind a conversation the caller can open, filtered to what the caller may see. */
-  async customer(auth: AuthContext, conversationId: bigint): Promise<CustomerDto> {
+  async customer(auth: AuthContext, conversationId: string): Promise<CustomerDto> {
     const conversation = await this.access.requireVisible(auth, conversationId);
     if (conversation.customerId === null) throw new NotFoundError("This conversation has no customer");
     let profile: CustomerProfile | null;
@@ -64,7 +64,7 @@ export class CustomerService {
    * The customer's other conversations that the caller is allowed to see (hidden ones are not counted), newest
    * first. Anchored to a conversation the caller can open, so customers cannot be enumerated by id.
    */
-  async otherConversations(auth: AuthContext, conversationId: bigint, page: PageQuery) {
+  async otherConversations(auth: AuthContext, conversationId: string, page: PageQuery) {
     const conversation = await this.access.requireVisible(auth, conversationId);
     if (conversation.customerId === null) throw new NotFoundError("This conversation has no customer");
     return this.conversations.list(auth, {
@@ -75,7 +75,7 @@ export class CustomerService {
     });
   }
 
-  async participants(auth: AuthContext, conversationId: bigint): Promise<ParticipantDto[]> {
+  async participants(auth: AuthContext, conversationId: string): Promise<ParticipantDto[]> {
     const conversation = await this.access.requireVisible(auth, conversationId);
     const rows = await this.repository.participants(conversationId);
 
