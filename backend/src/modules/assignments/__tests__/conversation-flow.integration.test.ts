@@ -30,11 +30,12 @@ describe.skipIf(!url)("conversation flows on PostgreSQL", () => {
     const { AssignmentRepository } = await import("../assignment.repository.js");
     const { AssignmentService } = await import("../assignment.service.js");
     const { NotificationRepository, NotificationService } = await import("@modules/notifications/index.js");
-    conversations = new ConversationService(new ConversationRepository());
-    assignments = new AssignmentService(
-      new AssignmentRepository(),
-      new NotificationService(new NotificationRepository()),
-    );
+    const { MessageRepository } = await import("@modules/messages/message.repository.js");
+    const { MessageService } = await import("@modules/messages/message.service.js");
+    const notifications = new NotificationService(new NotificationRepository());
+    const messages = new MessageService(new MessageRepository(), notifications);
+    conversations = new ConversationService(new ConversationRepository(), messages);
+    assignments = new AssignmentService(new AssignmentRepository(), notifications, messages);
   });
 
   afterAll(async () => {
@@ -264,7 +265,15 @@ describe.skipIf(!url)("conversation flows on PostgreSQL", () => {
         { from: "OPEN", to: "RESOLVED" },
         { from: "RESOLVED", to: "OPEN" },
       ]);
-      expect(await db.message.count({ where: { conversationId: cid } })).toBe(0); // history untouched
+      // Status changes leave a SYSTEM message in the thread and never delete anything.
+      const thread = await db.message.findMany({ where: { conversationId: cid }, orderBy: { sequenceNumber: "asc" } });
+      expect(thread.map((m) => [m.senderType, m.sequenceNumber])).toEqual([
+        ["SYSTEM", 1n],
+        ["SYSTEM", 2n],
+        ["SYSTEM", 3n],
+      ]);
+      expect(thread[1]?.content).toBe("Agent 1 resolved the conversation");
+      expect(thread[0]?.senderId).toBeNull();
     });
 
     it("closing frees the application for a new conversation", async () => {

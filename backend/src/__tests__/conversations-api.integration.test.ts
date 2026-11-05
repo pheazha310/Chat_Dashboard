@@ -41,6 +41,14 @@ describe.skipIf(!url)("/api/conversations over HTTP", () => {
   const agent1 = "dev:1:AGENT";
   const agent2 = "dev:2:AGENT";
 
+  it("serves the OpenAPI document publicly", async () => {
+    const response = await fetch(base.replace("/conversations", "/openapi.json"));
+    expect(response.status).toBe(200);
+    const doc = (await response.json()) as { openapi: string; paths: Record<string, unknown> };
+    expect(doc.openapi).toBe("3.1.0");
+    expect(Object.keys(doc.paths)).toContain("/conversations/{id}/messages");
+  });
+
   it("rejects missing, malformed and customer tokens", async () => {
     expect((await call("", null)).status).toBe(401);
     expect((await call("", "garbage")).status).toBe(401);
@@ -98,5 +106,60 @@ describe.skipIf(!url)("/api/conversations over HTTP", () => {
       "ASSIGNED",
     ]);
     expect((await call("/999", agent1)).status).toBe(404);
+  });
+
+  it("sends idempotently, pages history, syncs after a reconnect and tracks read state", async () => {
+    await call("", agent1, "POST", { customerId: "300", applicationId: "55", customerName: "Dara Sok" });
+    await call("/1/assign", agent1, "POST", {});
+
+    expect((await call("/1/messages", agent1, "POST", { clientId: "", text: "x" })).status).toBe(400);
+    expect((await call("/1/messages", agent1, "POST", { clientId: "c1", text: "   " })).status).toBe(400);
+    expect((await call("/1/messages", agent2, "POST", { clientId: "c1", text: "hi" })).status).toBe(404);
+
+    const sent = await call("/1/messages", agent1, "POST", { clientId: "c1", text: "Hello Dara" });
+    expect(sent.status).toBe(201);
+    expect(sent.body.data).toMatchObject({
+      clientId: "c1",
+      senderType: "AGENT",
+      content: "Hello Dara",
+      status: "SENT",
+    });
+    const retry = await call("/1/messages", agent1, "POST", { clientId: "c1", text: "Hello Dara" });
+    expect(retry.status).toBe(200);
+    expect(retry.body.data.id).toBe(sent.body.data.id);
+
+    const { messageService } = await import("../modules/messages/index.js");
+    await messageService.receiveFromCustomer({ customerId: 300n, conversationId: 1n, clientId: "k1", text: "Thanks" });
+    await messageService.receiveFromCustomer({
+      customerId: 300n,
+      conversationId: 1n,
+      clientId: "k2",
+      text: "One more thing",
+    });
+
+    const latest = await call("/1/messages?limit=2", agent1);
+    expect(latest.body.data.map((m: { content: string }) => m.content)).toEqual(["Thanks", "One more thing"]);
+    expect(latest.body.meta).toMatchObject({ limit: 2, hasMore: true, direction: "older" });
+    const older = await call(`/1/messages?limit=10&before=${latest.body.meta.oldestSequence}`, agent1);
+    expect(older.body.data.map((m: { content: string }) => m.content)).toEqual([
+      "Agent 1 took over the conversation",
+      "Hello Dara",
+    ]);
+    const missed = await call(`/1/messages?after=${sent.body.data.sequenceNumber}`, agent1);
+    expect(missed.body.data.map((m: { content: string }) => m.content)).toEqual(["Thanks", "One more thing"]);
+    expect((await call("/1/messages?before=3&after=1", agent1)).status).toBe(400);
+    expect((await call("/1/messages", agent2)).status).toBe(404);
+
+    expect((await call("", agent1)).body.data[0].unreadCount).toBe(2);
+    const read = await call("/1/read", agent1, "POST", {});
+    expect(read.body.data).toMatchObject({ unreadCount: 0, markedUnread: false });
+    expect((await call("", agent1)).body.data[0].unreadCount).toBe(0);
+    expect((await call("/1/unread", agent1, "POST")).body.data).toMatchObject({ markedUnread: true, unreadCount: 1 });
+    expect((await call("/1/read", agent2, "POST", {})).status).toBe(404);
+
+    const customerMessage = latest.body.data[0].id;
+    expect((await call(`/1/messages/${customerMessage}/delivered`, agent1, "POST")).body.data.status).toBe("READ");
+    expect((await call(`/1/messages/${sent.body.data.id}/delivered`, agent1, "POST")).status).toBe(400);
+    expect((await call("/1/messages/999/delivered", agent1, "POST")).status).toBe(404);
   });
 });

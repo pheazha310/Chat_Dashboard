@@ -1,24 +1,32 @@
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "@shared/errors/AppError.js";
 import type { AuthContext } from "@shared/auth/auth.types.js";
+import type { SystemMessagePort } from "@shared/ports/system-message.js";
+import { bestEffort } from "@shared/utils/best-effort.js";
 import { idToString } from "@shared/utils/ids.js";
 import { pageArgs, pageMeta, type PageQuery } from "@shared/utils/pagination.js";
-import { toActivity, toDetail, toSummary } from "./conversation.mapper.js";
 import { canView, permissionsFor } from "@shared/policy/conversation-access.js";
-import { buildInboxWhere, inboxOrderBy } from "./conversation.query.js";
 import type { ConversationRepository } from "./conversation.repository.js";
 import type { CreateInput, ListQuery } from "./conversation.schema.js";
-import type { AccessibleConversation, ConversationStatus } from "./conversation.types.js";
+import type {
+  AccessibleConversation,
+  ActivityDto,
+  ConversationDetailDto,
+  ConversationPermissions,
+  ConversationStatus,
+  ConversationSummaryDto,
+  ConversationWithTags,
+} from "./conversation.types.js";
+import type { ConversationActivity } from "../../../prisma/generated/prisma/client.js";
 
 export class ConversationService {
-  constructor(private readonly repository: ConversationRepository) {}
+  constructor(
+    private readonly repository: ConversationRepository,
+    private readonly systemMessages: SystemMessagePort,
+  ) {}
 
   async list(auth: AuthContext, query: ListQuery) {
     const unreadIds = query.filter === "unread" ? await this.repository.unreadConversationIds(auth.userId) : [];
-    const { items, total } = await this.repository.list(
-      buildInboxWhere(auth, query, unreadIds),
-      inboxOrderBy,
-      pageArgs(query),
-    );
+    const { items, total } = await this.repository.listInbox(auth, query, unreadIds);
     const unread = await this.repository.unreadCounts(
       auth.userId,
       items.map((item) => item.id),
@@ -88,6 +96,15 @@ export class ConversationService {
         metadata: { from: conversation.status, to },
       });
     });
+    const verb = { OPEN: "reopened", RESOLVED: "resolved", CLOSED: "closed" }[to];
+    await bestEffort("system message", () =>
+      this.systemMessages.post(id, `Agent ${auth.userId} ${verb} the conversation`, {
+        event: `status_${to.toLowerCase()}`,
+        actorId: idToString(auth.userId),
+        from: conversation.status,
+        to,
+      }),
+    );
     return this.get(auth, id);
   }
 
@@ -162,3 +179,57 @@ function statusPatch(to: ConversationStatus, current: AccessibleConversation) {
 }
 
 const released = { handoffStatus: "NONE", conversationMode: "AI", assignedAgentId: null } as const;
+
+// ─── DTO mapping ───────────────────────────────────────────────────────────
+
+const nullableId = (value: bigint | null) => (value === null ? null : idToString(value));
+const iso = (value: Date | null) => (value === null ? null : value.toISOString());
+
+function toSummary(row: ConversationWithTags, unreadCount: number): ConversationSummaryDto {
+  return {
+    id: idToString(row.id),
+    customerId: nullableId(row.customerId),
+    customerName: row.customerName,
+    customerIdentifier: row.customerIdentifier,
+    applicationId: nullableId(row.applicationId),
+    subject: row.subject,
+    status: row.status,
+    priority: row.priority,
+    conversationMode: row.conversationMode,
+    handoffStatus: row.handoffStatus,
+    assignedAgentId: nullableId(row.assignedAgentId),
+    isArchived: row.isArchived,
+    lastMessageAt: row.lastMessageAt.toISOString(),
+    lastMessagePreview: row.lastMessagePreview,
+    unreadCount,
+    tags: row.conversationTags.map(({ tag }) => ({ id: idToString(tag.id), name: tag.name, color: tag.color })),
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+    resolvedAt: iso(row.resolvedAt),
+    closedAt: iso(row.closedAt),
+  };
+}
+
+function toDetail(
+  row: ConversationWithTags,
+  unreadCount: number,
+  permissions: ConversationPermissions,
+): ConversationDetailDto {
+  return {
+    ...toSummary(row, unreadCount),
+    summary: row.summary,
+    lastSequenceNumber: idToString(row.lastSequenceNumber),
+    permissions,
+  };
+}
+
+const toActivity = (row: ConversationActivity): ActivityDto => ({
+  id: idToString(row.id),
+  conversationId: idToString(row.conversationId),
+  actorType: row.actorType,
+  actorId: nullableId(row.actorId),
+  activityType: row.activityType,
+  description: row.description,
+  metadata: row.metadata,
+  createdAt: row.createdAt.toISOString(),
+});

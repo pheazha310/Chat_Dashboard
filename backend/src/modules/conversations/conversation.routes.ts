@@ -2,12 +2,13 @@ import { Router } from "express";
 import { validate } from "@shared/middleware/validate.middleware.js";
 import { idParams } from "@shared/utils/ids.js";
 import { pageQuery } from "@shared/utils/pagination.js";
+import { messageService } from "@modules/messages/index.js";
 import { ConversationController } from "./conversation.controller.js";
 import { ConversationRepository } from "./conversation.repository.js";
 import { createBody, listQuery, statusBody } from "./conversation.schema.js";
 import { ConversationService } from "./conversation.service.js";
 
-const controller = new ConversationController(new ConversationService(new ConversationRepository()));
+const controller = new ConversationController(new ConversationService(new ConversationRepository(), messageService));
 
 export const conversationRoutes = Router();
 

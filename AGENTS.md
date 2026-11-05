@@ -36,7 +36,7 @@ Node 22, pnpm 10 (pinned in `.mise.toml` and root `package.json`).
 - **Frontend:** Feature-Sliced Design, `app → pages → widgets → features → entities → shared`, `@/` = `src/`.
   Slices expose only `index.ts`; features never import features. Enforced by `pnpm check:fsd`.
 - **Backend:** modular, one folder per domain under `backend/src/modules/<name>/`, each holding
-  `<name>.routes.ts → .controller.ts → .service.ts → .repository.ts` (+ `.schema.ts` for zod, `.types.ts`, optional `.openapi.ts`) and then
+  `<name>.routes.ts → .controller.ts → .service.ts → .repository.ts` (+ `.schema.ts` for zod, `.types.ts`, `.openapi.ts` for every module that exposes routes) and then
   Prisma → PostgreSQL. Cross-cutting code lives in `config/`, `database/`, `websocket/`, `shared/`
   (`errors/`, `middleware/`, `validators/`, `utils/`, `constants/`, `types/`; create a folder when first needed).
   `src/routes.ts` mounts module routers under `/api`. See [docs/backend-structure.md](docs/backend-structure.md).
@@ -48,9 +48,9 @@ Node 22, pnpm 10 (pinned in `.mise.toml` and root `package.json`).
 
 ## Current state (keep docs honest)
 
-- Backend implements `GET /api/health`, the conversations and assignments REST APIs (`docs/api-conversations.md`), a
-  notification service, the WS gateway relay (no auth, no event handlers) and the Prisma schema. Messages, receipts,
-  presence, customer info, realtime events and the AI worker are **designed in docs but not built**. Do not describe
+- Backend implements `GET /api/health`, the conversations, assignments and messages REST APIs (`docs/api-conversations.md`), a
+  notification service, the WS gateway relay (no auth, no event handlers) and the Prisma schema. The customer channel, presence and
+  typing, customer info, notification endpoints, realtime events and the AI worker are **designed in docs but not built**. Do not describe
   them as existing.
 - **Authentication is an external service** (separate repo). This backend only consumes it: it must not issue tokens,
   store passwords, or implement login. The service's API contract (token format, verify/introspect endpoint, user/role

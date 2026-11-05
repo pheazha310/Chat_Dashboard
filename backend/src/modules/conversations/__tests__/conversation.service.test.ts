@@ -6,8 +6,11 @@ import type { ConversationRepository } from "../conversation.repository.js";
 import { ConversationService } from "../conversation.service.js";
 import type { AccessibleConversation } from "../conversation.types.js";
 
+vi.mock("@config/logger.js", () => ({ logger: { warn: vi.fn() } }));
+
+const systemMessages = { post: vi.fn() };
 const repo = {
-  list: vi.fn(),
+  listInbox: vi.fn(),
   unreadCounts: vi.fn(),
   unreadConversationIds: vi.fn(),
   findForAccess: vi.fn(),
@@ -22,7 +25,7 @@ const repo = {
   listActivities: vi.fn(),
   inTransaction: vi.fn(),
 };
-const service = new ConversationService(fromPartial<ConversationRepository>(repo));
+const service = new ConversationService(fromPartial<ConversationRepository>(repo), systemMessages);
 
 const agent: AuthContext = { userId: 1n, role: "AGENT" };
 const other: AuthContext = { userId: 2n, role: "AGENT" };
@@ -62,14 +65,15 @@ beforeEach(() => {
   repo.unreadCounts.mockResolvedValue(new Map());
   repo.transitionStatus.mockResolvedValue(true);
   repo.setArchived.mockResolvedValue(true);
+  systemMessages.post.mockResolvedValue(undefined);
 });
 
 describe("list", () => {
   it("returns summaries with per-agent unread counts and pagination meta", async () => {
-    repo.list.mockResolvedValue({ items: [row()], total: 51 });
+    repo.listInbox.mockResolvedValue({ items: [row()], total: 51 });
     repo.unreadCounts.mockResolvedValue(new Map([[10n, 4]]));
     const result = await service.list(agent, { filter: "all", page: 2, size: 25 });
-    expect(repo.list).toHaveBeenCalledWith(expect.anything(), expect.anything(), { skip: 25, take: 25 });
+    expect(repo.listInbox).toHaveBeenCalledWith(agent, { filter: "all", page: 2, size: 25 }, []);
     expect(repo.unreadCounts).toHaveBeenCalledWith(1n, [10n]);
     expect(result.items[0]).toMatchObject({ id: "10", assignedAgentId: "1", unreadCount: 4, customerId: "100" });
     expect(result.meta).toEqual({ total: 51, page: 2, size: 25, totalPages: 3 });
@@ -78,7 +82,7 @@ describe("list", () => {
 
   it("loads unread ids only for the unread filter", async () => {
     repo.unreadConversationIds.mockResolvedValue([10n]);
-    repo.list.mockResolvedValue({ items: [], total: 0 });
+    repo.listInbox.mockResolvedValue({ items: [], total: 0 });
     await service.list(agent, { filter: "unread", page: 1, size: 25 });
     expect(repo.unreadConversationIds).toHaveBeenCalledWith(1n);
   });
@@ -151,6 +155,11 @@ describe("changeStatus", () => {
       expect.objectContaining({ status: "RESOLVED", handoffStatus: "NONE", assignedAgentId: null }),
     );
     expect(repo.releaseOwner).toHaveBeenCalledWith(10n, 1n, 1n);
+    expect(systemMessages.post).toHaveBeenCalledWith(
+      10n,
+      "Agent 1 resolved the conversation",
+      expect.objectContaining({ to: "RESOLVED" }),
+    );
     expect(repo.addActivity).toHaveBeenCalledWith(
       expect.objectContaining({ activityType: "STATUS_CHANGED", metadata: { from: "OPEN", to: "RESOLVED" } }),
     );

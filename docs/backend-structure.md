@@ -17,14 +17,16 @@ backend/
     │   ├── health/          reference module
     │   ├── conversations/   inbox, detail, create, status changes, archive, activities
     │   ├── assignments/     assign (takeover), transfer, unassign, history
+    │   ├── messages/        send (idempotent), history/sync cursors, read/unread, receipts, SYSTEM messages
     │   └── notifications/   service + repository only so far (no routes yet; used by assignments)
     ├── websocket/           websocket.server.ts (/ws, Redis chat:events fan-out, heartbeat)
     └── shared/
         ├── auth/            AuthClient port, DevAuthClient (dev/test only), createAuthClient
         ├── errors/          AppError.ts (AppError + subclasses)
         ├── middleware/      auth, validate (+ `parsed()`), error-handler, not-found, request-context
+        ├── ports/           SystemMessagePort (lets modules post SYSTEM messages without importing messages)
         ├── policy/          conversation-access.ts: who can view/do what (used by two modules, so shared)
-        └── utils/           ids (BigInt <-> string), pagination (page + cursor)
+        └── utils/           ids (BigInt <-> string), pagination (page + cursor), best-effort (post-commit side effects)
 ```
 
 Import with aliases (`@config/*`, `@modules/*`, `@shared/*`, `@lib/*`); `build` runs `tsc && tsc-alias` so they
@@ -46,29 +48,35 @@ modules/<plural>/                e.g. conversations/
 ```
 
 Folder names are plural, file prefixes singular (`health` has no plural, so it keeps one name).
-Create `schema`, `openapi` and `types` files only when a module needs them.
+Create `schema` and `types` files only when a module needs them; every module that exposes routes has an `openapi` file.
 
-### OpenAPI (not wired yet)
+### OpenAPI
 
-`<name>.openapi.ts` registers paths with `@asteasolutions/zod-to-openapi`, reusing the zod schemas from
-`<name>.schema.ts`. That package is not installed and no docs endpoint exists. When adopting it, add the dependency
-(check zod 4 support), create a shared registry in `shared/openapi/`, and document how the spec is served, in one change.
-Until then, do not add `.openapi.ts` files.
+Each module's `<name>.openapi.ts` exports `register<Name>OpenApi(registry)`, which registers its paths with
+`@asteasolutions/zod-to-openapi` (v9, zod 4), reusing the request schemas from `<name>.schema.ts`. Response schemas are
+declared in the same file with `satisfies z.ZodType<SomeDto>`, so a DTO change that is not mirrored fails the build.
+`src/openapi.ts` collects every module and `GET /api/openapi.json` serves the OpenAPI 3.1 document (public; no Swagger UI
+is bundled, point any viewer at that URL). Shared helpers are in `shared/openapi/` (`registry.ts`, `envelopes.ts`).
+When you add a route, register it in the module's `.openapi.ts` and add it to the route list in
+`shared/openapi/__tests__/openapi.test.ts`, which fails if the two drift.
+
+File purposes inside a module: `controller` (HTTP in/out), `service` (business logic, DTO shaping, no `req`/`res`, no
+Prisma), `repository` (Prisma queries and the query builders they need), `routes`, `schema` (zod), `openapi`, `types`.
+Do not add other per-module file kinds (no `mapper`, `query`, `policy`); rules shared by two modules go in `shared/`.
 
 Rules: no `req`/`res` below controllers; a module never imports another module's repository; add a
 `shared/<folder>` only when a second module needs it.
 
 ## Planned modules (map to existing Prisma models; create when the behaviour is designed)
 
-Built: `conversations`, `assignments`, `notifications` (service only). Still to build:
+Built: `conversations`, `assignments`, `messages`, `notifications` (service only). Still to build:
 
-| Module        | Prisma models                                   | Notes                                      |
-| ------------- | ----------------------------------------------- | ------------------------------------------ |
-| `messages`    | `Message`, `MessageReceipt`, `ConversationRead` | send (idempotent), history, receipts, read |
-| `presence`    | `AgentPresenceHistory` (live state in Redis)    | typing + availability                      |
-| `customers`   | none (Backend 1 data via a client)              | needs the Backend 1 API contract           |
-| `attachments` | `Attachment`, `MessageAttachment`               | storage backend undecided                  |
-| `ai-handoff`  | `AiHandoff`, `ConversationEscalation`           | AI worker is out of scope for now          |
+| Module        | Prisma models                                | Notes                             |
+| ------------- | -------------------------------------------- | --------------------------------- |
+| `presence`    | `AgentPresenceHistory` (live state in Redis) | typing + availability             |
+| `customers`   | none (Backend 1 data via a client)           | needs the Backend 1 API contract  |
+| `attachments` | `Attachment`, `MessageAttachment`            | storage backend undecided         |
+| `ai-handoff`  | `AiHandoff`, `ConversationEscalation`        | AI worker is out of scope for now |
 
 `auth` is **not** a module that issues tokens (external service, contract unknown); once the contract
 is known it becomes a verifier middleware plus an `AuthClient`. Presence, receipts, internal notes,

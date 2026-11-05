@@ -190,9 +190,18 @@ Implemented in `shared/policy/conversation-access.ts`; the API returns the calle
 - **Archive/restore** is global (`is_archived`), allowed for the owner, a supervisor, or anyone when unassigned.
 - **Create** finds or creates the open conversation per application. The customer/application are **not yet verified
   with Backend 1** (contract unknown); the target agent of an assign/transfer is likewise unverified.
-- **Not yet built:** `SYSTEM` messages for takeover/transfer (need the messages module) and realtime events
-  (`conversation.assigned` etc.; the gateway still broadcasts raw Redis payloads, so services publish nothing yet).
-  Assignment notifications are stored in `notifications` after the transaction commits (best effort).
+- **Messages.** The conversation row is locked (`SELECT ... FOR UPDATE`) while a message is appended, so sequence
+  numbers are contiguous and a retried `clientId` finds the original instead of failing on the unique key. Message
+  `created_at` is the database clock (the same instant as `last_message_at`). `receiveFromCustomer` (reopen, notify the
+  owner) is implemented and tested but has no entry point yet: the customer channel and its authentication are not built.
+- **Side effects after commit** (notifications, SYSTEM messages) are best effort: a failure is logged, never undoes the
+  committed change.
+- **Retention (FR-10):** only soft delete exists (deleted messages are excluded from history). No policy or job is
+  defined anywhere, so none is built.
+- **Not yet built:** realtime events (`message.new`, `conversation.assigned` etc.; the gateway still broadcasts raw
+  Redis payloads, so services publish nothing yet), typing and presence, customer info, notification endpoints.
+- **Timezone.** Database sessions are pinned to UTC (`config/database.ts`): the Prisma pg adapter reads `timestamptz`
+  as UTC, so a non-UTC server timezone shifted database-generated timestamps by the offset.
 
 ## 6. Permission matrix
 

@@ -1,0 +1,24 @@
+import { Router } from "express";
+import { validate } from "@shared/middleware/validate.middleware.js";
+import { idParams } from "@shared/utils/ids.js";
+import { cursorQuery } from "@shared/utils/pagination.js";
+import { NotificationRepository, NotificationService } from "@modules/notifications/index.js";
+import { MessageController } from "./message.controller.js";
+import { MessageRepository } from "./message.repository.js";
+import { messageParams, readBody, sendBody } from "./message.schema.js";
+import { MessageService } from "./message.service.js";
+
+export const messageService = new MessageService(
+  new MessageRepository(),
+  new NotificationService(new NotificationRepository()),
+);
+const controller = new MessageController(messageService);
+
+/** Mounted at /api/conversations (authentication is applied at the mount). */
+export const messageRoutes = Router();
+
+messageRoutes.post("/:id/messages", validate({ params: idParams, body: sendBody }), controller.send);
+messageRoutes.get("/:id/messages", validate({ params: idParams, query: cursorQuery }), controller.history);
+messageRoutes.post("/:id/messages/:messageId/delivered", validate({ params: messageParams }), controller.markDelivered);
+messageRoutes.post("/:id/read", validate({ params: idParams, body: readBody }), controller.markRead);
+messageRoutes.post("/:id/unread", validate({ params: idParams }), controller.markUnread);

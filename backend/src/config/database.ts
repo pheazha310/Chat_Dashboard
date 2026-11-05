@@ -3,7 +3,9 @@ import { PrismaClient, type Prisma } from "../../prisma/generated/prisma/client.
 import { env } from "./env.js";
 
 // Prisma 7 needs a driver adapter; @prisma/adapter-pg talks to PostgreSQL via `pg`.
-const adapter = new PrismaPg({ connectionString: env.DATABASE_URL });
+// Sessions are pinned to UTC: the adapter reads timestamptz values as UTC, so a server or role timezone such as
+// Asia/Phnom_Penh would shift every database-generated timestamp (now(), column defaults) by the UTC offset.
+const adapter = new PrismaPg({ connectionString: env.DATABASE_URL, options: "-c TimeZone=UTC" });
 
 export const prisma = new PrismaClient({ adapter });
 

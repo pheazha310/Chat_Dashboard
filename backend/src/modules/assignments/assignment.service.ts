@@ -1,13 +1,13 @@
-import { logger } from "@config/logger.js";
 import { ConflictError, ForbiddenError, NotFoundError } from "@shared/errors/AppError.js";
 import { isSupervisor, type AuthContext } from "@shared/auth/auth.types.js";
+import type { SystemMessagePort } from "@shared/ports/system-message.js";
+import { bestEffort } from "@shared/utils/best-effort.js";
 import { idToString } from "@shared/utils/ids.js";
 import { permissionsFor } from "@shared/policy/conversation-access.js";
 import type { NotificationService } from "@modules/notifications/index.js";
-import { toAssignment } from "./assignment.mapper.js";
 import type { AssignmentRepository } from "./assignment.repository.js";
 import type { AssignInput } from "./assignment.schema.js";
-import type { ConversationState } from "./assignment.types.js";
+import type { AssignmentDto, AssignmentRow, ConversationState } from "./assignment.types.js";
 
 const STALE = "The conversation was changed by someone else; refresh and try again";
 
@@ -15,6 +15,7 @@ export class AssignmentService {
   constructor(
     private readonly repository: AssignmentRepository,
     private readonly notifications: NotificationService,
+    private readonly systemMessages: SystemMessagePort,
   ) {}
 
   /** Self-assign (takeover) when `agentId` is omitted; assign to another agent (supervisors only) otherwise. */
@@ -69,6 +70,13 @@ export class AssignmentService {
         metadata: { previousAgentId: previous === null ? null : idToString(previous) },
       });
     });
+    await bestEffort("system message", () =>
+      this.systemMessages.post(state.id, `Agent ${auth.userId} returned the conversation to the queue`, {
+        event: "unassigned",
+        actorId: idToString(auth.userId),
+        previousAgentId: previous === null ? null : idToString(previous),
+      }),
+    );
     if (previous !== null && previous !== auth.userId) {
       await this.notify(previous, "TRANSFERRED", "Conversation unassigned", state.id);
     }
@@ -117,6 +125,19 @@ export class AssignmentService {
     });
 
     const type = previous === null ? "ASSIGNED" : "TRANSFERRED";
+    const who = `Agent ${auth.userId}`;
+    const text =
+      action === "TAKEOVER"
+        ? `${who} took over the conversation`
+        : `${who} ${type === "ASSIGNED" ? "assigned" : "transferred"} the conversation to agent ${target}`;
+    await bestEffort("system message", () =>
+      this.systemMessages.post(state.id, text, {
+        event: action.toLowerCase(),
+        actorId: idToString(auth.userId),
+        agentId: idToString(target),
+        previousAgentId: previous === null ? null : idToString(previous),
+      }),
+    );
     if (target !== auth.userId)
       await this.notify(target, type, `A conversation was ${type.toLowerCase()} to you`, state.id);
     if (previous !== null && previous !== auth.userId && previous !== target) {
@@ -134,14 +155,24 @@ export class AssignmentService {
   }
 
   /** Best effort: the ownership change is already committed, so a notification failure must not undo or fail it. */
-  private async notify(agentId: bigint, type: "ASSIGNED" | "TRANSFERRED", title: string, conversationId: bigint) {
-    try {
-      await this.notifications.notifyAgent({ agentId, type, title, conversationId });
-    } catch (error) {
-      logger.warn(
-        { err: error, agentId: idToString(agentId), conversationId: idToString(conversationId) },
-        "notification failed",
-      );
-    }
+  private notify(agentId: bigint, type: "ASSIGNED" | "TRANSFERRED", title: string, conversationId: bigint) {
+    return bestEffort("notification", () => this.notifications.notifyAgent({ agentId, type, title, conversationId }));
   }
 }
+
+// ─── DTO mapping ───────────────────────────────────────────────────────────
+
+const nullableId = (value: bigint | null) => (value === null ? null : idToString(value));
+
+const toAssignment = (row: AssignmentRow): AssignmentDto => ({
+  id: idToString(row.id),
+  conversationId: idToString(row.conversationId),
+  agentId: idToString(row.agentId),
+  assignedBy: nullableId(row.assignedBy),
+  type: row.assignmentType,
+  action: row.assignmentAction,
+  note: row.note,
+  assignedAt: row.assignedAt.toISOString(),
+  endedAt: row.endedAt?.toISOString() ?? null,
+  endedBy: nullableId(row.endedBy),
+});

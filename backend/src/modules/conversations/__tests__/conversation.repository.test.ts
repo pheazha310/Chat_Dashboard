@@ -1,7 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { AuthContext } from "@shared/auth/auth.types.js";
-import { buildInboxWhere, visibilityWhere } from "../conversation.query.js";
+import { buildInboxWhere, visibilityWhere } from "../conversation.repository.js";
 import { listQuery } from "../conversation.schema.js";
+
+// Only the pure query builders are tested here; the repository itself needs a database (integration tests).
+vi.mock("@config/database.js", () => ({ prisma: {}, runInTransaction: vi.fn() }));
 
 const agent: AuthContext = { userId: 1n, role: "AGENT" };
 const supervisor: AuthContext = { userId: 9n, role: "SUPERVISOR" };

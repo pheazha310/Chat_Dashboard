@@ -9,6 +9,8 @@ import type { ConversationState } from "../assignment.types.js";
 
 vi.mock("@config/logger.js", () => ({ logger: { warn: vi.fn() } }));
 
+const systemMessages = { post: vi.fn() };
+
 const repo = {
   findState: vi.fn(),
   claim: vi.fn(),
@@ -25,6 +27,7 @@ const notifications = { notifyAgent: vi.fn() };
 const service = new AssignmentService(
   fromPartial<AssignmentRepository>(repo),
   fromPartial<NotificationService>(notifications),
+  systemMessages,
 );
 
 const agent: AuthContext = { userId: 1n, role: "AGENT" };
@@ -60,6 +63,7 @@ beforeEach(() => {
   repo.release.mockResolvedValue(true);
   repo.createOwner.mockResolvedValue(assignmentRow);
   notifications.notifyAgent.mockResolvedValue(true);
+  systemMessages.post.mockResolvedValue(undefined);
 });
 
 describe("assign", () => {
@@ -73,6 +77,11 @@ describe("assign", () => {
     expect(repo.joinAsOwner).toHaveBeenCalledWith(10n, 1n);
     expect(repo.addActivity).toHaveBeenCalledWith(expect.objectContaining({ activityType: "ASSIGNED" }));
     expect(result.action).toBe("TAKEOVER");
+    expect(systemMessages.post).toHaveBeenCalledWith(
+      10n,
+      "Agent 1 took over the conversation",
+      expect.objectContaining({ event: "takeover" }),
+    );
     expect(notifications.notifyAgent).not.toHaveBeenCalled(); // no self-notification
   });
 
@@ -127,9 +136,10 @@ describe("assign", () => {
     await expect(service.assign(agent, 10n, {})).rejects.toBeInstanceOf(ConflictError);
   });
 
-  it("does not fail the assignment when the notification fails", async () => {
+  it("does not fail the assignment when the notification or system message fails", async () => {
     repo.findState.mockResolvedValue(state());
     notifications.notifyAgent.mockRejectedValue(new Error("db down"));
+    systemMessages.post.mockRejectedValue(new Error("db down"));
     await expect(service.assign(supervisor, 10n, { agentId: 3n })).resolves.toBeDefined();
   });
 });
