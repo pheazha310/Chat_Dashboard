@@ -26,5 +26,5 @@ export const generateDocument = (registry: OpenAPIRegistry) =>
       description:
         "Chat backend: conversations, assignments and messages. Identity, customers and loan data live in Backend 1.",
     },
-    servers: [{ url: "/admin/api/v1" }],
+    servers: [{ url: "/api/v1/admin" }],
   });

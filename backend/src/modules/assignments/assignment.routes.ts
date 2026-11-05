@@ -7,7 +7,7 @@ import { assignBody, transferBody, unassignBody } from "./assignment.schema.js";
 
 const controller = new AssignmentController(container.assignments);
 
-/** Mounted at /admin/api/v1/conversations next to the conversation routes. */
+/** Mounted at /api/v1/admin/conversations next to the conversation routes. */
 export const assignmentRoutes = Router();
 
 assignmentRoutes.post("/:id/assign", validate({ params: idParams, body: assignBody }), controller.assign);

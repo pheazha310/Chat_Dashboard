@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
  * The frontend's real stack (BackendSocket, WsClient, startRealtime, stores, feature actions) against a running
  * backend. Skipped unless all three are set; see docs/frontend-integration.md ("Verifying against the backend").
  *
- *   VITE_WS_URL=ws://127.0.0.1:4555/ws VITE_AUTH_TOKEN=dev:00000000-0000-4000-8000-000000000003:AGENT LIVE_API_URL=http://127.0.0.1:4555/admin/api/v1 pnpm test
+ *   VITE_WS_URL=ws://127.0.0.1:4555/ws VITE_AUTH_TOKEN=dev:00000000-0000-4000-8000-000000000003:AGENT LIVE_API_URL=http://127.0.0.1:4555/api/v1/admin pnpm test
  *
  * The backend must run with a throwaway database. The test creates its own conversations (unique application ids)
  * and acts as agent 3; other people (the customer's agent 1, a supervisor, agent 4) act through REST.

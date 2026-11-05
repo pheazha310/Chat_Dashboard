@@ -6,7 +6,7 @@ import { setPresenceBody } from "./presence.schema.js";
 
 const controller = new PresenceController(container.presence);
 
-/** Mounted at /admin/api/v1/presence (authentication is applied at the mount). */
+/** Mounted at /api/v1/admin/presence (authentication is applied at the mount). */
 export const presenceRoutes = Router();
 
 presenceRoutes.get("/", controller.list);

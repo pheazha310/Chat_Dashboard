@@ -9,8 +9,8 @@ backend/
 ├── vitest.config.ts         aliases + coverage thresholds
 └── src/
     ├── server.ts            http server, websocket attach, graceful shutdown
-    ├── app.ts               express app: helmet, cors, request context, pino-http, json, /api/health, /admin/api/v1, notFound, errorHandler
-    ├── routes.ts            mounts every module router (served under /admin/api/v1)
+    ├── app.ts               express app: helmet, cors, request context, pino-http, json, /api/health, /api/v1/admin, notFound, errorHandler
+    ├── routes.ts            mounts every module router (served under /api/v1/admin)
     ├── container.ts         builds every service once (composition root); app-container.ts is the running app's instance
     ├── config/              env.ts (zod-validated env), cors.ts, database.ts (Prisma singleton), redis.ts,
     │                        logger.ts (pino), request-context.ts (AsyncLocalStorage requestId)
@@ -62,7 +62,7 @@ Create `schema` and `types` files only when a module needs them; every module th
 Each module's `<name>.openapi.ts` exports `register<Name>OpenApi(registry)`, which registers its paths with
 `@asteasolutions/zod-to-openapi` (v9, zod 4), reusing the request schemas from `<name>.schema.ts`. Response schemas are
 declared in the same file with `satisfies z.ZodType<SomeDto>`, so a DTO change that is not mirrored fails the build.
-`src/openapi.ts` collects every module and `GET /admin/api/v1/openapi.json` serves the OpenAPI 3.1 document (public; no Swagger UI
+`src/openapi.ts` collects every module and `GET /api/v1/admin/openapi.json` serves the OpenAPI 3.1 document (public; no Swagger UI
 is bundled, point any viewer at that URL). Shared helpers are in `shared/openapi/` (`registry.ts`, `envelopes.ts`).
 When you add a route, register it in the module's `.openapi.ts` and add it to the route list in
 `shared/openapi/__tests__/openapi.test.ts`, which fails if the two drift.

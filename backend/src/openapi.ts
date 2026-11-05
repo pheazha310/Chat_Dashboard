@@ -7,7 +7,7 @@ import { registerNotificationOpenApi } from "@modules/notifications/notification
 import { registerMessageOpenApi } from "@modules/messages/message.openapi.js";
 import { createRegistry, generateDocument } from "@shared/openapi/registry.js";
 
-/** Builds the OpenAPI document from every module's registrations. Served at GET /admin/api/v1/openapi.json. */
+/** Builds the OpenAPI document from every module's registrations. Served at GET /api/v1/admin/openapi.json. */
 export function buildOpenApiDocument() {
   const registry = createRegistry();
   registerHealthOpenApi(registry);

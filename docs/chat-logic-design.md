@@ -236,7 +236,7 @@ The current protocol cannot express several cases. Add:
 - The PDF names events `message:send`, `message:new`, `message:sent`, `message:delivered`, `message:read`,
   `typing:start`, `typing:stop`, `conversation:assigned`; the protocol uses dotted names (`message.ack`, ...).
   Pick one naming scheme and change protocol, gateway, frontend and mock together.
-- REST paths in the PDF are under `/api/v1`; the chat backend mounts the staff API under `/admin/api/v1` (guest: `/guest/api/v1`, customer: `/customer/api/v1`, not built). `/api/health` is the only path outside it.
+- REST paths in the PDF are under `/api/v1`; the chat backend mounts the staff API under `/api/v1/admin` (guest: `/api/v1/guest`, customer: `/api/v1/customer`, not built). `/api/health` is the only path outside it.
 - The DTO `id` is currently the conversation slug (e.g. `maya`), but `conversations` has no `slug` column (ids are
   UUIDs). Either add a `slug` column or change the protocol to use the conversation UUID.
 

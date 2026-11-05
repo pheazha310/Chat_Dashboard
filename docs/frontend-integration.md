@@ -22,7 +22,7 @@ VITE_WS_URL=ws://localhost:4000/ws VITE_AUTH_TOKEN=dev:00000000-0000-4000-8000-0
 | Variable          | Meaning                                                                                                                                                                                             |
 | ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `VITE_WS_URL`     | gateway URL. Setting it switches to the backend mode.                                                                                                                                               |
-| `VITE_API_URL`    | REST base URL. Default: the WebSocket URL's host with `/admin/api/v1` (`ws://h:4000/ws` → `http://h:4000/admin/api/v1`).                                                                            |
+| `VITE_API_URL`    | REST base URL. Default: the WebSocket URL's host with `/api/v1/admin` (`ws://h:4000/ws` → `http://h:4000/api/v1/admin`).                                                                            |
 | `VITE_AUTH_TOKEN` | development access token. In production the host app stores the Backend 1 token in `localStorage["auth.token"]` after sign-in; the sign-in flow itself belongs to Backend 1 and is not in this app. |
 
 Backend `CORS_ORIGIN` must include the frontend origin (default `http://localhost:5173`); the gateway checks it too.
@@ -35,7 +35,7 @@ offline (a console warning explains why).
 widgets ─ features ─ entities ──► wsClient (WsClient: reconnect, queue, validation, unchanged)
                           │                │
                           │                └─► BackendSocket ── BackendTranslator ◄──► gateway /ws
-                          └─► shared/api/rest (apiRequest, getMessages, …) ◄──────────► /admin/api/v1
+                          └─► shared/api/rest (apiRequest, getMessages, …) ◄──────────► /api/v1/admin
 ```
 
 - **`shared/api/ws/backend/backend-socket.ts`** is a `WebSocketLike`, like the mock socket. It sends the `auth` frame,
@@ -110,7 +110,7 @@ unless configured:
 DATABASE_URL=postgresql://…/chat_test REDIS_URL=redis://127.0.0.1:6379 EVENT_BUS=memory PORT=4555 pnpm dev:backend
 
 cd frontend
-VITE_WS_URL=ws://127.0.0.1:4555/ws VITE_AUTH_TOKEN=dev:00000000-0000-4000-8000-000000000003:AGENT LIVE_API_URL=http://127.0.0.1:4555/admin/api/v1 pnpm test
+VITE_WS_URL=ws://127.0.0.1:4555/ws VITE_AUTH_TOKEN=dev:00000000-0000-4000-8000-000000000003:AGENT LIVE_API_URL=http://127.0.0.1:4555/api/v1/admin pnpm test
 ```
 
 It creates its own conversations (unique application ids) and never deletes anything, so use a disposable database.

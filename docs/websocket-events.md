@@ -64,7 +64,7 @@ conversation they could not open. Supervisors see everything. "Owner's sessions"
 | `error`                                               | the socket that caused it                        | `{ code, message, event?, conversationId? }`; codes match the REST error codes                                                 |
 
 `Message`, `conversation` and `Assignment` are the REST DTOs ([api-conversations.md](api-conversations.md),
-`GET /admin/api/v1/openapi.json`).
+`GET /api/v1/admin/openapi.json`).
 
 ### Unread counts
 

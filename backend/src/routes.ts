@@ -10,7 +10,7 @@ import { presenceRoutes } from "@modules/presence/index.js";
 import { buildOpenApiDocument } from "./openapi.js";
 
 /** Namespace of the internal-staff API (agents, supervisors, admins). Customer and guest APIs use their own prefixes. */
-export const ADMIN_API_PREFIX = "/admin/api/v1";
+export const ADMIN_API_PREFIX = "/api/v1/admin";
 
 // Mount each module's router here; app.ts serves it under ADMIN_API_PREFIX.
 export const apiRouter = Router();

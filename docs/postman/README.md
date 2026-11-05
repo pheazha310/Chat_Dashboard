@@ -18,20 +18,20 @@ id returned by Create. The database must be reachable: `GET /api/health` should 
 | Method | URL                          |
 | ------ | ---------------------------- |
 | GET    | `/api/health`                |
-| GET    | `/admin/api/v1/openapi.json` |
+| GET    | `/api/v1/admin/openapi.json` |
 
 ## Conversations
 
 | Method | URL                                                                           | Body  |
 | ------ | ----------------------------------------------------------------------------- | ----- |
-| GET    | `/admin/api/v1/conversations?filter=all&page=1&size=20`                       |       |
-| POST   | `/admin/api/v1/conversations`                                                 | below |
-| GET    | `/admin/api/v1/conversations/{id}`                                            |       |
-| GET    | `/admin/api/v1/conversations/{id}/activities?page=1&size=20`                  |       |
-| PATCH  | `/admin/api/v1/conversations/{id}/status`                                     | below |
-| POST   | `/admin/api/v1/conversations/{id}/archive`                                    | `{}`  |
-| POST   | `/admin/api/v1/conversations/{id}/restore`                                    | `{}`  |
-| GET    | `/admin/api/v1/conversations?customerId=00000000-0000-4000-8000-000000000100` |       |
+| GET    | `/api/v1/admin/conversations?filter=all&page=1&size=20`                       |       |
+| POST   | `/api/v1/admin/conversations`                                                 | below |
+| GET    | `/api/v1/admin/conversations/{id}`                                            |       |
+| GET    | `/api/v1/admin/conversations/{id}/activities?page=1&size=20`                  |       |
+| PATCH  | `/api/v1/admin/conversations/{id}/status`                                     | below |
+| POST   | `/api/v1/admin/conversations/{id}/archive`                                    | `{}`  |
+| POST   | `/api/v1/admin/conversations/{id}/restore`                                    | `{}`  |
+| GET    | `/api/v1/admin/conversations?customerId=00000000-0000-4000-8000-000000000100` |       |
 
 List filters: `filter` = all, mine, unread, unassigned, archived; optional `status`, `priority`, `tag`, `q`, `customerId`,
 `excludeId`.
@@ -59,23 +59,23 @@ Status (`OPEN`, `RESOLVED` or `CLOSED`; 409 if unchanged):
 
 | Method | URL                                            | Body                                                                                                                                                            |
 | ------ | ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| POST   | `/admin/api/v1/conversations/{id}/assign`      | `{}` takes over as the caller                                                                                                                                   |
-| POST   | `/admin/api/v1/conversations/{id}/assign`      | supervisor only: `{ "agentId": "00000000-0000-4000-8000-000000000004", "note": "please handle" }` (token `dev:00000000-0000-4000-8000-000000000009:SUPERVISOR`) |
-| POST   | `/admin/api/v1/conversations/{id}/transfer`    | `{ "agentId": "00000000-0000-4000-8000-000000000004", "note": "handover" }`                                                                                     |
-| POST   | `/admin/api/v1/conversations/{id}/unassign`    | `{ "note": "back to queue" }`                                                                                                                                   |
-| GET    | `/admin/api/v1/conversations/{id}/assignments` |                                                                                                                                                                 |
+| POST   | `/api/v1/admin/conversations/{id}/assign`      | `{}` takes over as the caller                                                                                                                                   |
+| POST   | `/api/v1/admin/conversations/{id}/assign`      | supervisor only: `{ "agentId": "00000000-0000-4000-8000-000000000004", "note": "please handle" }` (token `dev:00000000-0000-4000-8000-000000000009:SUPERVISOR`) |
+| POST   | `/api/v1/admin/conversations/{id}/transfer`    | `{ "agentId": "00000000-0000-4000-8000-000000000004", "note": "handover" }`                                                                                     |
+| POST   | `/api/v1/admin/conversations/{id}/unassign`    | `{ "note": "back to queue" }`                                                                                                                                   |
+| GET    | `/api/v1/admin/conversations/{id}/assignments` |                                                                                                                                                                 |
 
 ## Messages (only the owner of an open conversation can send)
 
 | Method | URL                                                               | Body                                                              |
 | ------ | ----------------------------------------------------------------- | ----------------------------------------------------------------- |
-| POST   | `/admin/api/v1/conversations/{id}/messages`                       | below                                                             |
-| GET    | `/admin/api/v1/conversations/{id}/messages?limit=50`              |                                                                   |
-| GET    | `/admin/api/v1/conversations/{id}/messages?before={messageId}`    | page back                                                         |
-| GET    | `/admin/api/v1/conversations/{id}/messages?after={sequence}`      | what you missed                                                   |
-| POST   | `/admin/api/v1/conversations/{id}/messages/{messageId}/delivered` | `{}` (customer messages only)                                     |
-| POST   | `/admin/api/v1/conversations/{id}/read`                           | `{}` or `{ "messageId": "00000000-0000-4000-8000-000000000012" }` |
-| POST   | `/admin/api/v1/conversations/{id}/unread`                         | `{}`                                                              |
+| POST   | `/api/v1/admin/conversations/{id}/messages`                       | below                                                             |
+| GET    | `/api/v1/admin/conversations/{id}/messages?limit=50`              |                                                                   |
+| GET    | `/api/v1/admin/conversations/{id}/messages?before={messageId}`    | page back                                                         |
+| GET    | `/api/v1/admin/conversations/{id}/messages?after={sequence}`      | what you missed                                                   |
+| POST   | `/api/v1/admin/conversations/{id}/messages/{messageId}/delivered` | `{}` (customer messages only)                                     |
+| POST   | `/api/v1/admin/conversations/{id}/read`                           | `{}` or `{ "messageId": "00000000-0000-4000-8000-000000000012" }` |
+| POST   | `/api/v1/admin/conversations/{id}/unread`                         | `{}`                                                              |
 
 Send (201; a retry with the same `clientId` returns 200 with the original message; `text` up to 4000 characters):
 
@@ -87,13 +87,13 @@ Send (201; a retry with the same `clientId` returns 200 with the original messag
 
 | Method | URL                                                      | Body                             |
 | ------ | -------------------------------------------------------- | -------------------------------- |
-| GET    | `/admin/api/v1/notifications?unread=true&page=1&size=20` |                                  |
-| GET    | `/admin/api/v1/notifications/unread-count`               |                                  |
-| PATCH  | `/admin/api/v1/notifications/{notifId}/read`             | `{}`                             |
-| POST   | `/admin/api/v1/notifications/read-all`                   | `{}`                             |
-| GET    | `/admin/api/v1/notifications/preferences`                |                                  |
-| PUT    | `/admin/api/v1/notifications/preferences`                | below (any subset, at least one) |
-| PUT    | `/admin/api/v1/conversations/{id}/mute`                  | `{ "muted": true }`              |
+| GET    | `/api/v1/admin/notifications?unread=true&page=1&size=20` |                                  |
+| GET    | `/api/v1/admin/notifications/unread-count`               |                                  |
+| PATCH  | `/api/v1/admin/notifications/{notifId}/read`             | `{}`                             |
+| POST   | `/api/v1/admin/notifications/read-all`                   | `{}`                             |
+| GET    | `/api/v1/admin/notifications/preferences`                |                                  |
+| PUT    | `/api/v1/admin/notifications/preferences`                | below (any subset, at least one) |
+| PUT    | `/api/v1/admin/conversations/{id}/mute`                  | `{ "muted": true }`              |
 
 ```json
 { "newMessage": true, "assignment": true, "transfer": true, "mention": true, "sound": false, "browser": true }
@@ -103,16 +103,16 @@ Send (201; a retry with the same `clientId` returns 200 with the original messag
 
 | Method | URL                         | Body                                            |
 | ------ | --------------------------- | ----------------------------------------------- |
-| GET    | `/admin/api/v1/presence`    | (lists only agents with an open WebSocket)      |
-| PUT    | `/admin/api/v1/presence/me` | `{ "status": "AVAILABLE" }` (or `BUSY`, `AWAY`) |
+| GET    | `/api/v1/admin/presence`    | (lists only agents with an open WebSocket)      |
+| PUT    | `/api/v1/admin/presence/me` | `{ "status": "AVAILABLE" }` (or `BUSY`, `AWAY`) |
 
 ## Customer info
 
 | Method | URL                                                       |
 | ------ | --------------------------------------------------------- |
-| GET    | `/admin/api/v1/conversations/{id}/customer`               |
-| GET    | `/admin/api/v1/conversations/{id}/customer/conversations` |
-| GET    | `/admin/api/v1/conversations/{id}/participants`           |
+| GET    | `/api/v1/admin/conversations/{id}/customer`               |
+| GET    | `/api/v1/admin/conversations/{id}/customer/conversations` |
+| GET    | `/api/v1/admin/conversations/{id}/participants`           |
 
 ## WebSocket (Postman: New, WebSocket)
 
@@ -148,4 +148,4 @@ Full event list: [../websocket-events.md](../websocket-events.md).
 - Agent 4 sends a message to it: rejected.
 - No token: **401**.
 - Send the same `clientId` twice: **201**, then **200**.
-- A wrong URL such as `GET /` or `/api/conversations` returns 404 (the staff API is under `/admin/api/v1`).
+- A wrong URL such as `GET /` or `/api/conversations` returns 404 (the staff API is under `/api/v1/admin`).

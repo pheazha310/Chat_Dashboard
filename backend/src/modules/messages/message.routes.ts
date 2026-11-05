@@ -8,7 +8,7 @@ import { messageParams, readBody, sendBody } from "./message.schema.js";
 
 const controller = new MessageController(container.messages);
 
-/** Mounted at /admin/api/v1/conversations (authentication is applied at the mount). */
+/** Mounted at /api/v1/admin/conversations (authentication is applied at the mount). */
 export const messageRoutes = Router();
 
 messageRoutes.post("/:id/messages", validate({ params: idParams, body: sendBody }), controller.send);

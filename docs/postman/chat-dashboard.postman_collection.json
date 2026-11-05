@@ -67,7 +67,7 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/admin/api/v1/conversations?filter=all&page=1&size=20",
+              "raw": "{{baseUrl}}/api/v1/admin/conversations?filter=all&page=1&size=20",
               "host": ["{{baseUrl}}"],
               "path": ["admin", "api", "v1", "conversations"],
               "query": [
@@ -98,7 +98,7 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/admin/api/v1/conversations",
+              "raw": "{{baseUrl}}/api/v1/admin/conversations",
               "host": ["{{baseUrl}}"],
               "path": ["admin", "api", "v1", "conversations"],
               "query": []
@@ -132,7 +132,7 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/admin/api/v1/conversations/{{convId}}",
+              "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}",
               "host": ["{{baseUrl}}"],
               "path": ["admin", "api", "v1", "conversations", "{{convId}}"],
               "query": []
@@ -145,7 +145,7 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/admin/api/v1/conversations/{{convId}}/activities",
+              "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/activities",
               "host": ["{{baseUrl}}"],
               "path": ["admin", "api", "v1", "conversations", "{{convId}}", "activities"],
               "query": []
@@ -163,7 +163,7 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/admin/api/v1/conversations/{{convId}}/status",
+              "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/status",
               "host": ["{{baseUrl}}"],
               "path": ["admin", "api", "v1", "conversations", "{{convId}}", "status"],
               "query": []
@@ -190,7 +190,7 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/admin/api/v1/conversations/{{convId}}/archive",
+              "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/archive",
               "host": ["{{baseUrl}}"],
               "path": ["admin", "api", "v1", "conversations", "{{convId}}", "archive"],
               "query": []
@@ -217,7 +217,7 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/admin/api/v1/conversations/{{convId}}/restore",
+              "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/restore",
               "host": ["{{baseUrl}}"],
               "path": ["admin", "api", "v1", "conversations", "{{convId}}", "restore"],
               "query": []
@@ -239,7 +239,7 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/admin/api/v1/conversations?customerId=00000000-0000-4000-8000-000000000100",
+              "raw": "{{baseUrl}}/api/v1/admin/conversations?customerId=00000000-0000-4000-8000-000000000100",
               "host": ["{{baseUrl}}"],
               "path": ["admin", "api", "v1", "conversations"],
               "query": [
@@ -267,7 +267,7 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/admin/api/v1/conversations/{{convId}}/assign",
+              "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/assign",
               "host": ["{{baseUrl}}"],
               "path": ["admin", "api", "v1", "conversations", "{{convId}}", "assign"],
               "query": []
@@ -294,7 +294,7 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/admin/api/v1/conversations/{{convId}}/assign",
+              "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/assign",
               "host": ["{{baseUrl}}"],
               "path": ["admin", "api", "v1", "conversations", "{{convId}}", "assign"],
               "query": []
@@ -331,7 +331,7 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/admin/api/v1/conversations/{{convId}}/transfer",
+              "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/transfer",
               "host": ["{{baseUrl}}"],
               "path": ["admin", "api", "v1", "conversations", "{{convId}}", "transfer"],
               "query": []
@@ -358,7 +358,7 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/admin/api/v1/conversations/{{convId}}/unassign",
+              "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/unassign",
               "host": ["{{baseUrl}}"],
               "path": ["admin", "api", "v1", "conversations", "{{convId}}", "unassign"],
               "query": []
@@ -380,7 +380,7 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/admin/api/v1/conversations/{{convId}}/assignments",
+              "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/assignments",
               "host": ["{{baseUrl}}"],
               "path": ["admin", "api", "v1", "conversations", "{{convId}}", "assignments"],
               "query": []
@@ -403,7 +403,7 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/admin/api/v1/conversations/{{convId}}/messages",
+              "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/messages",
               "host": ["{{baseUrl}}"],
               "path": ["admin", "api", "v1", "conversations", "{{convId}}", "messages"],
               "query": []
@@ -438,7 +438,7 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/admin/api/v1/conversations/{{convId}}/messages?limit=50",
+              "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/messages?limit=50",
               "host": ["{{baseUrl}}"],
               "path": ["admin", "api", "v1", "conversations", "{{convId}}", "messages"],
               "query": [
@@ -456,7 +456,7 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/admin/api/v1/conversations/{{convId}}/messages?after=0&limit=50",
+              "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/messages?after=0&limit=50",
               "host": ["{{baseUrl}}"],
               "path": ["admin", "api", "v1", "conversations", "{{convId}}", "messages"],
               "query": [
@@ -483,7 +483,7 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/admin/api/v1/conversations/{{convId}}/messages/{{msgId}}/delivered",
+              "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/messages/{{msgId}}/delivered",
               "host": ["{{baseUrl}}"],
               "path": ["admin", "api", "v1", "conversations", "{{convId}}", "messages", "{{msgId}}", "delivered"],
               "query": []
@@ -510,7 +510,7 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/admin/api/v1/conversations/{{convId}}/read",
+              "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/read",
               "host": ["{{baseUrl}}"],
               "path": ["admin", "api", "v1", "conversations", "{{convId}}", "read"],
               "query": []
@@ -537,7 +537,7 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/admin/api/v1/conversations/{{convId}}/unread",
+              "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/unread",
               "host": ["{{baseUrl}}"],
               "path": ["admin", "api", "v1", "conversations", "{{convId}}", "unread"],
               "query": []
@@ -564,7 +564,7 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/admin/api/v1/notifications?unread=true",
+              "raw": "{{baseUrl}}/api/v1/admin/notifications?unread=true",
               "host": ["{{baseUrl}}"],
               "path": ["admin", "api", "v1", "notifications"],
               "query": [
@@ -594,7 +594,7 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/admin/api/v1/notifications/unread-count",
+              "raw": "{{baseUrl}}/api/v1/admin/notifications/unread-count",
               "host": ["{{baseUrl}}"],
               "path": ["admin", "api", "v1", "notifications", "unread-count"],
               "query": []
@@ -612,7 +612,7 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/admin/api/v1/notifications/{{notifId}}/read",
+              "raw": "{{baseUrl}}/api/v1/admin/notifications/{{notifId}}/read",
               "host": ["{{baseUrl}}"],
               "path": ["admin", "api", "v1", "notifications", "{{notifId}}", "read"],
               "query": []
@@ -639,7 +639,7 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/admin/api/v1/notifications/read-all",
+              "raw": "{{baseUrl}}/api/v1/admin/notifications/read-all",
               "host": ["{{baseUrl}}"],
               "path": ["admin", "api", "v1", "notifications", "read-all"],
               "query": []
@@ -661,7 +661,7 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/admin/api/v1/notifications/preferences",
+              "raw": "{{baseUrl}}/api/v1/admin/notifications/preferences",
               "host": ["{{baseUrl}}"],
               "path": ["admin", "api", "v1", "notifications", "preferences"],
               "query": []
@@ -679,7 +679,7 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/admin/api/v1/notifications/preferences",
+              "raw": "{{baseUrl}}/api/v1/admin/notifications/preferences",
               "host": ["{{baseUrl}}"],
               "path": ["admin", "api", "v1", "notifications", "preferences"],
               "query": []
@@ -706,7 +706,7 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/admin/api/v1/conversations/{{convId}}/mute",
+              "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/mute",
               "host": ["{{baseUrl}}"],
               "path": ["admin", "api", "v1", "conversations", "{{convId}}", "mute"],
               "query": []
@@ -733,7 +733,7 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/admin/api/v1/presence",
+              "raw": "{{baseUrl}}/api/v1/admin/presence",
               "host": ["{{baseUrl}}"],
               "path": ["admin", "api", "v1", "presence"],
               "query": []
@@ -751,7 +751,7 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/admin/api/v1/presence/me",
+              "raw": "{{baseUrl}}/api/v1/admin/presence/me",
               "host": ["{{baseUrl}}"],
               "path": ["admin", "api", "v1", "presence", "me"],
               "query": []
@@ -778,7 +778,7 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/admin/api/v1/conversations/{{convId}}/customer",
+              "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/customer",
               "host": ["{{baseUrl}}"],
               "path": ["admin", "api", "v1", "conversations", "{{convId}}", "customer"],
               "query": []
@@ -791,7 +791,7 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/admin/api/v1/conversations/{{convId}}/customer/conversations",
+              "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/customer/conversations",
               "host": ["{{baseUrl}}"],
               "path": ["admin", "api", "v1", "conversations", "{{convId}}", "customer", "conversations"],
               "query": []
@@ -804,7 +804,7 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/admin/api/v1/conversations/{{convId}}/participants",
+              "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/participants",
               "host": ["{{baseUrl}}"],
               "path": ["admin", "api", "v1", "conversations", "{{convId}}", "participants"],
               "query": []
@@ -822,7 +822,7 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/admin/api/v1/openapi.json",
+              "raw": "{{baseUrl}}/api/v1/admin/openapi.json",
               "host": ["{{baseUrl}}"],
               "path": ["admin", "api", "v1", "openapi.json"],
               "query": []

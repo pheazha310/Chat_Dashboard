@@ -8,7 +8,7 @@ import { uid } from "./support/ids.js";
 const url = process.env.TEST_DATABASE_URL;
 if (url && !/test/i.test(new URL(url).pathname)) throw new Error("TEST_DATABASE_URL must point at a *test* database");
 
-describe.skipIf(!url)("/admin/api/v1/conversations over HTTP", () => {
+describe.skipIf(!url)("/api/v1/admin/conversations over HTTP", () => {
   let server: Server;
   let base: string;
   let db: typeof import("@config/database.js").prisma;
@@ -22,7 +22,7 @@ describe.skipIf(!url)("/admin/api/v1/conversations over HTTP", () => {
     const { app } = await import("../app.js");
     server = app.listen(0);
     await new Promise((resolve) => server.once("listening", resolve));
-    base = `http://127.0.0.1:${(server.address() as AddressInfo).port}/admin/api/v1/conversations`;
+    base = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api/v1/admin/conversations`;
   });
 
   afterAll(async () => {
