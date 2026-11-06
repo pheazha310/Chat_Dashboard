@@ -2,6 +2,7 @@ import type { AgentProfile } from "@shared/ports/directory.js";
 import type { ConversationPermissions } from "@shared/policy/conversation-access.js";
 import type { Conversation, Tag } from "../../../prisma/generated/prisma/client.js";
 
+export type ConversationPriority = "HIGH" | "MEDIUM" | "LOW";
 export type ConversationStatus = "OPEN" | "RESOLVED" | "CLOSED";
 export type InboxFilter = "all" | "mine" | "unread" | "unassigned" | "archived";
 

@@ -3,6 +3,9 @@ import type { ConversationDto } from "@/shared/api/ws";
 
 export type Conversation = ConversationDto;
 
+export type PriorityFilter = "all" | "HIGH" | "MEDIUM" | "LOW";
+export type ConversationSort = "recent" | "priority";
+
 export type ConversationFilter = "all" | "mine" | "unread" | "unassigned" | "archived";
 
 type ConversationState = {
@@ -11,6 +14,13 @@ type ConversationState = {
   selectedId: string | null;
   query: string;
   filter: ConversationFilter;
+  priorityFilter: PriorityFilter;
+  /** Show only conversations carrying this tag. */
+  tagFilter: string | null;
+  sort: ConversationSort;
+  setPriorityFilter: (value: PriorityFilter) => void;
+  setTagFilter: (value: string | null) => void;
+  setSort: (value: ConversationSort) => void;
   setAll: (conversations: Conversation[]) => void;
   upsert: (conversation: Conversation) => void;
   select: (id: string) => void;
@@ -34,6 +44,12 @@ export const useConversationStore = create<ConversationState>((set) => ({
   selectedId: null,
   query: "",
   filter: "all",
+  priorityFilter: "all",
+  tagFilter: null,
+  sort: "recent",
+  setPriorityFilter: (priorityFilter) => set({ priorityFilter }),
+  setTagFilter: (tagFilter) => set({ tagFilter }),
+  setSort: (sort) => set({ sort }),
   setAll: (conversations) =>
     set((state) => {
       const stillExists = conversations.some(({ id }) => id === state.selectedId);

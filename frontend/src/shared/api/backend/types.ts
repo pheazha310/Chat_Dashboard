@@ -22,7 +22,12 @@ export type BackendConversation = {
   unreadCount?: number;
   /** Only in the detail response. */
   summary?: string | null;
+  tags?: BackendTagRef[];
 };
+
+export type BackendTagRef = { id: string; name: string; color: string | null };
+
+export type BackendTag = BackendTagRef & { createdBy: string | null; usageCount: number; createdAt: string };
 
 export type BackendMessage = {
   id: string;
@@ -34,8 +39,41 @@ export type BackendMessage = {
   type: string;
   content: string | null;
   status: "SENDING" | "SENT" | "DELIVERED" | "READ" | "FAILED";
+  replyToMessageId?: string | null;
+  forwardedFromMessageId?: string | null;
+  isEdited?: boolean;
+  reactions?: BackendReaction[];
+  attachments?: BackendAttachment[];
   createdAt: string;
 };
+
+export type BackendAttachment = {
+  id: string;
+  conversationId: string;
+  messageId: string | null;
+  kind: "IMAGE" | "DOCUMENT" | "AUDIO" | "VIDEO";
+  fileName: string;
+  mimeType: string;
+  fileSize: number;
+  durationMs: number | null;
+  waveform: number[] | null;
+  createdAt: string;
+  /** Path under the API base URL; needs the bearer token. */
+  downloadPath: string;
+};
+
+export type BackendNote = {
+  id: string;
+  conversationId: string;
+  authorAgentId: string;
+  author: { id: string; name: string; avatarUrl: string | null } | null;
+  content: string;
+  mentionedAgentIds: string[];
+  isEdited: boolean;
+  createdAt: string;
+};
+
+export type BackendReaction = { id: string; userType: string; userId: string; emoji: string; createdAt: string };
 
 export type BackendActivity = {
   id: string;

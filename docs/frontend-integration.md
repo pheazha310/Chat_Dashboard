@@ -114,3 +114,17 @@ VITE_WS_URL=ws://127.0.0.1:4555/ws VITE_AUTH_TOKEN=dev:00000000-0000-4000-8000-0
 ```
 
 It creates its own conversations (unique application ids) and never deletes anything, so use a disposable database.
+
+## Workspace: tabs and drafts (FR-14, FR-15)
+
+Only with the real backend (`VITE_WS_URL` set); the mock server has no REST, so tabs and drafts stay in memory there.
+
+- `features/chat-tabs` keeps the open tabs (`openTab`, `closeTab`) and renders the strip when two or more are open.
+  The selected conversation always gets a tab. Closing a tab calls `DELETE /workspace/tabs/:id` and never touches the
+  conversation.
+- `features/send-message` saves the draft 800 ms after typing stops (`PUT /workspace/drafts/:id`) and discards it on
+  send. Drafts are per conversation; a remote draft older than the last local edit is ignored.
+- `app/providers/realtime.ts` calls `GET /workspace` after the first `sync` to restore tabs and drafts, and routes
+  `workspace.tab_opened`, `.tab_closed` and `.draft_updated` from the agent's other windows into those stores.
+- `PATCH /workspace/preferences` (`restoreTabs`, `persistTabs`) has a REST client (`shared/api/rest/workspace.ts`) but
+  no settings UI yet.

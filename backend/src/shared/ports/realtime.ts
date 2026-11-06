@@ -1,4 +1,5 @@
-export type ConversationEventKind = "created" | "updated" | "assigned" | "transferred" | "status_changed";
+export type ConversationEventKind =
+  "created" | "updated" | "assigned" | "transferred" | "status_changed" | "priority_changed" | "tags_updated";
 
 /**
  * What services tell the realtime layer after a change is committed. Calls are best effort (a failure is logged and
@@ -29,4 +30,16 @@ export interface RealtimeNotifier {
   notificationRead(agentId: string, payload: object): Promise<void>;
   /** A notification was stored for an agent. */
   notification(agentId: string, notification: object): Promise<void>;
+  /** Any event addressed to one agent, delivered to all of that agent's sessions (workspace, settings, ...). */
+  agentEvent(agentId: string, type: string, payload: object): Promise<void>;
+  /**
+   * A change to an existing message (edit, delete, reaction, forward), delivered to whoever may see the conversation.
+   * `conversationUpdated` also sends `conversation.updated`, for when the inbox preview changed.
+   */
+  messageEvent(
+    conversationId: string,
+    type: string,
+    payload: object,
+    options?: { conversationUpdated?: boolean },
+  ): Promise<void>;
 }

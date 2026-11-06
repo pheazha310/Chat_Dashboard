@@ -1,5 +1,6 @@
 import { env } from "@config/env.js";
 import { redis } from "@config/redis.js";
+import { LocalStorage } from "@shared/storage/local-storage.js";
 import { createDirectory } from "@shared/directory/directory.js";
 import { createContainer } from "./container.js";
 import { MemoryEventBus, RedisEventBus } from "./websocket/websocket.bus.js";
@@ -9,4 +10,5 @@ export const container = createContainer(
   env.EVENT_BUS === "redis" ? new RedisEventBus(env.REDIS_URL) : new MemoryEventBus(),
   redis,
   createDirectory(),
+  new LocalStorage(env.STORAGE_DIR),
 );

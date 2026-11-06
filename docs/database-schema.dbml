@@ -579,7 +579,7 @@ Table canned_responses {
 
   shortcut varchar(50) [note: 'e.g. /greeting']
 
-  scope varchar(30) [not null, default: 'PERSONAL', note: 'PERSONAL or TEAM']
+  scope varchar(30) [not null, default: 'PERSONAL', note: 'PERSONAL, SHARED (everyone) or TEAM (unused until Backend 1 defines teams)']
   team_id uuid [note: 'External team id; set exactly when scope = TEAM (CHECK)']
   created_by uuid [not null, note: 'External agents.id']
 
@@ -796,6 +796,7 @@ TableGroup Backend_2_Workspace {
   push_devices
   workspace_preferences
   workspace_open_conversations
+  conversation_drafts
   user_chat_settings
 }
 
@@ -836,6 +837,21 @@ Table workspace_open_conversations {
 
   sort_order int [not null, default: 0]
   last_opened_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (agent_id, conversation_id) [unique]
+    conversation_id
+  }
+}
+
+Table conversation_drafts {
+  id uuid [pk, default: `gen_random_uuid()`]
+  agent_id uuid [not null, note: 'External agents.id']
+  conversation_id uuid [not null]
+
+  content text [not null, note: 'Unsent composer text, at most 10000 characters. An empty draft is deleted, not stored.']
+
+  updated_at timestamptz [not null, default: `now()`]
 
   indexes {
     (agent_id, conversation_id) [unique]
@@ -928,6 +944,7 @@ Ref: messages.id < spam_reports.message_id
 
 // Workspace
 Ref: conversations.id < workspace_open_conversations.conversation_id
+Ref: conversations.id < conversation_drafts.conversation_id
 
 // =====================================================
 // BACKEND 1 ↔ BACKEND 2 — CONCEPTUAL REFERENCES ONLY
@@ -952,6 +969,7 @@ Ref: agents.id < customer_blocks.blocked_by
 Ref: customers.id < customer_blocks.customer_id
 Ref: agents.id < workspace_preferences.agent_id
 Ref: agents.id < workspace_open_conversations.agent_id
+Ref: agents.id < conversation_drafts.agent_id
 Ref: users.id < user_chat_settings.user_id
 Ref: agents.id < conversations.assigned_agent_id
 Ref: agents.id < conversation_assignments.ended_by

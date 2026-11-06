@@ -7,9 +7,10 @@ import { bestEffort } from "@shared/utils/best-effort.js";
 import { idToString } from "@shared/utils/ids.js";
 import type { CursorQuery } from "@shared/utils/pagination.js";
 import type { NotificationService } from "@modules/notifications/index.js";
-import type { MessageRepository } from "./message.repository.js";
+import type { MessageRepository, NewAttachment } from "./message.repository.js";
 import type { SendInput } from "./message.schema.js";
-import type { LockedConversation, MessageDto, MessageRow, ReadState } from "./message.types.js";
+import { toAttachment, toMessage } from "./message.mapper.js";
+import type { LockedConversation, MessageRow, ReadState } from "./message.types.js";
 
 const PREVIEW_LENGTH = 255;
 /** Cut by code points: a split surrogate pair would be rejected by PostgreSQL. */
@@ -63,6 +64,66 @@ export class MessageService implements SystemMessagePort {
       await bestEffort("realtime", () =>
         this.realtime.messageCreated(result.message, { conversationUpdated: true, ...(origin ? { origin } : {}) }),
       );
+    }
+    return result;
+  }
+
+  /**
+   * An agent sends a file or voice message. The bytes are already in storage; this stores the message and the file's
+   * metadata together or not at all. Same rules and the same `clientId` idempotency as `send`. A retry returns the
+   * original message with `created: false`, and the caller must then discard the file it just stored.
+   */
+  async sendWithAttachment(
+    auth: AuthContext,
+    conversationId: string,
+    input: {
+      clientId: string;
+      text?: string | undefined;
+      messageType: string;
+      /** What the inbox shows when there is no caption. */
+      preview: string;
+      attachment: NewAttachment;
+    },
+  ) {
+    const result = await this.repository.inTransaction(async (tx) => {
+      const conversation = await this.lockVisible(tx, auth, conversationId);
+      const existing = await tx.findByClientId(conversationId, input.clientId);
+      if (existing) {
+        if (existing.senderType !== "AGENT" || existing.senderId !== auth.userId) {
+          throw new ConflictError("clientId is already used by another message");
+        }
+        const files = (await tx.attachmentsFor([existing.id])).get(existing.id) ?? [];
+        return {
+          message: toMessage(
+            existing,
+            [],
+            files.map((row) => toAttachment(row, existing.id)),
+          ),
+          created: false,
+        };
+      }
+      if (!permissionsFor(auth, conversation).canSendMessage) {
+        throw new ForbiddenError("Only the agent who owns an open conversation can send messages");
+      }
+      const message = await tx.append({
+        conversationId,
+        clientId: input.clientId,
+        senderType: "AGENT",
+        senderId: auth.userId,
+        messageType: input.messageType,
+        content: input.text ?? null,
+        preview: toPreview(input.text || input.preview),
+      });
+      const file = await tx.addAttachment({
+        ...input.attachment,
+        conversationId,
+        messageId: message.id,
+        uploadedById: auth.userId,
+      });
+      return { message: toMessage(message, [], [toAttachment(file, message.id)]), created: true };
+    });
+    if (result.created) {
+      await bestEffort("realtime", () => this.realtime.messageCreated(result.message, { conversationUpdated: true }));
     }
     return result;
   }
@@ -152,8 +213,19 @@ export class MessageService implements SystemMessagePort {
   async history(auth: AuthContext, conversationId: string, query: CursorQuery) {
     await this.requireVisible(auth, conversationId);
     const { items, hasMore } = await this.repository.history(conversationId, query);
+    const ids = items.map((item) => item.id);
+    const [reactions, attachments] = await Promise.all([
+      this.repository.reactionsFor(ids),
+      this.repository.attachmentsFor(ids),
+    ]);
     return {
-      items: items.map(toMessage),
+      items: items.map((item) =>
+        toMessage(
+          item,
+          reactions.get(item.id),
+          (attachments.get(item.id) ?? []).map((row) => toAttachment(row, item.id)),
+        ),
+      ),
       meta: {
         limit: query.limit,
         hasMore,
@@ -238,20 +310,3 @@ export class MessageService implements SystemMessagePort {
     await this.repository.inTransaction((tx) => this.lockVisible(tx, auth, id));
   }
 }
-
-// ─── DTO mapping ───────────────────────────────────────────────────────────
-
-const toMessage = (row: MessageRow): MessageDto => ({
-  id: idToString(row.id),
-  conversationId: idToString(row.conversationId),
-  clientId: row.clientId,
-  sequenceNumber: row.sequenceNumber.toString(),
-  senderType: row.senderType,
-  senderId: row.senderId === null ? null : idToString(row.senderId),
-  type: row.messageType,
-  content: row.content,
-  metadata: row.metadata,
-  status: row.status,
-  replyToMessageId: row.replyToMessageId === null ? null : idToString(row.replyToMessageId),
-  createdAt: row.createdAt.toISOString(),
-});

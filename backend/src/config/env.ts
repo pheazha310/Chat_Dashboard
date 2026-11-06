@@ -14,6 +14,15 @@ const schema = z.object({
   // Customer and agent profiles. "dev" returns labelled synthetic data; "external" will call Backend 1 (contract pending).
   BACKEND1_MODE: z.enum(["dev", "external"]).default("dev"),
   AUTH_MODE: z.enum(["dev", "external"]).default("dev"),
+  // Uploaded files. "local" keeps them on this server's disk under STORAGE_DIR (object storage can be added as a driver).
+  STORAGE_DRIVER: z.enum(["local"]).default("local"),
+  STORAGE_DIR: z.string().min(1).default("./storage"),
+  // Hard cap for one upload; each file type also has its own, lower limit.
+  MAX_UPLOAD_BYTES: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(25 * 1024 * 1024),
 });
 
 export const env = schema

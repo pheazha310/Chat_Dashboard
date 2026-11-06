@@ -260,6 +260,7 @@ export default function ExpandedChat({ onBack }: { onBack: () => void }) {
           <MediaFilesPanel
             customer={conversation.name}
             appId={conversation.application.appId}
+            conversationId={conversation.id}
             backLabel="Back to conversation"
             onBack={() => {
               setShowMedia(false);

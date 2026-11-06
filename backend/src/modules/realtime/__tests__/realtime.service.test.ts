@@ -83,4 +83,16 @@ describe("RealtimeService", () => {
     ]);
     expect(published[3]?.payload).toEqual({ conversationId: uid(10), messageIds: [uid(5), uid(6)], status: "READ" });
   });
+
+  it("sends agent events to all sessions of that agent only", async () => {
+    const { service, published } = setup(null);
+    await service.agentEvent(uid(1), "workspace.tab_closed", { conversationId: uid(10) });
+    expect(published).toEqual([
+      {
+        type: "workspace.tab_closed",
+        payload: { conversationId: uid(10) },
+        audience: { kind: "users", userIds: [uid(1)] },
+      },
+    ]);
+  });
 });

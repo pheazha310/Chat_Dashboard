@@ -5,12 +5,34 @@ import { cursorPagedOf, errors, jsonBody, ok, successOf } from "@shared/openapi/
 import { idParams } from "@shared/utils/ids.js";
 import { cursorQuery } from "@shared/utils/pagination.js";
 import { messageParams, readBody, sendBody } from "./message.schema.js";
-import type { MessageDto, ReadState } from "./message.types.js";
+import type { AttachmentDto, MessageDto, ReactionDto, ReadState } from "./message.types.js";
 
 const nullableString = z.string().nullable();
 
 // `satisfies` keeps the schemas in step with the TypeScript DTOs: drift fails the build.
-const message = z
+export const reaction = z
+  .object({ id: z.string(), userType: z.string(), userId: z.string(), emoji: z.string(), createdAt: z.string() })
+  .openapi("MessageReaction") satisfies z.ZodType<ReactionDto>;
+
+export const attachment = z
+  .object({
+    id: z.string(),
+    conversationId: z.string(),
+    messageId: z.string().nullable(),
+    kind: z.enum(["IMAGE", "DOCUMENT", "AUDIO", "VIDEO"]),
+    fileName: z.string(),
+    mimeType: z.string(),
+    fileSize: z.number().int(),
+    durationMs: z.number().int().nullable(),
+    waveform: z.array(z.number().int()).nullable(),
+    uploadedByType: z.string(),
+    uploadedById: z.string(),
+    createdAt: z.string(),
+    downloadPath: z.string(),
+  })
+  .openapi("Attachment") satisfies z.ZodType<AttachmentDto>;
+
+export const message = z
   .object({
     id: z.string(),
     conversationId: z.string(),
@@ -23,6 +45,11 @@ const message = z
     metadata: z.unknown(),
     status: z.enum(["SENDING", "SENT", "DELIVERED", "READ", "FAILED"]),
     replyToMessageId: nullableString,
+    forwardedFromMessageId: nullableString,
+    isEdited: z.boolean(),
+    editedAt: nullableString,
+    reactions: z.array(reaction),
+    attachments: z.array(attachment),
     createdAt: z.string(),
   })
   .openapi("Message") satisfies z.ZodType<MessageDto>;

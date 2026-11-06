@@ -4,7 +4,7 @@ import { BEARER_AUTH } from "@shared/openapi/registry.js";
 import { errors, jsonBody, ok, pagedOf, successOf } from "@shared/openapi/envelopes.js";
 import { idParams } from "@shared/utils/ids.js";
 import { pageQuery } from "@shared/utils/pagination.js";
-import { createBody, listQuery, statusBody } from "./conversation.schema.js";
+import { createBody, listQuery, priorityBody, statusBody } from "./conversation.schema.js";
 import type {
   ActivityDto,
   ConversationDetailDto,
@@ -25,6 +25,7 @@ const permissions: z.ZodType<ConversationPermissions> = z.object({
   canReopen: z.boolean(),
   canArchive: z.boolean(),
   canRestore: z.boolean(),
+  canOrganize: z.boolean(),
 });
 
 const summaryShape = {
@@ -136,6 +137,24 @@ export function registerConversationOpenApi(registry: OpenAPIRegistry) {
       401: errors[401],
       403: errors[403],
       404: errors[404],
+    },
+  });
+  registry.registerPath({
+    method: "patch",
+    path: "/conversations/{id}/priority",
+    tags,
+    security,
+    summary: "Change priority",
+    description:
+      "HIGH, MEDIUM or LOW (new conversations start at MEDIUM). The owner, a supervisor, or anyone while nobody owns the conversation (`permissions.canOrganize`). The same value is a no-op. Adds a `PRIORITY_CHANGED` timeline entry and broadcasts `conversation.priority_changed`. Two simultaneous changes: one wins, the other gets 409.",
+    request: { params: idParams, body: jsonBody(priorityBody) },
+    responses: {
+      200: ok("Updated conversation", successOf(detail)),
+      400: errors[400],
+      401: errors[401],
+      403: errors[403],
+      404: errors[404],
+      409: errors[409],
     },
   });
   registry.registerPath({

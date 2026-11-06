@@ -3810,3 +3810,19 @@ button {
 .load-earlier:disabled {
   opacity: 0.6;
 }
+
+.sidebar-refine {
+  display: flex;
+  gap: 6px;
+  padding: 0 16px 8px;
+}
+.sidebar-refine select {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 6px;
+  border: 1px solid #d7deeb;
+  border-radius: 8px;
+  background: #fff;
+  font: inherit;
+  font-size: 12px;
+}

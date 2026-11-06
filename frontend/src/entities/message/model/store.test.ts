@@ -148,3 +148,68 @@ describe("history state and cursors", () => {
     expect(newestSequences(state().byConversation)).toEqual({ a: "10" });
   });
 });
+
+describe("message actions in the store", () => {
+  const base = { conversationId: "a", side: "agent" as const, text: "t", createdAt: "2026-01-01T09:00:00Z" };
+
+  it("removes a message and clears a reply aimed at it", () => {
+    useMessageStore.setState({
+      byConversation: {
+        a: [
+          { ...base, id: "m1" },
+          { ...base, id: "m2" },
+        ],
+      },
+      replyTarget: { a: "m1" },
+    });
+    useMessageStore.getState().remove("a", "m1");
+    expect(useMessageStore.getState().byConversation.a?.map((m) => m.id)).toEqual(["m2"]);
+    expect(useMessageStore.getState().replyTarget.a).toBeUndefined();
+  });
+
+  it("sets the reactions of one message only", () => {
+    useMessageStore.setState({
+      byConversation: {
+        a: [
+          { ...base, id: "m1" },
+          { ...base, id: "m2" },
+        ],
+      },
+    });
+    useMessageStore.getState().setReactions("a", "m2", [{ id: "r", userId: "u", emoji: "👍" }]);
+    expect(useMessageStore.getState().byConversation.a?.map((m) => m.reactions?.length ?? 0)).toEqual([0, 1]);
+  });
+});
+
+describe("attachments in the store", () => {
+  it("removes one file from its message and leaves the others", () => {
+    const file = (id: string) => ({
+      id,
+      kind: "IMAGE" as const,
+      fileName: id,
+      mimeType: "image/png",
+      size: 1,
+      downloadPath: `/${id}`,
+    });
+    useMessageStore.setState({
+      byConversation: {
+        a: [
+          {
+            id: "m1",
+            conversationId: "a",
+            side: "agent",
+            text: "",
+            createdAt: "t",
+            attachments: [file("f1"), file("f2")],
+          },
+          { id: "m2", conversationId: "a", side: "agent", text: "", createdAt: "t", attachments: [file("f3")] },
+        ],
+      },
+    });
+    useMessageStore.getState().removeAttachment("a", "f1");
+    expect(useMessageStore.getState().byConversation.a?.map((m) => m.attachments?.map((f) => f.id))).toEqual([
+      ["f2"],
+      ["f3"],
+    ]);
+  });
+});

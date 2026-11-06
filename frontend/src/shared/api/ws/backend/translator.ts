@@ -1,6 +1,20 @@
 import type { BackendFrame } from "@/shared/api/backend/types";
-import type { BackendConversation, BackendMessage, BackendNotification } from "@/shared/api/backend/types";
-import { toAgent, toConversation, toDeliveryStatus, toMessage, toNotification } from "@/shared/api/backend/mappers";
+import type {
+  BackendConversation,
+  BackendMessage,
+  BackendNote,
+  BackendNotification,
+  BackendReaction,
+} from "@/shared/api/backend/types";
+import {
+  toAgent,
+  toConversation,
+  toDeliveryStatus,
+  toMessage,
+  toNotification,
+  toNote,
+  toReaction,
+} from "@/shared/api/backend/mappers";
 import type { ChatMessageDto } from "../protocol";
 
 type Frame = { type: string; payload: unknown };
@@ -47,6 +61,61 @@ export class BackendTranslator {
       case "message.ack":
         return [{ type: "message.ack", payload: { message: toMessage(payload.message as BackendMessage) } }];
 
+      case "message.updated":
+        return [{ type: "message.updated", payload: { message: toMessage(payload.message as BackendMessage) } }];
+
+      case "message.deleted":
+        return [
+          { type: "message.deleted", payload: { conversationId: payload.conversationId, messageId: payload.id } },
+        ];
+
+      case "note.created":
+      case "note.updated":
+        return [{ type: frame.type, payload: { note: toNote(payload.note as BackendNote) } }];
+
+      case "note.deleted":
+        return [{ type: "note.deleted", payload: { conversationId: payload.conversationId, noteId: payload.id } }];
+
+      case "conversation.escalated": {
+        const escalation = payload.escalation as Record<string, unknown>;
+        return [
+          {
+            type: "conversation.escalated",
+            payload: {
+              conversationId: escalation.conversationId,
+              escalationId: escalation.id,
+              status: escalation.status,
+              requestedBy: escalation.requestedBy,
+              ...(typeof escalation.reason === "string" ? { reason: escalation.reason } : {}),
+            },
+          },
+        ];
+      }
+
+      case "attachment.deleted":
+        return [
+          {
+            type: "attachment.deleted",
+            payload: {
+              conversationId: payload.conversationId,
+              messageId: payload.messageId ?? null,
+              attachmentId: payload.id,
+            },
+          },
+        ];
+
+      case "message.reaction_updated":
+        return [
+          {
+            type: "message.reaction_updated",
+            payload: {
+              conversationId: payload.conversationId,
+              messageId: payload.messageId,
+              reactions: asArray<BackendReaction>(payload.reactions).map(toReaction),
+            },
+          },
+        ];
+
       case "message.status": {
         const status = toDeliveryStatus(payload.status as BackendMessage["status"]);
         return asArray<string>(payload.messageIds).map((messageId) => ({
@@ -71,6 +140,8 @@ export class BackendTranslator {
       case "conversation.updated":
       case "conversation.assigned":
       case "conversation.transferred":
+      case "conversation.priority_changed":
+      case "conversation.tags_updated":
       case "conversation.status_changed": {
         const source = payload.conversation as BackendConversation;
         return [
@@ -104,6 +175,13 @@ export class BackendTranslator {
             payload: { notification: toNotification(payload.notification as BackendNotification, this.userId ?? "") },
           },
         ];
+
+      // Per-agent workspace events already use the frontend's shape.
+      case "workspace.tab_opened":
+      case "workspace.tab_closed":
+      case "workspace.draft_updated":
+      case "workspace.preferences_updated":
+        return [{ type: frame.type, payload }];
 
       case "error":
         return [{ type: "notice", payload: { text: String(payload.message ?? "Something went wrong") } }];

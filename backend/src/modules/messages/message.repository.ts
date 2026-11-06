@@ -1,7 +1,14 @@
 import { prisma, runInTransaction, type Db } from "@config/database.js";
 import type { Prisma } from "../../../prisma/generated/prisma/client.js";
 import type { CursorQuery } from "@shared/utils/pagination.js";
-import type { LockedConversation, MessagePage, MessageRow } from "./message.types.js";
+import type {
+  AttachmentRow,
+  EditHistoryRow,
+  LockedConversation,
+  MessagePage,
+  MessageRow,
+  ReactionRow,
+} from "./message.types.js";
 
 interface AppendInput {
   conversationId: string;
@@ -9,11 +16,23 @@ interface AppendInput {
   senderType: string;
   senderId: string | null;
   messageType: string;
-  content: string;
+  content: string | null;
   metadata?: Prisma.InputJsonValue;
   replyToMessageId?: string | null;
+  forwardedFromMessageId?: string | null;
   /** Updates the inbox preview and last-activity time (not for SYSTEM messages). */
   preview: string | null;
+}
+
+/** File metadata for a message that carries a file; the bytes are in storage under `storageKey`. */
+export interface NewAttachment {
+  storageKey: string;
+  fileName: string;
+  mimeType: string;
+  fileSize: number;
+  durationMs?: number | undefined;
+  waveform?: number[] | undefined;
+  checksumSha256: string;
 }
 
 export class MessageRepository {
@@ -26,7 +45,7 @@ export class MessageRepository {
   /** Locks the conversation row until commit, so concurrent senders and retries are processed one at a time. */
   async lock(id: string): Promise<LockedConversation | null> {
     const rows = await this.db.$queryRaw<LockedConversation[]>`
-      SELECT id, customer_id AS "customerId", status, handoff_status AS "handoffStatus",
+      SELECT id, customer_id AS "customerId", conversation_type AS "conversationType", status, handoff_status AS "handoffStatus",
              assigned_agent_id AS "assignedAgentId", is_archived AS "isArchived"
         FROM conversations WHERE id = ${id}::uuid FOR UPDATE`;
     return rows[0] ?? null;
@@ -75,6 +94,7 @@ export class MessageRepository {
         content: input.content,
         ...(input.metadata === undefined ? {} : { metadata: input.metadata }),
         replyToMessageId: input.replyToMessageId ?? null,
+        forwardedFromMessageId: input.forwardedFromMessageId ?? null,
       },
     });
   }
@@ -211,5 +231,131 @@ export class MessageRepository {
       }),
     ]);
     return { position, unread, markedUnread: read?.markedUnread ?? false };
+  }
+
+  // ─── Message actions (edit, delete, reactions) ───────────────────────────
+
+  /** A message by id including soft-deleted ones (unlike `findById`, which is scoped to a conversation). */
+  findAnyById(id: string): Promise<MessageRow | null> {
+    return this.db.message.findUnique({ where: { id } });
+  }
+
+  /** Records the text being replaced, then stores the new text. The history row and the update commit together. */
+  async applyEdit(message: MessageRow, editorId: string, content: string): Promise<MessageRow> {
+    await this.db.messageEditHistory.create({
+      data: {
+        messageId: message.id,
+        editorType: "AGENT",
+        editorId,
+        previousContent: message.content ?? "",
+      },
+    });
+    return this.db.message.update({
+      where: { id: message.id },
+      data: { content, isEdited: true, editedAt: new Date() },
+    });
+  }
+
+  listEditHistory(messageId: string): Promise<EditHistoryRow[]> {
+    return this.db.messageEditHistory.findMany({
+      where: { messageId },
+      orderBy: [{ editedAt: "desc" }, { id: "desc" }],
+    });
+  }
+
+  /** Soft delete: the row and its edit history stay for audit; every read path filters on `deleted_at`. */
+  async softDelete(id: string, deletedBy: string): Promise<MessageRow> {
+    const now = new Date();
+    // Its files go with it: they must not stay downloadable once the message is deleted.
+    await this.db.attachment.updateMany({
+      where: { deletedAt: null, messageAttachments: { some: { messageId: id } } },
+      data: { deletedAt: now },
+    });
+    return this.db.message.update({ where: { id }, data: { deletedAt: now, deletedBy } });
+  }
+
+  // ─── Attachments carried by a message ────────────────────────────────────
+
+  /** Stores the file's metadata and links it to the message. The bytes are already in storage. */
+  async addAttachment(data: NewAttachment & { conversationId: string; messageId: string; uploadedById: string }) {
+    const attachment = await this.db.attachment.create({
+      data: {
+        conversationId: data.conversationId,
+        uploadedByType: "AGENT",
+        uploadedById: data.uploadedById,
+        storageKey: data.storageKey,
+        fileName: data.fileName,
+        mimeType: data.mimeType,
+        fileSize: BigInt(data.fileSize),
+        durationMs: data.durationMs ?? null,
+        ...(data.waveform === undefined ? {} : { waveform: data.waveform }),
+        checksumSha256: data.checksumSha256,
+        uploadStatus: "UPLOADED",
+      },
+    });
+    await this.db.messageAttachment.create({
+      data: { messageId: data.messageId, attachmentId: attachment.id, conversationId: data.conversationId },
+    });
+    return attachment;
+  }
+
+  /** Live attachments of several messages, grouped by message. */
+  async attachmentsFor(messageIds: string[]): Promise<Map<string, AttachmentRow[]>> {
+    const grouped = new Map<string, AttachmentRow[]>();
+    if (messageIds.length === 0) return grouped;
+    const links = await this.db.messageAttachment.findMany({
+      where: { messageId: { in: messageIds }, attachment: { deletedAt: null } },
+      include: { attachment: true },
+      orderBy: { createdAt: "asc" },
+    });
+    for (const link of links) grouped.set(link.messageId, [...(grouped.get(link.messageId) ?? []), link.attachment]);
+    return grouped;
+  }
+
+  /** The message the inbox preview is taken from: the newest non-deleted message that is not a SYSTEM message. */
+  previewSource(conversationId: string): Promise<MessageRow | null> {
+    return this.db.message.findFirst({
+      where: { conversationId, deletedAt: null, senderType: { not: "SYSTEM" } },
+      orderBy: { sequenceNumber: "desc" },
+    });
+  }
+
+  async setPreview(conversationId: string, preview: string | null): Promise<void> {
+    await this.db.conversation.update({ where: { id: conversationId }, data: { lastMessagePreview: preview } });
+  }
+
+  /** Reactions of several messages, grouped by message, oldest first. */
+  async reactionsFor(messageIds: string[]): Promise<Map<string, ReactionRow[]>> {
+    const grouped = new Map<string, ReactionRow[]>();
+    if (messageIds.length === 0) return grouped;
+    const rows = await this.db.messageReaction.findMany({
+      where: { messageId: { in: messageIds } },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    });
+    for (const row of rows) grouped.set(row.messageId, [...(grouped.get(row.messageId) ?? []), row]);
+    return grouped;
+  }
+
+  countDistinctReactions(messageId: string, userId: string) {
+    return this.db.messageReaction.count({ where: { messageId, userType: "AGENT", userId } });
+  }
+
+  /** Adds the reaction unless the same user already reacted with the same emoji (the unique key makes this race-safe). */
+  async addReaction(messageId: string, userId: string, emoji: string): Promise<ReactionRow> {
+    await this.db.messageReaction.createMany({
+      data: [{ messageId, userType: "AGENT", userId, emoji }],
+      skipDuplicates: true,
+    });
+    return this.db.messageReaction.findUniqueOrThrow({
+      where: { messageId_userType_userId_emoji: { messageId, userType: "AGENT", userId, emoji } },
+    });
+  }
+
+  findReaction(id: string): Promise<ReactionRow | null> {
+    return this.db.messageReaction.findUnique({ where: { id } });
+  }
+
+  async deleteReaction(id: string): Promise<void> {
+    await this.db.messageReaction.deleteMany({ where: { id } });
   }
 }

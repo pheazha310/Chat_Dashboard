@@ -10,13 +10,19 @@ import type {
   MessageSide,
   NotificationDto,
   NotificationType,
+  ReactionDto,
+  AttachmentDto,
+  NoteDto,
 } from "../ws/protocol";
 import type {
   BackendActivity,
+  BackendAttachment,
   BackendAgentProfile,
   BackendConversation,
   BackendMessage,
+  BackendNote,
   BackendNotification,
+  BackendReaction,
 } from "./types";
 
 const UNKNOWN = "—";
@@ -56,6 +62,8 @@ export function toConversation(source: BackendConversation, unread: number): Con
     lastMessageAt: source.lastMessageAt,
     unread,
     urgent: source.priority === "HIGH",
+    priority: source.priority,
+    ...(source.tags?.length ? { tags: source.tags } : {}),
     handoff: HANDOFF[source.handoffStatus],
     ...(source.assignedAgent ? { assignedAgent: toAgent(source.assignedAgent) } : {}),
     application: {
@@ -83,8 +91,41 @@ export function toMessage(source: BackendMessage): ChatMessageDto {
     ...(source.senderId ? { senderId: source.senderId } : {}),
     ...(source.clientId ? { clientId: source.clientId } : {}),
     sequence: source.sequenceNumber,
+    ...(source.replyToMessageId ? { replyToId: source.replyToMessageId } : {}),
+    ...(source.forwardedFromMessageId ? { forwarded: true } : {}),
+    ...(source.isEdited ? { edited: true } : {}),
+    ...(source.reactions?.length ? { reactions: source.reactions.map(toReaction) } : {}),
+    ...(source.attachments?.length ? { attachments: source.attachments.map(toAttachment) } : {}),
   };
 }
+
+export const toAttachment = (source: BackendAttachment): AttachmentDto => ({
+  id: source.id,
+  kind: source.kind,
+  fileName: source.fileName,
+  mimeType: source.mimeType,
+  size: source.fileSize,
+  ...(source.durationMs === null ? {} : { durationMs: source.durationMs }),
+  ...(source.waveform === null ? {} : { waveform: source.waveform }),
+  downloadPath: source.downloadPath,
+});
+
+export const toNote = (source: BackendNote): NoteDto => ({
+  id: source.id,
+  conversationId: source.conversationId,
+  authorId: source.authorAgentId,
+  ...(source.author ? { authorName: source.author.name } : {}),
+  text: source.content,
+  mentionedAgentIds: source.mentionedAgentIds,
+  edited: source.isEdited,
+  createdAt: source.createdAt,
+});
+
+export const toReaction = (source: BackendReaction): ReactionDto => ({
+  id: source.id,
+  userId: source.userId,
+  emoji: source.emoji,
+});
 
 const TONE: Record<string, ActivityTone> = {
   STATUS_CHANGED: "cyan",

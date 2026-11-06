@@ -41,7 +41,7 @@ ALTER TABLE notifications ADD CONSTRAINT notifications_notification_type_check C
 ));
 ALTER TABLE notifications ADD CONSTRAINT notifications_recipient_type_check CHECK (recipient_type IN ('CUSTOMER', 'AGENT'));
 ALTER TABLE agent_presence_history ADD CONSTRAINT agent_presence_history_status_check CHECK (status IN ('AVAILABLE', 'BUSY', 'AWAY', 'OFFLINE'));
-ALTER TABLE canned_responses ADD CONSTRAINT canned_responses_scope_check CHECK (scope IN ('PERSONAL', 'TEAM'));
+ALTER TABLE canned_responses ADD CONSTRAINT canned_responses_scope_check CHECK (scope IN ('PERSONAL', 'TEAM', 'SHARED'));
 ALTER TABLE automation_logs ADD CONSTRAINT automation_logs_execution_status_check CHECK (execution_status IN ('SUCCESS', 'FAILED', 'SKIPPED'));
 
 
@@ -103,6 +103,7 @@ ALTER TABLE attachments ADD CONSTRAINT attachments_duration_nonnegative CHECK (d
 ALTER TABLE conversations ADD CONSTRAINT conversations_last_sequence_nonnegative CHECK (last_sequence_number >= 0);
 ALTER TABLE conversation_reads ADD CONSTRAINT conversation_reads_last_read_sequence_nonnegative CHECK (last_read_sequence_number >= 0);
 ALTER TABLE workspace_preferences ADD CONSTRAINT workspace_preferences_sidebar_width_positive CHECK (sidebar_width IS NULL OR sidebar_width > 0);
+ALTER TABLE conversation_drafts ADD CONSTRAINT conversation_drafts_content_length CHECK (char_length(content) BETWEEN 1 AND 10000);
 
 -- The assistant has no Backend 1 id; every other participant does.
 ALTER TABLE conversation_participants ADD CONSTRAINT conversation_participants_assistant_has_no_id CHECK (
@@ -125,10 +126,18 @@ ALTER TABLE conversation_participants ADD CONSTRAINT conversation_participants_l
 -- Plain text messages carry content (attachment/voice messages may not).
 ALTER TABLE messages ADD CONSTRAINT messages_text_has_content CHECK (message_type <> 'TEXT' OR content IS NOT NULL);
 
--- A TEAM template names its team; a personal one does not.
+-- A TEAM template names its team; personal and shared ones do not.
 ALTER TABLE canned_responses ADD CONSTRAINT canned_responses_team_matches_scope CHECK (
   (scope = 'TEAM') = (team_id IS NOT NULL)
 );
+
+-- A shortcut means one template to whoever can see it (deactivating a template frees its shortcut).
+CREATE UNIQUE INDEX canned_responses_personal_shortcut_key
+  ON canned_responses (created_by, lower(shortcut))
+  WHERE scope = 'PERSONAL' AND is_active AND shortcut IS NOT NULL;
+CREATE UNIQUE INDEX canned_responses_shared_shortcut_key
+  ON canned_responses (lower(shortcut))
+  WHERE scope = 'SHARED' AND is_active AND shortcut IS NOT NULL;
 
 -- At most one non-closed conversation per loan application.
 CREATE UNIQUE INDEX conversations_one_open_per_application

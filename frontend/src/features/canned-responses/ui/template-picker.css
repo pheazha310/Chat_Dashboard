@@ -1,0 +1,111 @@
+.template-picker {
+  position: relative;
+}
+.template-popover {
+  position: absolute;
+  z-index: 20;
+  bottom: calc(100% + 8px);
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(360px, 80vw);
+  max-height: 380px;
+  padding: 10px;
+  border: 1px solid #e3e8f2;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 12px 32px #0f172a2e;
+}
+.template-popover input:not([type="checkbox"]),
+.template-popover textarea {
+  width: 100%;
+  padding: 7px 9px;
+  border: 1px solid #d7deeb;
+  border-radius: 8px;
+  font: inherit;
+}
+.template-popover textarea {
+  min-height: 90px;
+  resize: vertical;
+}
+.template-list {
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+.template-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+}
+.template-choice {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.template-choice:hover,
+.template-choice:focus-visible {
+  background: #f1f4fa;
+}
+.template-choice strong,
+.template-choice span {
+  display: block;
+}
+.template-choice code,
+.template-choice small {
+  margin-left: 6px;
+  font-size: 11px;
+  opacity: 0.65;
+}
+.template-choice span {
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0.75;
+}
+.template-item-actions {
+  display: flex;
+  gap: 2px;
+  padding-top: 6px;
+}
+.template-item-actions button,
+.template-new,
+.template-form-actions button {
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: #00000012;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.template-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.template-form-actions {
+  display: flex;
+  gap: 8px;
+}
+.template-form-actions button[type="submit"] {
+  color: #fff;
+  background: #3b6df0;
+}
+.template-form-actions button:disabled {
+  opacity: 0.5;
+}
+.template-empty {
+  padding: 8px;
+  font-size: 13px;
+  opacity: 0.7;
+}

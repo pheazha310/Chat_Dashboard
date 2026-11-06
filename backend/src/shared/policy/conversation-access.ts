@@ -12,6 +12,8 @@ export interface ConversationPermissions {
   canReopen: boolean;
   canArchive: boolean;
   canRestore: boolean;
+  /** Change priority and tags: the owner or a supervisor, or anyone while nobody owns the conversation. */
+  canOrganize: boolean;
 }
 
 /** The conversation fields the rules depend on. */
@@ -52,5 +54,6 @@ export function permissionsFor(auth: AuthContext, c: PolicyInput): ConversationP
     canReopen: c.status !== "OPEN",
     canArchive: !c.isArchived && canArchiveNow,
     canRestore: c.isArchived && canArchiveNow,
+    canOrganize: canArchiveNow,
   };
 }

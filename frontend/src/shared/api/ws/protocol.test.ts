@@ -101,3 +101,60 @@ describe("isServerEvent", () => {
     expect(isServerEvent(type, payload)).toBe(false);
   });
 });
+
+describe("workspace events", () => {
+  it("accepts well-formed events and rejects malformed ones", () => {
+    expect(isServerEvent("workspace.tab_opened", { conversationId: "a", sortOrder: 1, lastOpenedAt: "t" })).toBe(true);
+    expect(isServerEvent("workspace.tab_opened", { conversationId: "a" })).toBe(false);
+    expect(isServerEvent("workspace.tab_closed", { conversationId: "a" })).toBe(true);
+    expect(isServerEvent("workspace.draft_updated", { conversationId: "a", content: null, updatedAt: "t" })).toBe(true);
+    expect(isServerEvent("workspace.draft_updated", { conversationId: "a", content: 5, updatedAt: "t" })).toBe(false);
+    expect(
+      isServerEvent("workspace.preferences_updated", { preferences: { restoreTabs: true, persistTabs: false } }),
+    ).toBe(true);
+    expect(isServerEvent("workspace.preferences_updated", { preferences: { restoreTabs: true } })).toBe(false);
+  });
+});
+
+describe("message action events", () => {
+  it("validates edits, deletes and reaction updates", () => {
+    expect(isServerEvent("message.updated", { message })).toBe(true);
+    expect(isServerEvent("message.updated", { message: { id: "x" } })).toBe(false);
+    expect(isServerEvent("message.deleted", { conversationId: "a", messageId: "m" })).toBe(true);
+    expect(isServerEvent("message.deleted", { conversationId: "a" })).toBe(false);
+    const reactions = [{ id: "r", userId: "u", emoji: "👍" }];
+    expect(isServerEvent("message.reaction_updated", { conversationId: "a", messageId: "m", reactions })).toBe(true);
+    expect(isServerEvent("message.reaction_updated", { conversationId: "a", messageId: "m", reactions: [{}] })).toBe(
+      false,
+    );
+  });
+});
+
+describe("attachment events", () => {
+  it("validates attachment.deleted", () => {
+    expect(isServerEvent("attachment.deleted", { conversationId: "a", messageId: "m", attachmentId: "f" })).toBe(true);
+    expect(isServerEvent("attachment.deleted", { conversationId: "a", messageId: null, attachmentId: "f" })).toBe(true);
+    expect(isServerEvent("attachment.deleted", { conversationId: "a" })).toBe(false);
+  });
+});
+
+describe("note and escalation events", () => {
+  const note = {
+    id: "n",
+    conversationId: "a",
+    authorId: "u",
+    text: "t",
+    mentionedAgentIds: [],
+    edited: false,
+    createdAt: "t",
+  };
+  it("validates notes and escalations", () => {
+    expect(isServerEvent("note.created", { note })).toBe(true);
+    expect(isServerEvent("note.updated", { note: { ...note, edited: "yes" } })).toBe(false);
+    expect(isServerEvent("note.deleted", { conversationId: "a", noteId: "n" })).toBe(true);
+    expect(isServerEvent("note.deleted", { conversationId: "a" })).toBe(false);
+    const escalation = { conversationId: "a", escalationId: "e", status: "PENDING", requestedBy: "u" };
+    expect(isServerEvent("conversation.escalated", escalation)).toBe(true);
+    expect(isServerEvent("conversation.escalated", { ...escalation, status: "DONE" })).toBe(false);
+  });
+});

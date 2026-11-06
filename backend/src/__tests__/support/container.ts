@@ -20,6 +20,10 @@ export async function createTestContainer() {
   const { createContainer } = await import("../../container.js");
   const { MemoryEventBus } = await import("../../websocket/websocket.bus.js");
   const { DevDirectory } = await import("@shared/directory/dev-directory.js");
+  const { LocalStorage } = await import("@shared/storage/local-storage.js");
+  const { mkdtemp } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
 
   const bus = new MemoryEventBus();
   const redis = new Redis(process.env.TEST_REDIS_URL ?? "redis://localhost:6379", {
@@ -29,7 +33,12 @@ export async function createTestContainer() {
   const events: BusEvent[] = [];
   bus.subscribe((event) => events.push(event));
   return {
-    ...createContainer(bus, redis, new DevDirectory()),
+    ...createContainer(
+      bus,
+      redis,
+      new DevDirectory(),
+      new LocalStorage(await mkdtemp(join(tmpdir(), "chat-test-storage-"))),
+    ),
     db,
     redis,
     events,

@@ -21,12 +21,14 @@ const repo = {
   unreadCounts: vi.fn(),
   unreadConversationIds: vi.fn(),
   findForAccess: vi.fn(),
+  findManyForAccess: vi.fn(),
   findForEvent: vi.fn(),
   findByApplication: vi.fn(),
   lockCustomer: vi.fn(),
   create: vi.fn(),
   addCustomerParticipant: vi.fn(),
   transitionStatus: vi.fn(),
+  transitionPriority: vi.fn(),
   releaseOwner: vi.fn(),
   setArchived: vi.fn(),
   addActivity: vi.fn(),
@@ -154,6 +156,30 @@ describe("requireVisible", () => {
   });
 });
 
+describe("visibleSummaries", () => {
+  it("returns only the conversations the caller may see, with their own unread counts", async () => {
+    const mine = row({ id: uid(10) });
+    const theirs = row({ id: uid(11), assignedAgentId: uid(2) });
+    repo.findManyForAccess.mockResolvedValue([mine, theirs]);
+    repo.unreadCounts.mockResolvedValue(new Map([[uid(10), 3]]));
+    const result = await service.visibleSummaries(agent, [uid(10), uid(11), uid(10), uid(12)]);
+    expect([...result.keys()]).toEqual([uid(10)]);
+    expect(result.get(uid(10))?.unreadCount).toBe(3);
+    expect(repo.findManyForAccess).toHaveBeenCalledWith([uid(10), uid(11), uid(12)], uid(1));
+    expect(repo.unreadCounts).toHaveBeenCalledWith(uid(1), [uid(10)]);
+  });
+
+  it("lets a viewer see a conversation owned by someone else and skips the query for no ids", async () => {
+    repo.findManyForAccess.mockResolvedValue([
+      row({ id: uid(11), assignedAgentId: uid(2), conversationAssignments: [{ assignmentType: "VIEWER" }] }),
+    ]);
+    expect((await service.visibleSummaries(agent, [uid(11)])).has(uid(11))).toBe(true);
+    repo.findManyForAccess.mockClear();
+    expect((await service.visibleSummaries(agent, [])).size).toBe(0);
+    expect(repo.findManyForAccess).not.toHaveBeenCalled();
+  });
+});
+
 describe("get", () => {
   it("includes the caller's permissions", async () => {
     repo.findForAccess.mockResolvedValue(row());
@@ -229,6 +255,51 @@ describe("create", () => {
   it("rejects an application that belongs to another customer", async () => {
     repo.findByApplication.mockResolvedValue(row({ customerId: uid(555) }));
     await expect(service.create(agent, input)).rejects.toBeInstanceOf(ConflictError);
+  });
+});
+
+describe("changePriority", () => {
+  beforeEach(() => {
+    repo.findForAccess.mockResolvedValue(row());
+    repo.transitionPriority.mockResolvedValue(true);
+  });
+
+  it("changes the priority, records from and to, and announces it", async () => {
+    await service.changePriority(agent, uid(10), "HIGH");
+    expect(repo.transitionPriority).toHaveBeenCalledWith(uid(10), "MEDIUM", "HIGH");
+    expect(repo.addActivity).toHaveBeenCalledWith(
+      expect.objectContaining({
+        activityType: "PRIORITY_CHANGED",
+        actorId: uid(1),
+        metadata: { from: "MEDIUM", to: "HIGH" },
+      }),
+    );
+    expect(realtime.conversationEvent).toHaveBeenCalledWith(uid(10), "priority_changed", {
+      from: "MEDIUM",
+      to: "HIGH",
+    });
+  });
+
+  it("does nothing when the priority is already that value", async () => {
+    await service.changePriority(agent, uid(10), "MEDIUM");
+    expect(repo.transitionPriority).not.toHaveBeenCalled();
+    expect(repo.addActivity).not.toHaveBeenCalled();
+    expect(realtime.conversationEvent).not.toHaveBeenCalled();
+  });
+
+  it("allows the owner, a supervisor, and anyone on an unowned conversation, but not another agent", async () => {
+    await expect(service.changePriority(supervisor, uid(10), "LOW")).resolves.toBeTruthy();
+    repo.findForAccess.mockResolvedValue(row({ handoffStatus: "NEEDS_HUMAN", assignedAgentId: null }));
+    await expect(service.changePriority(other, uid(10), "LOW")).resolves.toBeTruthy();
+    repo.findForAccess.mockResolvedValue(row({ conversationAssignments: [{ assignmentType: "VIEWER" }] }));
+    await expect(service.changePriority(other, uid(10), "LOW")).rejects.toBeInstanceOf(ForbiddenError);
+  });
+
+  it("answers 409 and writes nothing when another change won", async () => {
+    repo.transitionPriority.mockResolvedValue(false);
+    await expect(service.changePriority(agent, uid(10), "HIGH")).rejects.toBeInstanceOf(ConflictError);
+    expect(repo.addActivity).not.toHaveBeenCalled();
+    expect(realtime.conversationEvent).not.toHaveBeenCalled();
   });
 });
 

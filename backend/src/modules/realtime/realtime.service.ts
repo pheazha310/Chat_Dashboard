@@ -9,6 +9,8 @@ const EVENT_NAMES: Record<ConversationEventKind, string> = {
   assigned: "conversation.assigned",
   transferred: "conversation.transferred",
   status_changed: "conversation.status_changed",
+  priority_changed: "conversation.priority_changed",
+  tags_updated: "conversation.tags_updated",
 };
 
 /**
@@ -37,6 +39,25 @@ export class RealtimeService implements RealtimeNotifier {
       audience,
       ...(options.origin ? { except: options.origin } : {}),
     });
+    if (options.conversationUpdated) {
+      await this.bus.publish({
+        type: "conversation.updated",
+        payload: { conversation: snapshot.conversation },
+        audience,
+      });
+    }
+  }
+
+  async messageEvent(
+    conversationId: string,
+    type: string,
+    payload: object,
+    options: { conversationUpdated?: boolean } = {},
+  ) {
+    const snapshot = await this.conversations().snapshot(conversationId);
+    if (!snapshot) return;
+    const audience = conversationAudience(snapshot);
+    await this.bus.publish({ type, payload, audience });
     if (options.conversationUpdated) {
       await this.bus.publish({
         type: "conversation.updated",
@@ -115,6 +136,10 @@ export class RealtimeService implements RealtimeNotifier {
       payload,
       audience: { kind: "users", userIds: [idToString(agentId)] },
     });
+  }
+
+  async agentEvent(agentId: string, type: string, payload: object) {
+    await this.bus.publish({ type, payload, audience: { kind: "users", userIds: [idToString(agentId)] } });
   }
 
   async notification(agentId: string, notification: object) {

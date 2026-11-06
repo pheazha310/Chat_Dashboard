@@ -62,6 +62,7 @@ model Conversation {
   calls                            Call[]
   spamReports                      SpamReport[]
   workspaceOpenConversations       WorkspaceOpenConversation[]
+  conversationDrafts               ConversationDraft[]
 
   @@index([status, lastMessageAt])
   @@index([customerId])
@@ -394,7 +395,7 @@ model CannedResponse {
   title     String   @db.VarChar(255)
   content   String   @db.Text
   shortcut  String?  @db.VarChar(50) /// e.g. /greeting
-  scope     String   @default("PERSONAL") @db.VarChar(30) /// PERSONAL or TEAM
+  scope     String   @default("PERSONAL") @db.VarChar(30) /// PERSONAL (only its creator), SHARED (every dashboard user) or TEAM (not used until Backend 1 defines teams)
   teamId    String?  @map("team_id") @db.Uuid /// External team id; set exactly when scope = TEAM (CHECK)
   createdBy String   @map("created_by") @db.Uuid /// External agents.id
   isActive  Boolean  @default(true) @map("is_active")
@@ -591,6 +592,20 @@ model WorkspaceOpenConversation {
   @@unique([agentId, conversationId])
   @@index([conversationId])
   @@map("workspace_open_conversations")
+}
+
+/// An agent's unsent composer text for one conversation (FR-14). Deleted when emptied or sent.
+model ConversationDraft {
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  agentId        String       @map("agent_id") @db.Uuid /// External agents.id
+  conversationId String       @map("conversation_id") @db.Uuid
+  content        String       @db.Text /// At most 10000 characters. An empty draft is deleted, not stored.
+  updatedAt      DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, conversationId])
+  @@index([conversationId])
+  @@map("conversation_drafts")
 }
 
 model UserChatSetting {

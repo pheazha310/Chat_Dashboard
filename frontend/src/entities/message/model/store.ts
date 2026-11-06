@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { ChatMessageDto, DeliveryStatus, MessageSide } from "@/shared/api/ws";
+import type { ChatMessageDto, DeliveryStatus, MessageSide, ReactionDto } from "@/shared/api/ws";
 
 export type ChatMessage = ChatMessageDto;
 
@@ -16,12 +16,20 @@ type MessageState = {
   byConversation: Record<string, ChatMessage[]>;
   typing: Record<string, MessageSide | undefined>;
   history: Record<string, HistoryState>;
+  /** The message the agent is replying to, per conversation (composer state shared by the bubble and the composer). */
+  replyTarget: Record<string, string | undefined>;
   replaceAll: (messages: Record<string, ChatMessage[]>) => void;
   mergeMany: (messages: Record<string, ChatMessage[]>) => void;
   upsert: (message: ChatMessage) => void;
   setStatus: (conversationId: string, messageId: string, status: DeliveryStatus) => void;
   setTyping: (conversationId: string, side: MessageSide, active: boolean) => void;
   setHistory: (conversationId: string, patch: Partial<HistoryState>) => void;
+  /** A message was deleted (it is gone from history too). */
+  remove: (conversationId: string, messageId: string) => void;
+  setReactions: (conversationId: string, messageId: string, reactions: ReactionDto[]) => void;
+  /** A file was deleted from a message. */
+  removeAttachment: (conversationId: string, attachmentId: string) => void;
+  setReplyTarget: (conversationId: string, messageId: string | undefined) => void;
 };
 
 const EMPTY: ChatMessage[] = [];
@@ -52,6 +60,7 @@ export const useMessageStore = create<MessageState>((set) => ({
   byConversation: {},
   typing: {},
   history: {},
+  replyTarget: {},
   // Keep optimistic messages the server has not acknowledged yet.
   replaceAll: (incoming) =>
     set((state) => {
@@ -88,6 +97,39 @@ export const useMessageStore = create<MessageState>((set) => ({
         ),
       },
     })),
+  remove: (conversationId, messageId) =>
+    set((state) => ({
+      byConversation: {
+        ...state.byConversation,
+        [conversationId]: (state.byConversation[conversationId] ?? EMPTY).filter((m) => m.id !== messageId),
+      },
+      replyTarget:
+        state.replyTarget[conversationId] === messageId
+          ? { ...state.replyTarget, [conversationId]: undefined }
+          : state.replyTarget,
+    })),
+  setReactions: (conversationId, messageId, reactions) =>
+    set((state) => ({
+      byConversation: {
+        ...state.byConversation,
+        [conversationId]: (state.byConversation[conversationId] ?? EMPTY).map((m) =>
+          m.id === messageId ? { ...m, reactions } : m,
+        ),
+      },
+    })),
+  removeAttachment: (conversationId, attachmentId) =>
+    set((state) => ({
+      byConversation: {
+        ...state.byConversation,
+        [conversationId]: (state.byConversation[conversationId] ?? EMPTY).map((m) =>
+          m.attachments?.some((a) => a.id === attachmentId)
+            ? { ...m, attachments: m.attachments.filter((a) => a.id !== attachmentId) }
+            : m,
+        ),
+      },
+    })),
+  setReplyTarget: (conversationId, messageId) =>
+    set((state) => ({ replyTarget: { ...state.replyTarget, [conversationId]: messageId } })),
   setTyping: (conversationId, side, active) =>
     set((state) => ({
       typing: { ...state.typing, [conversationId]: active ? side : undefined },

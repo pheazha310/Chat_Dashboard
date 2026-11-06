@@ -2,7 +2,11 @@ import { logger } from "@config/logger.js";
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "@shared/errors/AppError.js";
 import type { AuthContext } from "@shared/auth/auth.types.js";
 import type { AvailableAgents } from "@shared/ports/available-agents.js";
-import type { AccessibleConversationState, ConversationAccess } from "@shared/ports/conversation-access.js";
+import type {
+  AccessibleConversationState,
+  ConversationAccess,
+  ConversationSummaries,
+} from "@shared/ports/conversation-access.js";
 import type { AgentProfile, Directory } from "@shared/ports/directory.js";
 import type { RealtimeNotifier } from "@shared/ports/realtime.js";
 import type { SystemMessagePort } from "@shared/ports/system-message.js";
@@ -19,13 +23,14 @@ import type {
   ConversationDetailDto,
   ConversationEventDto,
   ConversationPermissions,
+  ConversationPriority,
   ConversationStatus,
   ConversationSummaryDto,
   ConversationWithTags,
 } from "./conversation.types.js";
 import type { ConversationActivity } from "../../../prisma/generated/prisma/client.js";
 
-export class ConversationService implements ConversationAccess {
+export class ConversationService implements ConversationAccess, ConversationSummaries {
   constructor(
     private readonly repository: ConversationRepository,
     private readonly systemMessages: SystemMessagePort,
@@ -135,6 +140,35 @@ export class ConversationService implements ConversationAccess {
     return this.get(auth, id);
   }
 
+  /**
+   * Changes the priority (HIGH, MEDIUM, LOW). The owner, a supervisor, or anyone while nobody owns the conversation.
+   * Setting the value it already has changes nothing. Two simultaneous changes: one wins, the other gets a 409.
+   */
+  async changePriority(auth: AuthContext, id: string, priority: ConversationPriority) {
+    const conversation = await this.load(auth, id);
+    if (!permissionsFor(auth, conversation).canOrganize) {
+      throw new ForbiddenError("Only the owner or a supervisor can change this conversation's priority");
+    }
+    if (conversation.priority === priority) return this.get(auth, id);
+    await this.repository.inTransaction(async (tx) => {
+      if (!(await tx.transitionPriority(id, conversation.priority, priority))) {
+        throw new ConflictError("The conversation changed; refresh and try again");
+      }
+      await tx.addActivity({
+        conversationId: id,
+        actorType: "AGENT",
+        actorId: auth.userId,
+        activityType: "PRIORITY_CHANGED",
+        description: `Priority changed from ${conversation.priority} to ${priority}`,
+        metadata: { from: conversation.priority, to: priority },
+      });
+    });
+    await bestEffort("realtime", () =>
+      this.realtime.conversationEvent(id, "priority_changed", { from: conversation.priority, to: priority }),
+    );
+    return this.get(auth, id);
+  }
+
   archive(auth: AuthContext, id: string) {
     return this.setArchived(auth, id, true);
   }
@@ -204,6 +238,24 @@ export class ConversationService implements ConversationAccess {
       logger.warn({ err: error }, "agent profiles unavailable");
       return new Map();
     }
+  }
+
+  async visibleSummaries(auth: AuthContext, ids: string[]) {
+    const unique = [...new Set(ids)];
+    const found = unique.length === 0 ? [] : await this.repository.findManyForAccess(unique, auth.userId);
+    const visible = found.filter((row) =>
+      canView(
+        auth,
+        row,
+        row.conversationAssignments.some((a) => a.assignmentType === "VIEWER"),
+      ),
+    );
+    const unread = await this.repository.unreadCounts(
+      auth.userId,
+      visible.map((row) => row.id),
+    );
+    const agents = await this.agentProfiles(visible.map((row) => row.assignedAgentId));
+    return new Map(visible.map((row) => [row.id, toSummary(row, unread.get(row.id) ?? 0, agents)]));
   }
 
   /** Typing indicators come only from whoever may send in the conversation (same rule as sending). */

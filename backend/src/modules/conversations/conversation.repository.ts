@@ -18,11 +18,47 @@ export class ConversationRepository {
   /** One page of the caller's inbox, newest activity first. `unreadIds` is only used by the `unread` filter. */
   async listInbox(auth: AuthContext, query: ListQuery, unreadIds: string[]) {
     const where = buildInboxWhere(auth, query, unreadIds);
+    if (query.sort === "priority") return this.listByPriority(where, query);
     const [items, total] = await Promise.all([
       this.db.conversation.findMany({ where, orderBy: inboxOrderBy, ...pageArgs(query), include: withTags }),
       this.db.conversation.count({ where }),
     ]);
     return { items, total };
+  }
+
+  /**
+   * HIGH, then MEDIUM, then LOW, latest activity first inside each. The priority names do not sort in that order, so
+   * the page is cut out of the three groups one after the other instead of sorting on the column.
+   */
+  private async listByPriority(where: Prisma.ConversationWhereInput, query: ListQuery) {
+    const groups = ["HIGH", "MEDIUM", "LOW"] as const;
+    const counts = await Promise.all(
+      groups.map((priority) => this.db.conversation.count({ where: { AND: [where, { priority }] } })),
+    );
+    let skip = (query.page - 1) * query.size;
+    let take = query.size;
+    const items: ConversationWithTags[] = [];
+    for (const [index, priority] of groups.entries()) {
+      const size = counts[index] ?? 0;
+      if (skip >= size) {
+        skip -= size;
+        continue;
+      }
+      const here = Math.min(take, size - skip);
+      items.push(
+        ...(await this.db.conversation.findMany({
+          where: { AND: [where, { priority }] },
+          orderBy: inboxOrderBy,
+          skip,
+          take: here,
+          include: withTags,
+        })),
+      );
+      take -= here;
+      skip = 0;
+      if (take === 0) break;
+    }
+    return { items, total: counts.reduce((sum, n) => sum + n, 0) };
   }
 
   /** Unread = customer messages after the agent's read position (plus a manual "mark unread" flag), per agent. */
@@ -74,6 +110,17 @@ export class ConversationRepository {
     });
   }
 
+  /** Several conversations with the caller's own open assignments, for batch access checks. Unknown ids are absent. */
+  findManyForAccess(ids: string[], agentId: string): Promise<AccessibleConversation[]> {
+    return this.db.conversation.findMany({
+      where: { id: { in: ids } },
+      include: {
+        ...withTags,
+        conversationAssignments: { where: { agentId, endedAt: null }, select: { assignmentType: true } },
+      },
+    });
+  }
+
   /** For realtime events: the conversation with tags and the agents added to it as VIEWER. */
   async findForEvent(id: string) {
     const conversation = await this.db.conversation.findUnique({ where: { id }, include: withTags });
@@ -105,6 +152,12 @@ export class ConversationRepository {
   }
 
   /** Conditional on the status the caller observed, so two simultaneous transitions cannot both win. */
+  /** Conditional on the priority the caller observed, so two simultaneous changes cannot both win. */
+  async transitionPriority(id: string, from: string, to: string): Promise<boolean> {
+    const { count } = await this.db.conversation.updateMany({ where: { id, priority: from }, data: { priority: to } });
+    return count === 1;
+  }
+
   async transitionStatus(
     id: string,
     from: string,
@@ -185,7 +238,12 @@ export function buildInboxWhere(
 
   if (query.status) and.push({ status: query.status });
   if (query.priority) and.push({ priority: query.priority });
-  if (query.tag) and.push({ conversationTags: { some: { tagId: query.tag } } });
+  const tagIds = [...new Set([...(query.tag ? [query.tag] : []), ...(query.tags ?? [])])];
+  const [onlyTag] = tagIds;
+  if (tagIds.length === 1 && onlyTag !== undefined) and.push({ conversationTags: { some: { tagId: onlyTag } } });
+  else if (tagIds.length > 1 && query.tagMatch === "all") {
+    for (const tagId of tagIds) and.push({ conversationTags: { some: { tagId } } });
+  } else if (tagIds.length > 1) and.push({ conversationTags: { some: { tagId: { in: tagIds } } } });
 
   if (query.q) {
     const text = { contains: query.q, mode: "insensitive" } as const;

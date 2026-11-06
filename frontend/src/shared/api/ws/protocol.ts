@@ -30,7 +30,42 @@ export type ChatMessageDto = {
   clientId?: string;
   /** Position in the conversation (a decimal string); orders messages and is the sync cursor. */
   sequence?: string;
+  /** The message this one answers. */
+  replyToId?: string;
+  /** A copy made by "forward". */
+  forwarded?: boolean;
+  edited?: boolean;
+  reactions?: ReactionDto[];
+  /** Files sent with the message. The bytes come from `downloadPath` with the bearer token. */
+  attachments?: AttachmentDto[];
 };
+
+export type AttachmentDto = {
+  id: string;
+  kind: "IMAGE" | "DOCUMENT" | "AUDIO" | "VIDEO";
+  fileName: string;
+  mimeType: string;
+  size: number;
+  durationMs?: number;
+  waveform?: number[];
+  downloadPath: string;
+};
+
+/** An internal note: staff only, never shown to the customer. */
+export type NoteDto = {
+  id: string;
+  conversationId: string;
+  authorId: string;
+  authorName?: string;
+  text: string;
+  mentionedAgentIds: string[];
+  edited: boolean;
+  createdAt: string;
+};
+
+export type EscalationStatus = "PENDING" | "RESOLVED" | "CANCELLED";
+
+export type ReactionDto = { id: string; userId: string; emoji: string };
 
 export type ActivityDto = {
   id: string;
@@ -52,6 +87,9 @@ export type ApplicationDto = {
   registeredAt?: string;
 };
 
+export type Priority = "HIGH" | "MEDIUM" | "LOW";
+export type TagRefDto = { id: string; name: string; color: string | null };
+
 export type ConversationDto = {
   id: string;
   customerId?: string;
@@ -61,6 +99,9 @@ export type ConversationDto = {
   lastMessageAt: string;
   unread: number;
   urgent: boolean;
+  /** Set by the real backend; the mock server only knows `urgent`. */
+  priority?: Priority;
+  tags?: TagRefDto[];
   handoff: HandoffStatus;
   assignedAgent?: AgentDto;
   application: ApplicationDto;
@@ -143,6 +184,29 @@ export type ServerEventMap = {
   typing: { conversationId: string; side: MessageSide; active: boolean };
   notice: { text: string };
   notification: { notification: NotificationDto };
+  /** An existing message changed (edit). Replaces the held copy. */
+  "message.updated": { message: ChatMessageDto };
+  "message.deleted": { conversationId: string; messageId: string };
+  "note.created": { note: NoteDto };
+  "note.updated": { note: NoteDto };
+  "note.deleted": { conversationId: string; noteId: string };
+  /** A conversation was escalated, or an escalation was resolved or cancelled. */
+  "conversation.escalated": {
+    conversationId: string;
+    escalationId: string;
+    status: EscalationStatus;
+    requestedBy: string;
+    reason?: string;
+  };
+  /** A file was removed from a message. */
+  "attachment.deleted": { conversationId: string; messageId: string | null; attachmentId: string };
+  "message.reaction_updated": { conversationId: string; messageId: string; reactions: ReactionDto[] };
+  /** Another window of this agent opened or closed a tab (docs/api-workspace.md). */
+  "workspace.tab_opened": { conversationId: string; sortOrder: number; lastOpenedAt: string };
+  "workspace.tab_closed": { conversationId: string };
+  /** `content: null` means the draft was deleted. Ignore when `updatedAt` is older than the local edit. */
+  "workspace.draft_updated": { conversationId: string; content: string | null; updatedAt: string };
+  "workspace.preferences_updated": { preferences: { restoreTabs: boolean; persistTabs: boolean } };
 };
 
 /** Events the client sends to the server. */
@@ -152,7 +216,7 @@ export type ClientEventMap = {
    * brings back only what was missed. `selectedConversationId` gets its latest messages if it has no cursor.
    */
   "sync.request": { cursors?: Record<string, string>; selectedConversationId?: string };
-  "message.send": { conversationId: string; clientId: string; text: string };
+  "message.send": { conversationId: string; clientId: string; text: string; replyToMessageId?: string };
   "conversation.read": { conversationId: string };
   "conversation.unread": { conversationId: string };
   "conversation.takeover": { conversationId: string };
@@ -193,6 +257,15 @@ const isMessage = (value: unknown): value is ChatMessageDto =>
   (value.senderId === undefined || isString(value.senderId)) &&
   (value.clientId === undefined || isString(value.clientId)) &&
   (value.sequence === undefined || isString(value.sequence));
+const isNote = (value: unknown): value is NoteDto =>
+  isRecord(value) &&
+  isString(value.id) &&
+  isString(value.conversationId) &&
+  isString(value.authorId) &&
+  isString(value.text) &&
+  Array.isArray(value.mentionedAgentIds) &&
+  typeof value.edited === "boolean" &&
+  isString(value.createdAt);
 const isNotification = (value: unknown): value is NotificationDto =>
   isRecord(value) &&
   isString(value.id) &&
@@ -217,7 +290,35 @@ export function isServerEvent(type: string, payload: unknown): payload is Server
       );
     case "message.new":
     case "message.ack":
+    case "message.updated":
       return isMessage(payload.message);
+    case "message.deleted":
+      return isString(payload.conversationId) && isString(payload.messageId);
+    case "note.created":
+    case "note.updated":
+      return isNote(payload.note);
+    case "note.deleted":
+      return isString(payload.conversationId) && isString(payload.noteId);
+    case "conversation.escalated":
+      return (
+        isString(payload.conversationId) &&
+        isString(payload.escalationId) &&
+        isString(payload.requestedBy) &&
+        ["PENDING", "RESOLVED", "CANCELLED"].includes(String(payload.status))
+      );
+    case "attachment.deleted":
+      return (
+        isString(payload.conversationId) &&
+        isString(payload.attachmentId) &&
+        (payload.messageId === null || isString(payload.messageId))
+      );
+    case "message.reaction_updated":
+      return (
+        isString(payload.conversationId) &&
+        isString(payload.messageId) &&
+        Array.isArray(payload.reactions) &&
+        payload.reactions.every((r) => isRecord(r) && isString(r.id) && isString(r.userId) && isString(r.emoji))
+      );
     case "message.status":
       return (
         isString(payload.conversationId) &&
@@ -248,6 +349,24 @@ export function isServerEvent(type: string, payload: unknown): payload is Server
       return isString(payload.text);
     case "notification":
       return isNotification(payload.notification);
+    case "workspace.tab_opened":
+      return (
+        isString(payload.conversationId) && typeof payload.sortOrder === "number" && isString(payload.lastOpenedAt)
+      );
+    case "workspace.tab_closed":
+      return isString(payload.conversationId);
+    case "workspace.draft_updated":
+      return (
+        isString(payload.conversationId) &&
+        (payload.content === null || isString(payload.content)) &&
+        isString(payload.updatedAt)
+      );
+    case "workspace.preferences_updated":
+      return (
+        isRecord(payload.preferences) &&
+        typeof payload.preferences.restoreTabs === "boolean" &&
+        typeof payload.preferences.persistTabs === "boolean"
+      );
     default:
       return false;
   }

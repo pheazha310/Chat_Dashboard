@@ -1,10 +1,12 @@
 import { useSelectedConversation } from "@/entities/conversation";
 import { useMessageSettingsStore } from "@/features/message-settings";
+import { OrganizePanel } from "@/features/organize-conversation";
+import { NotesPanel } from "@/features/internal-notes";
 import { MediaFilesPanel } from "@/features/share-files";
 import { assets } from "@/shared/config";
 import { Icon } from "@/shared/ui";
 
-type ContextView = "media" | null;
+export type ContextView = "media" | "notes" | "organize" | null;
 
 export default function CustomerContext({
   open,
@@ -27,8 +29,17 @@ export default function CustomerContext({
       <button type="button" className="close-context" onClick={onClose} aria-label="Close customer details">
         ×
       </button>
-      {view === "media" ? (
-        <MediaFilesPanel customer={conversation.name} appId={application.appId} onBack={() => onViewChange(null)} />
+      {view === "organize" ? (
+        <OrganizePanel conversationId={conversation.id} onBack={() => onViewChange(null)} />
+      ) : view === "notes" ? (
+        <NotesPanel conversationId={conversation.id} onBack={() => onViewChange(null)} />
+      ) : view === "media" ? (
+        <MediaFilesPanel
+          customer={conversation.name}
+          appId={application.appId}
+          conversationId={conversation.id}
+          onBack={() => onViewChange(null)}
+        />
       ) : (
         <>
           <div className="customer-card info-card">

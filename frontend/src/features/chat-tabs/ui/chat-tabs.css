@@ -1,0 +1,46 @@
+.chat-tabs {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding: 6px 12px 0;
+  border-bottom: 1px solid #e3e8f2;
+}
+.chat-tab {
+  display: flex;
+  align-items: center;
+  flex: none;
+  border: 1px solid transparent;
+  border-radius: 10px 10px 0 0;
+  background: #f1f4fa;
+}
+.chat-tab.active {
+  border-color: #e3e8f2;
+  border-bottom-color: #fff;
+  background: #fff;
+  font-weight: 600;
+}
+.chat-tab button {
+  padding: 7px 10px;
+  border: 0;
+  color: inherit;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+}
+.chat-tab button:focus-visible {
+  outline: 2px solid #4f7cff;
+  outline-offset: -2px;
+}
+.chat-tab-unread {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  color: #fff;
+  background: #3b6df0;
+  font-size: 11px;
+}
+.chat-tab-close {
+  padding: 7px 8px 7px 0;
+  opacity: 0.6;
+}

@@ -87,4 +87,34 @@ describe("ConnectionRegistry.deliver", () => {
     expect(slow.socket.terminate).toHaveBeenCalled();
     expect(slow.socket.send).not.toHaveBeenCalled();
   });
+
+  it("delivers a user-addressed event to every window of that user and to nobody else", () => {
+    const registry = new ConnectionRegistry();
+    const windowA = connection("a", agent1);
+    const windowB = connection("b", agent1);
+    const other = connection("c", agent2);
+    [windowA, windowB, other].forEach((c) => registry.add(c));
+
+    registry.deliver({
+      type: "workspace.tab_opened",
+      payload: { conversationId: uid(10) },
+      audience: { kind: "users", userIds: [uid(1)] },
+    });
+
+    expect(windowA.socket.send).toHaveBeenCalledTimes(1);
+    expect(windowB.socket.send).toHaveBeenCalledTimes(1);
+    expect(other.socket.send).not.toHaveBeenCalled();
+  });
+
+  it("checks access per window: a conversation event reaches only the windows whose user may see it", () => {
+    const registry = new ConnectionRegistry();
+    const owner1 = connection("a", agent1);
+    const owner2 = connection("b", agent1);
+    const stranger = connection("c", agent2);
+    [owner1, owner2, stranger].forEach((c) => registry.add(c));
+    registry.deliver({ type: "conversation.updated", payload: {}, audience: assignedTo1 });
+    expect(owner1.socket.send).toHaveBeenCalledTimes(1);
+    expect(owner2.socket.send).toHaveBeenCalledTimes(1);
+    expect(stranger.socket.send).not.toHaveBeenCalled();
+  });
 });

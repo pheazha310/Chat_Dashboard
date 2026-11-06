@@ -3,7 +3,7 @@ import { getAuth } from "@shared/middleware/auth.middleware.js";
 import { parsed } from "@shared/middleware/validate.middleware.js";
 import { idParams } from "@shared/utils/ids.js";
 import { pageQuery } from "@shared/utils/pagination.js";
-import { createBody, listQuery, statusBody } from "./conversation.schema.js";
+import { createBody, listQuery, priorityBody, statusBody } from "./conversation.schema.js";
 import type { ConversationService } from "./conversation.service.js";
 
 export class ConversationController {
@@ -27,6 +27,12 @@ export class ConversationController {
   changeStatus = async (req: Request, res: Response) => {
     const { id } = parsed(req, "params", idParams);
     const data = await this.service.changeStatus(getAuth(req), id, parsed(req, "body", statusBody).status);
+    res.json({ status: "success", data });
+  };
+
+  changePriority = async (req: Request, res: Response) => {
+    const { id } = parsed(req, "params", idParams);
+    const data = await this.service.changePriority(getAuth(req), id, parsed(req, "body", priorityBody).priority);
     res.json({ status: "success", data });
   };
 

@@ -38,6 +38,17 @@ describe("buildInboxWhere", () => {
     });
   });
 
+  it("filters by several tags: any of them, or all of them", () => {
+    const any = and(buildInboxWhere(agent, q({ tags: `${uid(3)}, ${uid(4)}` })));
+    expect(any).toContainEqual({ conversationTags: { some: { tagId: { in: [uid(3), uid(4)] } } } });
+    const all = and(buildInboxWhere(agent, q({ tags: `${uid(3)},${uid(4)}`, tagMatch: "all" })));
+    expect(all).toContainEqual({ conversationTags: { some: { tagId: uid(3) } } });
+    expect(all).toContainEqual({ conversationTags: { some: { tagId: uid(4) } } });
+    // `tag` and `tags` combine without duplicates
+    const both = and(buildInboxWhere(agent, q({ tag: uid(3), tags: `${uid(3)},${uid(4)}`, tagMatch: "all" })));
+    expect(both.filter((w) => JSON.stringify(w).includes("conversationTags"))).toHaveLength(2);
+  });
+
   it("combines status, priority, tag and search", () => {
     const where = and(buildInboxWhere(agent, q({ status: "OPEN", priority: "HIGH", tag: uid(3), q: uid(123) })));
     expect(where).toContainEqual({ status: "OPEN" });

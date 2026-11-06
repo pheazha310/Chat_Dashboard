@@ -2,6 +2,11 @@ import { loadDetails, useConversationStore } from "@/entities/conversation";
 import { catchUp, loadHistory, newestSequences, useMessageStore } from "@/entities/message";
 import { useSessionStore } from "@/shared/api/session";
 import { isMockTransport, wsClient } from "@/shared/api/ws";
+import { useNotesStore } from "@/features/internal-notes";
+import { useChatTabsStore } from "@/features/chat-tabs";
+import { applyRemoteDraft, hydrateDrafts } from "@/features/send-message";
+import { getWorkspace } from "@/shared/api/rest";
+import { API_URL } from "@/shared/config";
 import { useMessageSettingsStore } from "@/features/message-settings";
 import { requestBrowserNotificationPermission, showBrowserNotification } from "@/shared/lib/browser-notification";
 import { notify } from "@/shared/ui";
@@ -48,6 +53,24 @@ export function startRealtime() {
     };
   };
 
+  /** Brings back last session's tabs and unsent drafts. Runs once, after the first sync has filled the inbox. */
+  let workspaceLoaded = false;
+  const loadWorkspace = () => {
+    if (workspaceLoaded || !API_URL || isMockTransport) return;
+    workspaceLoaded = true;
+    void getWorkspace()
+      .then(({ tabs, drafts }) => {
+        const known = new Set(tabs.map((tab) => tab.conversationId));
+        // Tabs opened in this window before the answer arrived stay.
+        const current = useChatTabsStore.getState().openIds.filter((id) => !known.has(id));
+        useChatTabsStore.getState().setTabs([...tabs.map((tab) => tab.conversationId), ...current]);
+        hydrateDrafts(drafts);
+      })
+      .catch(() => {
+        workspaceLoaded = false; // try again after the next sync
+      });
+  };
+
   const offs = [
     wsClient.onStatus((status) => status === "open" && wsClient.send("sync.request", syncRequest())),
     wsClient.on("sync", (payload) => {
@@ -61,7 +84,14 @@ export function startRealtime() {
         void loadDetails(selectedId);
       }
       payload.incomplete?.forEach((id) => void catchUp(id));
+      loadWorkspace();
     }),
+    // Another window of this agent changed the workspace.
+    wsClient.on("workspace.tab_opened", ({ conversationId }) => useChatTabsStore.getState().add(conversationId)),
+    wsClient.on("workspace.tab_closed", ({ conversationId }) => useChatTabsStore.getState().remove(conversationId)),
+    wsClient.on("workspace.draft_updated", ({ conversationId, content, updatedAt }) =>
+      applyRemoteDraft(conversationId, content, updatedAt),
+    ),
     wsClient.on("message.failed", ({ conversationId, clientId, reason }) => {
       messages.getState().setStatus(conversationId, clientId, "failed");
       notify(reason ?? "Message could not be sent");
@@ -76,6 +106,25 @@ export function startRealtime() {
     }),
     wsClient.on("message.new", ({ message }) => messages.getState().upsert(message)),
     wsClient.on("message.ack", ({ message }) => messages.getState().upsert(message)),
+    wsClient.on("message.updated", ({ message }) => messages.getState().upsert(message)),
+    wsClient.on("message.deleted", ({ conversationId, messageId }) =>
+      messages.getState().remove(conversationId, messageId),
+    ),
+    wsClient.on("note.created", ({ note }) => useNotesStore.getState().upsert(note)),
+    wsClient.on("note.updated", ({ note }) => useNotesStore.getState().upsert(note)),
+    wsClient.on("note.deleted", ({ conversationId, noteId }) =>
+      useNotesStore.getState().remove(conversationId, noteId),
+    ),
+    wsClient.on("conversation.escalated", ({ conversationId, status, requestedBy }) => {
+      const name = conversations.getState().byId[conversationId]?.name ?? "A conversation";
+      if (status === "PENDING" && requestedBy !== useSessionStore.getState().userId) notify(`${name} was escalated`);
+    }),
+    wsClient.on("attachment.deleted", ({ conversationId, attachmentId }) =>
+      messages.getState().removeAttachment(conversationId, attachmentId),
+    ),
+    wsClient.on("message.reaction_updated", ({ conversationId, messageId, reactions }) =>
+      messages.getState().setReactions(conversationId, messageId, reactions),
+    ),
     wsClient.on("message.status", ({ conversationId, messageId, status }) =>
       messages.getState().setStatus(conversationId, messageId, status),
     ),

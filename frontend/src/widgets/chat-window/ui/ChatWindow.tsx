@@ -8,13 +8,18 @@ import {
   useHistory,
   useMessageStore,
 } from "@/entities/message";
+import { escalateConversation } from "@/features/escalate-conversation";
+import { ChatTabs } from "@/features/chat-tabs";
+import { MessageActions, MessageEditor, useEditingStore } from "@/features/message-actions";
+import { selectConversation } from "@/features/select-conversation";
 import { archiveConversation, restoreConversation } from "@/features/archive-conversation";
 import { markConversationUnread } from "@/features/mark-unread";
 import { takeOverConversation } from "@/features/take-over-conversation";
 import { useSessionStore } from "@/shared/api/session";
 import { ChatSearchBar, filterByQuery, useChatSearchStore } from "@/features/search-in-chat";
-import { MessageComposer, retryMessage, useComposerStore } from "@/features/send-message";
-import { assets } from "@/shared/config";
+import { TemplatePicker } from "@/features/canned-responses";
+import { insertIntoDraft, MessageComposer, retryMessage, useComposerStore } from "@/features/send-message";
+import { API_URL, assets } from "@/shared/config";
 import { AssetIcon, IconButton, notify, Icon } from "@/shared/ui";
 import { useCustomerCallStore } from "@/features/customer-call";
 import HandoffCard from "./HandoffCard";
@@ -28,9 +33,13 @@ const PRESENCE = {
 export default function ChatWindow({
   onOpenContext,
   onOpenMedia,
+  onOpenNotes,
+  onOpenOrganize,
 }: {
   onOpenContext: () => void;
   onOpenMedia: () => void;
+  onOpenNotes: () => void;
+  onOpenOrganize: () => void;
 }) {
   const conversation = useSelectedConversation();
   const messages = useConversationMessages(conversation?.id ?? null);
@@ -38,6 +47,7 @@ export default function ChatWindow({
   const history = useHistory(conversation?.id ?? null);
   const me = useSessionStore((state) => state.userId);
   const { query, toggle } = useChatSearchStore();
+  const editingId = useEditingStore((state) => state.editingId);
   const setDraft = useComposerStore((state) => state.setDraft);
   const [showMore, setShowMore] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
@@ -82,6 +92,7 @@ export default function ChatWindow({
 
   return (
     <section className="active-chat">
+      <ChatTabs onSelect={selectConversation} />
       <header className="chat-header">
         <div className="chat-identity">
           <img src={conversation.avatar} alt="" />
@@ -164,6 +175,37 @@ export default function ChatWindow({
               >
                 Media & files
               </button>
+              {API_URL && (
+                <>
+                  <button
+                    onClick={() => {
+                      onOpenNotes();
+                      setShowMore(false);
+                    }}
+                  >
+                    Internal notes
+                  </button>
+                  <button
+                    onClick={() => {
+                      onOpenOrganize();
+                      setShowMore(false);
+                    }}
+                  >
+                    Priority & tags
+                  </button>
+                  {conversation.handoff === "assigned" && !handledByOther && (
+                    <button
+                      onClick={() => {
+                        const reason = window.prompt("Why are you escalating this conversation? (optional)");
+                        if (reason !== null) void escalateConversation(conversation.id, reason);
+                        setShowMore(false);
+                      }}
+                    >
+                      Escalate to supervisor
+                    </button>
+                  )}
+                </>
+              )}
             </div>
           )}
         </div>
@@ -189,6 +231,9 @@ export default function ChatWindow({
             message={message}
             showReadReceipts
             onRetry={(failed) => retryMessage(failed.conversationId, failed.id)}
+            {...(message.replyToId ? { replyTo: messages.find((m) => m.id === message.replyToId) } : {})}
+            actions={<MessageActions message={message} />}
+            {...(editingId === message.id ? { body: <MessageEditor message={message} /> } : {})}
           />
         ))}
         {typing === "customer" && <TypingBubble />}
@@ -210,7 +255,12 @@ export default function ChatWindow({
         {conversation.handoff === "assigned" && !handledByOther && (
           <div className="takeover-confirmation">You’re now handling this conversation.</div>
         )}
-        <MessageComposer conversationId={conversation.id} />
+        <MessageComposer
+          conversationId={conversation.id}
+          extraControls={
+            API_URL ? <TemplatePicker onInsert={(text) => insertIntoDraft(conversation.id, text)} /> : undefined
+          }
+        />
       </div>
     </section>
   );

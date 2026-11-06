@@ -21,6 +21,9 @@ const repo = {
   reopen: vi.fn(),
   addActivity: vi.fn(),
   history: vi.fn(),
+  reactionsFor: vi.fn(),
+  attachmentsFor: vi.fn(),
+  addAttachment: vi.fn(),
   latest: vi.fn(),
   readPosition: vi.fn(),
   advanceRead: vi.fn(),
@@ -44,6 +47,7 @@ const at = new Date("2026-01-01T00:00:00Z");
 const conv = (patch: Partial<LockedConversation> = {}): LockedConversation => ({
   id: uid(10),
   customerId: uid(100),
+  conversationType: "CUSTOMER_SUPPORT",
   status: "OPEN",
   handoffStatus: "ASSIGNED",
   assignedAgentId: uid(1),
@@ -63,6 +67,9 @@ const msg = (patch: Partial<MessageRow> = {}): MessageRow =>
     metadata: null,
     status: "SENT",
     replyToMessageId: null,
+    forwardedFromMessageId: null,
+    isEdited: false,
+    editedAt: null,
     createdAt: at,
     ...patch,
   });
@@ -73,6 +80,8 @@ beforeEach(() => {
   repo.inTransaction.mockImplementation((fn: (tx: unknown) => unknown) => fn(repo));
   repo.lock.mockResolvedValue(conv());
   repo.isViewer.mockResolvedValue(false);
+  repo.reactionsFor.mockResolvedValue(new Map());
+  repo.attachmentsFor.mockResolvedValue(new Map());
   repo.findByClientId.mockResolvedValue(null);
   repo.append.mockResolvedValue(msg());
   notifications.notifyAgent.mockResolvedValue(true);

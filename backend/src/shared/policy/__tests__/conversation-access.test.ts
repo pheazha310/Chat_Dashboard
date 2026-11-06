@@ -71,4 +71,11 @@ describe("permissionsFor", () => {
     expect(permissionsFor(other, { ...owned, isArchived: true }).canRestore).toBe(false);
     expect(permissionsFor(agent, { ...owned, isArchived: true }).canRestore).toBe(true);
   });
+
+  it("lets the owner, supervisors and anyone on an unowned chat organize it, but not other agents", () => {
+    expect(permissionsFor(agent, owned).canOrganize).toBe(true);
+    expect(permissionsFor(supervisor, owned).canOrganize).toBe(true);
+    expect(permissionsFor(other, owned).canOrganize).toBe(false);
+    expect(permissionsFor(other, conv()).canOrganize).toBe(true); // nobody owns it
+  });
 });
