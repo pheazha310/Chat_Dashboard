@@ -1,0 +1,18 @@
+$kind: http-request
+name: 'Update Tag'
+method: PATCH
+url: '{{base_url}}/api/v1/admin/tags/:tagId'
+order: 3000
+pathVariables:
+  - key: tagId
+    value: '{{tag_id}}'
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "name": "urgent-updated",
+      "color": "#FF5500"
+    }

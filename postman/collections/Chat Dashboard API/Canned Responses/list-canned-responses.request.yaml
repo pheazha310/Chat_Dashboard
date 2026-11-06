@@ -1,0 +1,14 @@
+$kind: http-request
+name: 'List Canned Responses'
+method: GET
+url: '{{base_url}}/api/v1/admin/canned-responses'
+order: 1000
+queryParams:
+  - key: search
+    value: ''
+    description: Search by shortcut or content
+    disabled: true
+  - key: scope
+    value: ''
+    description: 'Filter by scope (personal, shared)'
+    disabled: true

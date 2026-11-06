@@ -1,0 +1,8 @@
+$kind: http-request
+name: 'Archive Conversation'
+method: POST
+url: '{{base_url}}/api/v1/admin/conversations/:id/archive'
+order: 7000
+pathVariables:
+  - key: id
+    value: '{{conversation_id}}'

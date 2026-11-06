@@ -1,0 +1,8 @@
+$kind: http-request
+name: 'Mark Conversation Unread'
+method: POST
+url: '{{base_url}}/api/v1/admin/conversations/:id/unread'
+order: 5000
+pathVariables:
+  - key: id
+    value: '{{conversation_id}}'

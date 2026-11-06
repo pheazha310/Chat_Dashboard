@@ -1,0 +1,15 @@
+$kind: http-request
+name: 'Create Keyword'
+method: POST
+url: '{{base_url}}/api/v1/admin/moderation/keywords'
+order: 6000
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "word": "badword",
+      "action": "flag"
+    }

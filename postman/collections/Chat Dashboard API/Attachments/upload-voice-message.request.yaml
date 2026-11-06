@@ -1,0 +1,15 @@
+$kind: http-request
+name: 'Upload Voice Message'
+method: POST
+url: '{{base_url}}/api/v1/admin/conversations/:conversationId/voice-messages'
+order: 6000
+pathVariables:
+  - key: conversationId
+    value: '{{conversation_id}}'
+body:
+  type: formdata
+  content:
+    - key: audio
+      type: file
+      src: ''
+      description: Audio file (e.g. .ogg, .mp3, .wav)

@@ -1,0 +1,10 @@
+$kind: http-request
+name: 'Mark Message Delivered'
+method: POST
+url: '{{base_url}}/api/v1/admin/conversations/:id/messages/:messageId/delivered'
+order: 3000
+pathVariables:
+  - key: id
+    value: '{{conversation_id}}'
+  - key: messageId
+    value: '{{message_id}}'

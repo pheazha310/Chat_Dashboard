@@ -1,0 +1,13 @@
+$kind: http-request
+name: 'List Spam Reports'
+method: GET
+url: '{{base_url}}/api/v1/admin/moderation/spam-reports'
+order: 9000
+queryParams:
+  - key: status
+    value: pending
+    description: 'Filter by status (pending, reviewed)'
+    disabled: true
+  - key: page
+    value: '1'
+    disabled: true

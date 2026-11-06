@@ -1,0 +1,10 @@
+$kind: http-request
+name: 'Remove Reaction'
+method: DELETE
+url: '{{base_url}}/api/v1/admin/messages/:messageId/reactions/:reactionId'
+order: 6000
+pathVariables:
+  - key: messageId
+    value: '{{message_id}}'
+  - key: reactionId
+    value: 'reaction-uuid-here'

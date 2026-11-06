@@ -1,0 +1,54 @@
+$kind: collection
+name: Chat Dashboard API
+description: |-
+  REST API for the Loan-support Chat Dashboard backend.
+  All admin endpoints are served under /api/v1/admin and require a Bearer token (JWT).
+  The health endpoint lives at /api/health and is unauthenticated.
+auth:
+  type: bearer
+  credentials:
+    - key: token
+      value: '{{auth_token}}'
+variables:
+  - key: base_url
+    value: 'http://localhost:3000'
+    description: Base URL of the backend server
+  - key: auth_token
+    value: ''
+    description: JWT bearer token for authenticated requests
+  - key: conversation_id
+    value: ''
+    description: A conversation ID for use in requests
+  - key: message_id
+    value: ''
+    description: A message ID for use in requests
+  - key: attachment_id
+    value: ''
+    description: An attachment ID for use in requests
+  - key: tag_id
+    value: ''
+    description: A tag ID for use in requests
+  - key: note_id
+    value: ''
+    description: A note ID for use in requests
+  - key: escalation_id
+    value: ''
+    description: An escalation ID for use in requests
+  - key: callback_id
+    value: ''
+    description: A callback ID for use in requests
+  - key: call_id
+    value: ''
+    description: A call ID for use in requests
+  - key: canned_response_id
+    value: ''
+    description: A canned response template ID for use in requests
+  - key: customer_id
+    value: ''
+    description: A customer ID for use in requests
+  - key: report_id
+    value: ''
+    description: A spam report ID for use in requests
+  - key: keyword_id
+    value: ''
+    description: A keyword ID for use in requests

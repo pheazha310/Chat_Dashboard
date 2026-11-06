@@ -1,0 +1,17 @@
+$kind: http-request
+name: 'Assign Conversation'
+method: POST
+url: '{{base_url}}/api/v1/admin/conversations/:id/assign'
+order: 1000
+pathVariables:
+  - key: id
+    value: '{{conversation_id}}'
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "agentId": "agent-uuid-here"
+    }

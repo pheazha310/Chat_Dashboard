@@ -1,0 +1,8 @@
+$kind: http-request
+name: 'Deactivate Canned Response'
+method: DELETE
+url: '{{base_url}}/api/v1/admin/canned-responses/:templateId'
+order: 5000
+pathVariables:
+  - key: templateId
+    value: '{{canned_response_id}}'

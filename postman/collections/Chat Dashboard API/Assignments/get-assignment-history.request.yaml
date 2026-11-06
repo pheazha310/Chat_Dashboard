@@ -1,0 +1,8 @@
+$kind: http-request
+name: 'Get Assignment History'
+method: GET
+url: '{{base_url}}/api/v1/admin/conversations/:id/assignments'
+order: 4000
+pathVariables:
+  - key: id
+    value: '{{conversation_id}}'

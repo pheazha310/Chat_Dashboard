@@ -1,0 +1,9 @@
+$kind: http-request
+name: 'List Keywords'
+method: GET
+url: '{{base_url}}/api/v1/admin/moderation/keywords'
+order: 5000
+queryParams:
+  - key: page
+    value: '1'
+    disabled: true

@@ -1,0 +1,17 @@
+$kind: http-request
+name: 'Edit Message'
+method: PATCH
+url: '{{base_url}}/api/v1/admin/messages/:messageId'
+order: 2000
+pathVariables:
+  - key: messageId
+    value: '{{message_id}}'
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "content": "Updated message content."
+    }

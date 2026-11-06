@@ -1,0 +1,17 @@
+$kind: http-request
+name: 'Reply to Message'
+method: POST
+url: '{{base_url}}/api/v1/admin/messages/:messageId/replies'
+order: 1000
+pathVariables:
+  - key: messageId
+    value: '{{message_id}}'
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "content": "This is a reply."
+    }

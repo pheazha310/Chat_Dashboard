@@ -1,0 +1,15 @@
+$kind: http-request
+name: 'Unassign Conversation'
+method: POST
+url: '{{base_url}}/api/v1/admin/conversations/:id/unassign'
+order: 3000
+pathVariables:
+  - key: id
+    value: '{{conversation_id}}'
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {}

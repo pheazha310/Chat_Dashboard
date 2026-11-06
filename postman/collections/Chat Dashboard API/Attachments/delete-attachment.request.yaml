@@ -1,0 +1,8 @@
+$kind: http-request
+name: 'Delete Attachment'
+method: DELETE
+url: '{{base_url}}/api/v1/admin/attachments/:attachmentId'
+order: 4000
+pathVariables:
+  - key: attachmentId
+    value: '{{attachment_id}}'

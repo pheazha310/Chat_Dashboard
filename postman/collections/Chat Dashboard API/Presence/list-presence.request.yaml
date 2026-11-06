@@ -1,0 +1,5 @@
+$kind: http-request
+name: 'List Agent Presence'
+method: GET
+url: '{{base_url}}/api/v1/admin/presence'
+order: 1000

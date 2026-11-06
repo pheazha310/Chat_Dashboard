@@ -1,0 +1,15 @@
+$kind: http-request
+name: 'Get Customer Other Conversations'
+method: GET
+url: '{{base_url}}/api/v1/admin/conversations/:id/customer/conversations'
+order: 2000
+pathVariables:
+  - key: id
+    value: '{{conversation_id}}'
+queryParams:
+  - key: page
+    value: '1'
+    disabled: true
+  - key: limit
+    value: '20'
+    disabled: true

@@ -1,0 +1,13 @@
+$kind: http-request
+name: 'List Notifications'
+method: GET
+url: '{{base_url}}/api/v1/admin/notifications'
+order: 1000
+queryParams:
+  - key: read
+    value: 'false'
+    description: Filter by read status
+    disabled: true
+  - key: page
+    value: '1'
+    disabled: true

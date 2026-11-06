@@ -1,0 +1,8 @@
+$kind: http-request
+name: 'Get Conversation'
+method: GET
+url: '{{base_url}}/api/v1/admin/conversations/:id'
+order: 3000
+pathVariables:
+  - key: id
+    value: '{{conversation_id}}'

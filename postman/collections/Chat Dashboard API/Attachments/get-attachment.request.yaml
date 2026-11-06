@@ -1,0 +1,8 @@
+$kind: http-request
+name: 'Get Attachment'
+method: GET
+url: '{{base_url}}/api/v1/admin/attachments/:attachmentId'
+order: 2000
+pathVariables:
+  - key: attachmentId
+    value: '{{attachment_id}}'
