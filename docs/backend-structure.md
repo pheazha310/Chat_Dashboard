@@ -74,20 +74,40 @@ Do not add other per-module file kinds (no `mapper`, `query`, `policy`); rules s
 Rules: no `req`/`res` below controllers; a module never imports another module's repository; add a
 `shared/<folder>` only when a second module needs it.
 
-## Planned modules (map to existing Prisma models; create when the behaviour is designed)
+## Modules
 
-Built: `conversations`, `assignments`, `messages`, `notifications`, `presence`, `customers`, `realtime`. Still to build:
+Built (each has its API guide, listed in [AGENTS.md](../AGENTS.md)):
 
-| Module        | Prisma models                                | Notes                             |
-| ------------- | -------------------------------------------- | --------------------------------- |
-| `presence`    | `AgentPresenceHistory` (live state in Redis) | typing + availability             |
-| `attachments` | `Attachment`, `MessageAttachment`            | storage backend undecided         |
-| `ai-handoff`  | `AiHandoff`, `ConversationEscalation`        | AI worker is out of scope for now |
+| Module                                                         | Owns                                                                                               | Guide                    |
+| -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- | ------------------------ |
+| `conversations`                                                | Conversations, status, archive, priority, activity log, inbox filters and search                   | api-conversations.md     |
+| `assignments`                                                  | Takeover, assign, transfer, unassign, assignment history                                           | api-conversations.md     |
+| `messages`                                                     | Messages, receipts, unread; message actions (reply, edit, delete, reactions, forward)              | api-message-actions.md   |
+| `attachments`                                                  | Files, images, voice messages, secured downloads (`Storage` port, local-disk driver)               | api-attachments.md       |
+| `notes`                                                        | Internal notes and agent mentions                                                                  | api-notes-escalations.md |
+| `escalations`                                                  | Escalation to a supervisor                                                                         | api-notes-escalations.md |
+| `tags`                                                         | Tag catalog and tagging of conversations                                                           | api-tags-priority.md     |
+| `canned-responses`                                             | Personal and shared reply templates                                                                | api-canned-responses.md  |
+| `workspace`                                                    | Per-agent open tabs, drafts, tab preferences                                                       | api-workspace.md         |
+| `chat-settings`                                                | Per-agent chat switches                                                                            | api-chat-settings.md     |
+| `callbacks`                                                    | Scheduled callbacks and the reminder job                                                           | api-callbacks.md         |
+| `calls`                                                        | Call records and WebRTC signalling relay                                                           | api-calls.md             |
+| `moderation`                                                   | Blocked customers, blocked keywords, spam reports, audit log                                       | api-moderation.md        |
+| `notifications`, `presence`, `customers`, `realtime`, `health` | Notifications, presence and typing, customer info via the `Directory` port, the realtime publisher | api-conversations.md     |
+
+Modules call each other only through services or the ports in `shared/ports/` (`ConversationAccess`,
+`CustomerConversationAccess`, `ConversationSummaries`, `RealtimeNotifier`, `Directory`, `CustomerGuard`, `MessageLookup`,
+`Storage`, `SystemMessagePort`). Two kinds of background job run inside the API process, started only by `server.ts`: the
+callback job (`CallbackScheduler`) and the call job (`IntervalJob`); both claim rows in the database, so several instances
+can run them.
+
+Still to build: the customer channel (`/api/v1/customer`, its own authentication; the entry points it will call already
+exist as service methods), the AI worker and handoff (`AiHandoff` models were removed from the schema until designed),
+automations and analytics.
 
 `auth` is **not** a module that issues tokens (external service, contract unknown); once the contract
-is known it becomes a verifier middleware plus an `AuthClient`. Presence, receipts, internal notes,
-tags, canned responses, automations, callbacks, calls, moderation and analytics have **no schema or
-design yet**: propose them and update the schema, protocol and docs first.
+is known it becomes a verifier middleware plus an `AuthClient`. Automations and analytics have **no schema or design
+yet**: propose them and update the schema, protocol and docs first.
 
 ## Websocket
 

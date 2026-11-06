@@ -2,7 +2,7 @@
   "info": {
     "name": "Chat Dashboard - Backend 2 (staff API)",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "description": "Dev auth only: Bearer dev:<userId>:<ROLE> (AUTH_MODE=dev). Other tokens: dev:00000000-0000-4000-8000-000000000004:AGENT, dev:00000000-0000-4000-8000-000000000009:SUPERVISOR. Run 'Create' first, then 'Take over' before sending messages."
+    "description": "Dev auth only: Bearer dev:<userId>:<ROLE> (AUTH_MODE=dev). Other tokens: dev:00000000-0000-4000-8000-000000000004:AGENT, dev:00000000-0000-4000-8000-000000000009:SUPERVISOR. Run 'Create' first, then 'Take over' before sending messages. FR-14 to FR-27 folders were added in the enhanced-chat work: run Conversations > Create, Assignment > Take over, Messages > Send first; most requests then work with the saved variables. Customer-side calls, moderation enforcement and the file/voice uploads need a customer channel or files, see docs/api-*.md."
   },
   "auth": {
     "type": "bearer",
@@ -34,6 +34,50 @@
     {
       "key": "notifId",
       "value": ""
+    },
+    {
+      "key": "noteId",
+      "value": ""
+    },
+    {
+      "key": "tagId",
+      "value": ""
+    },
+    {
+      "key": "templateId",
+      "value": ""
+    },
+    {
+      "key": "escalationId",
+      "value": ""
+    },
+    {
+      "key": "callbackId",
+      "value": ""
+    },
+    {
+      "key": "callId",
+      "value": ""
+    },
+    {
+      "key": "attachmentId",
+      "value": ""
+    },
+    {
+      "key": "reactionId",
+      "value": ""
+    },
+    {
+      "key": "keywordId",
+      "value": ""
+    },
+    {
+      "key": "reportId",
+      "value": ""
+    },
+    {
+      "key": "customerId",
+      "value": "00000000-0000-4000-8000-000000000101"
     }
   ],
   "item": [
@@ -809,6 +853,1623 @@
               "path": ["admin", "api", "v1", "conversations", "{{convId}}", "participants"],
               "query": []
             }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Conversations (FR-14 to FR-27)",
+      "item": [
+        {
+          "name": "Change priority",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/priority",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "conversations", "{{convId}}", "priority"],
+              "query": []
+            },
+            "description": "HIGH, MEDIUM or LOW (new conversations start at MEDIUM). The owner, a supervisor, or anyone while nobody owns the conversation (`permissions.canOrganize`). The same value is a no-op. Adds a `PRIORITY_CHANGED` timeline entry and broadcasts `conversation.priority_changed`. Two simultaneous changes: one wins, the other gets 409.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"priority\": \"HIGH\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Message actions (FR-14 to FR-27)",
+      "item": [
+        {
+          "name": "Reply to a message",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/messages/{{msgId}}/replies",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "messages", "{{msgId}}", "replies"],
+              "query": []
+            },
+            "description": "Sends an agent message with `replyToMessageId` set. Same rules as sending (owner of an open conversation) and same idempotency by `clientId`. Delivered as `message.new`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientId\": \"{{$guid}}\",\n  \"text\": \"Replying to that\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Edit my message",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/messages/{{msgId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "messages", "{{msgId}}"],
+              "query": []
+            },
+            "description": "Author only, text messages only, while the caller still owns the open conversation. The previous text is saved in the edit history. Unchanged text is a no-op. Broadcast as `message.updated`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"Edited text\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Delete a message",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/messages/{{msgId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "messages", "{{msgId}}"],
+              "query": []
+            },
+            "description": "Soft delete (the row and its history are kept). Authors delete their own messages; supervisors and admins any agent, AI or customer message. SYSTEM messages cannot be deleted. Broadcast as `message.deleted`."
+          }
+        },
+        {
+          "name": "Edit history",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/messages/{{msgId}}/history",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "messages", "{{msgId}}", "history"],
+              "query": []
+            },
+            "description": "Earlier versions, newest edit first. Only the author and supervisors may read it."
+          }
+        },
+        {
+          "name": "React with an emoji",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/messages/{{msgId}}/reactions",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "messages", "{{msgId}}", "reactions"],
+              "query": []
+            },
+            "description": "Idempotent: the same emoji twice keeps one reaction. At most 10 different emojis per user and message (409). Anyone who can see the conversation may react. Broadcast as `message.reaction_updated`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"emoji\": \"👍\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "const d = j.data || {};",
+                  "const id = d.id || (d.reactions && d.reactions.length ? d.reactions[0].id : null);",
+                  "if (id) pm.collectionVariables.set('reactionId', String(id));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Remove my reaction",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/messages/{{msgId}}/reactions/{{reactionId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "messages", "{{msgId}}", "reactions", "{{reactionId}}"],
+              "query": []
+            },
+            "description": "Only the reaction's owner (403 otherwise). Broadcast as `message.reaction_updated`."
+          }
+        },
+        {
+          "name": "Forward a message",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/messages/{{msgId}}/forwards",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "messages", "{{msgId}}", "forwards"],
+              "query": []
+            },
+            "description": "Copies a text message into another conversation the caller owns and that is open, keeping `forwardedFromMessageId`. Allowed only within the same customer's conversations or into an internal conversation. Idempotent by `clientId`. Broadcast as `message.new` plus `message.forwarded`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"conversationId\": \"{{convId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Attachments (FR-14 to FR-27)",
+      "item": [
+        {
+          "name": "Send a file",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/attachments/upload",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "attachments", "upload"],
+              "query": []
+            },
+            "description": "Multipart: `file`, `conversationId`, `clientId`, optional `text` caption. Stores the file and sends a message carrying it (type IMAGE, FILE, AUDIO or VIDEO). Allowed: JPEG, PNG, GIF, WebP, PDF, TXT, CSV, DOC(X), XLS(X), MP3, OGG, WAV, WebM, M4A, MP4, MOV. The MIME type, the extension and the file's first bytes must agree; images 10 MB, other files up to 25 MB. Only the owner of an open conversation. Idempotent by `clientId` (200 on a retry). Broadcast as `message.new` and `attachment.uploaded`. If storing the message fails, the stored file is removed.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "conversationId",
+                  "value": "{{convId}}",
+                  "type": "text"
+                },
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Send a voice message",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/voice-messages",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "conversations", "{{convId}}", "voice-messages"],
+              "query": []
+            },
+            "description": "Multipart: `file` (an audio recording, max 10 MB), `clientId`, optional `durationMs` (measured by the browser, up to 10 minutes) and `waveform` (a JSON array of up to 200 integers 0 to 255). The message has type VOICE. Same rules as sending a file.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "clientId",
+                  "value": "{{$guid}}",
+                  "type": "text"
+                },
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Shared media and files",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/attachments?kind=image",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "conversations", "{{convId}}", "attachments"],
+              "query": [
+                {
+                  "key": "kind",
+                  "value": "image"
+                }
+              ]
+            },
+            "description": "Newest first. Filter with `kind`: image, document, audio, video or voice. Deleted files are not listed."
+          }
+        },
+        {
+          "name": "Attachment details",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/attachments/{{attachmentId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "attachments", "{{attachmentId}}"],
+              "query": []
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Delete a file",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/attachments/{{attachmentId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "attachments", "{{attachmentId}}"],
+              "query": []
+            },
+            "description": "The uploader or a supervisor/admin. The record is kept (soft delete) and the stored bytes are removed. Broadcast as `attachment.deleted`. Deleting the message removes its files the same way."
+          }
+        },
+        {
+          "name": "Preview or download a file",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/attachments/{{attachmentId}}/download?inline=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "attachments", "{{attachmentId}}", "download"],
+              "query": [
+                {
+                  "key": "inline",
+                  "value": "true"
+                }
+              ]
+            },
+            "description": "Streams the file after checking the caller may see its conversation. Needs the bearer token, so the browser fetches it and shows the bytes from a blob URL. `?inline=1` displays images, audio and video; every other type is always sent as a download. Supports one `Range` (206) so audio and video can seek. Sent with `Cache-Control: private`, `nosniff` and a sandbox CSP."
+          }
+        },
+        {
+          "name": "Play a voice message",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/messages/{{msgId}}/audio",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "messages", "{{msgId}}", "audio"],
+              "query": []
+            },
+            "description": "The audio of a voice or audio message, streamed inline with `Range` support."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Internal notes (FR-14 to FR-27)",
+      "item": [
+        {
+          "name": "Internal notes of a conversation",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/notes",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "conversations", "{{convId}}", "notes"],
+              "query": []
+            },
+            "description": "Newest first. Anyone who may see the conversation can read its notes. Notes are staff-only and are never part of message history or any customer-facing API."
+          }
+        },
+        {
+          "name": "Add an internal note",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/notes",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "conversations", "{{convId}}", "notes"],
+              "query": []
+            },
+            "description": "Anyone who may see the conversation. `mentionedAgentIds` lists the agents to notify; each must exist in Backend 1 and be able to open the conversation (400 otherwise, `error.details.agentIds` names them). Mentioning yourself is ignored. Adds a `NOTE_ADDED` timeline entry (without the text). Broadcast as `note.created`, and `note.mentioned` plus a `MENTION` notification for each mentioned agent.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"Customer prefers calls after 5pm\",\n  \"mentionedAgentIds\": []\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "const d = j.data || {};",
+                  "const id = d.id || (d.reactions && d.reactions.length ? d.reactions[0].id : null);",
+                  "if (id) pm.collectionVariables.set('noteId', String(id));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Edit my note",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/notes/{{noteId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "notes", "{{noteId}}"],
+              "query": []
+            },
+            "description": "Author only. `text` and/or the complete new `mentionedAgentIds`; only agents added by this edit are notified. Broadcast as `note.updated`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"Updated note\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Delete a note",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/notes/{{noteId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "notes", "{{noteId}}"],
+              "query": []
+            },
+            "description": "The author, or a supervisor/admin. Soft delete. Broadcast as `note.deleted`."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Tags (FR-14 to FR-27)",
+      "item": [
+        {
+          "name": "Available tags",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/tags?q=vip",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "tags"],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "vip"
+                }
+              ]
+            },
+            "description": "Alphabetical, with how many conversations use each. `q` searches the name."
+          }
+        },
+        {
+          "name": "Create a tag",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/tags?q=vip",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "tags"],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "vip"
+                }
+              ]
+            },
+            "description": "Any agent. The name is unique ignoring case (409). `color` is `#RRGGBB`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"VIP\",\n  \"color\": \"#3B6DF0\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "const d = j.data || {};",
+                  "const id = d.id || (d.reactions && d.reactions.length ? d.reactions[0].id : null);",
+                  "if (id) pm.collectionVariables.set('tagId', String(id));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Rename or recolor a tag",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/tags/{{tagId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "tags", "{{tagId}}"],
+              "query": []
+            },
+            "description": "The tag's creator or a supervisor. `color: null` clears the color. Conversations using the tag receive `conversation.tags_updated`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"VIP customer\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Delete a tag",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/tags/{{tagId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "tags", "{{tagId}}"],
+              "query": []
+            },
+            "description": "Supervisors only. A tag used by conversations is refused with 409 (`error.details.usageCount`) unless `force=true`, which takes it off every conversation first (a `TAG_REMOVED` timeline entry on each) and then deletes it."
+          }
+        },
+        {
+          "name": "Set a conversation's tags",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/tags",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "conversations", "{{convId}}", "tags"],
+              "query": []
+            },
+            "description": "Replaces the conversation's tags with `tagIds` (at most 20; an empty list removes all). The owner, a supervisor, or anyone while nobody owns the conversation (`permissions.canOrganize`). Unknown ids give 400. Additions and removals are recorded as `TAG_ADDED`/`TAG_REMOVED`, and `conversation.tags_updated` is broadcast. Idempotent.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tagIds\": [\n    \"{{tagId}}\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Canned responses (FR-14 to FR-27)",
+      "item": [
+        {
+          "name": "Available templates",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/canned-responses?q=greeting",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "canned-responses"],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "greeting"
+                }
+              ]
+            },
+            "description": "Your personal templates and the shared ones, active only, by title. `q` searches title, text and shortcut; `shortcut` finds one by what the agent typed; `includeInactive` also lists deactivated templates you could reactivate. Other agents' personal templates are never listed."
+          }
+        },
+        {
+          "name": "Create a template",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/canned-responses?q=greeting",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "canned-responses"],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "greeting"
+                }
+              ]
+            },
+            "description": "`scope` PERSONAL (default; private to you) or SHARED (supervisors/admins only; visible to everyone). `shortcut` like `/greeting` must be free among the templates you can see (409). TEAM templates are not available yet.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Greeting\",\n  \"content\": \"Hello, how can I help you today?\",\n  \"shortcut\": \"/hi\",\n  \"scope\": \"PERSONAL\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "const d = j.data || {};",
+                  "const id = d.id || (d.reactions && d.reactions.length ? d.reactions[0].id : null);",
+                  "if (id) pm.collectionVariables.set('templateId', String(id));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "One template",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/canned-responses/{{templateId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "canned-responses", "{{templateId}}"],
+              "query": []
+            },
+            "description": "Someone else's personal template answers 404, as if it did not exist."
+          }
+        },
+        {
+          "name": "Edit, deactivate or reactivate a template",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/canned-responses/{{templateId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "canned-responses", "{{templateId}}"],
+              "query": []
+            },
+            "description": "Your own personal template, or a shared one if you are a supervisor/admin (403 otherwise). The scope cannot change. `shortcut: null` removes the shortcut; `isActive` false/true deactivates/reactivates.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Greeting v2\",\n  \"isActive\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Deactivate a template",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/canned-responses/{{templateId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "canned-responses", "{{templateId}}"],
+              "query": []
+            },
+            "description": "Templates are never deleted: this deactivates it (same rights as editing) and frees its shortcut. Repeating it changes nothing."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Escalations (FR-14 to FR-27)",
+      "item": [
+        {
+          "name": "Escalation history",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/escalations",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "conversations", "{{convId}}", "escalations"],
+              "query": []
+            },
+            "description": "Newest first, including resolved and cancelled ones."
+          }
+        },
+        {
+          "name": "Escalate a conversation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/escalations",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "conversations", "{{convId}}", "escalations"],
+              "query": []
+            },
+            "description": "Only the owner of a conversation that is not closed. One escalation can be pending at a time (409). Adds an `ESCALATED` timeline entry and broadcasts `conversation.escalated` to everyone who can see the conversation. It does not change the owner, status or priority.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Customer asks for a manager\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "const d = j.data || {};",
+                  "const id = d.id || (d.reactions && d.reactions.length ? d.reactions[0].id : null);",
+                  "if (id) pm.collectionVariables.set('escalationId', String(id));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Resolve or cancel an escalation",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/escalations/{{escalationId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "escalations", "{{escalationId}}"],
+              "query": []
+            },
+            "description": "`RESOLVED`: supervisors and admins. `CANCELLED`: the requester or a supervisor. A closed escalation cannot change again (409). Broadcast as `conversation.escalated` with the new status.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"RESOLVED\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Workspace (FR-14 to FR-27)",
+      "item": [
+        {
+          "name": "My workspace",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/workspace",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "workspace"],
+              "query": []
+            },
+            "description": "Everything needed to restore the dashboard: tab preferences, the tabs left open (empty when `restoreTabs` is off) with each conversation's current state and this agent's unread count, and unsent drafts. Conversations the agent can no longer see are omitted."
+          }
+        },
+        {
+          "name": "Update tab preferences",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/workspace/preferences",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "workspace", "preferences"],
+              "query": []
+            },
+            "description": "Partial update; omitted keys keep their value. Broadcast as `workspace.preferences_updated`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"restoreTabs\": true,\n  \"persistTabs\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Open a tab",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/workspace/tabs/{{convId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "workspace", "tabs", "{{convId}}"],
+              "query": []
+            },
+            "description": "Idempotent: an open tab is only refreshed, so two windows never create a duplicate. Needs access to the conversation. With `persistTabs` off nothing is stored and `persisted` is false. At most 20 tabs (409). Broadcast as `workspace.tab_opened`. This never changes the conversation itself."
+          }
+        },
+        {
+          "name": "Close a tab",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/workspace/tabs/{{convId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "workspace", "tabs", "{{convId}}"],
+              "query": []
+            },
+            "description": "Idempotent. Only removes the tab: the conversation is not closed, resolved or archived. Broadcast as `workspace.tab_closed` when a tab was removed."
+          }
+        },
+        {
+          "name": "Save my draft",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/workspace/drafts/{{convId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "workspace", "drafts", "{{convId}}"],
+              "query": []
+            },
+            "description": "Replaces my unsent text for this conversation (max 10000 characters). Drafts are per agent and conversation. An empty `content` deletes the draft and returns `null`. Broadcast as `workspace.draft_updated`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"Dear Maya,\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Discard my draft",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/workspace/drafts/{{convId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "workspace", "drafts", "{{convId}}"],
+              "query": []
+            },
+            "description": "Idempotent. Call after the message was sent. Broadcast as `workspace.draft_updated` with `content: null`."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Chat settings (FR-14 to FR-27)",
+      "item": [
+        {
+          "name": "My chat settings",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/agents/me/chat-settings",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "agents", "me", "chat-settings"],
+              "query": []
+            },
+            "description": "The caller's own switches. Defaults are returned until something was saved (sounds and AI on, auto-assign off); reading never creates a row."
+          }
+        },
+        {
+          "name": "Update my chat settings",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/agents/me/chat-settings",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "agents", "me", "chat-settings"],
+              "query": []
+            },
+            "description": "Partial update; omitted keys keep their value, unknown keys are rejected. Only the caller's settings can be changed. Broadcast to the caller's other sessions as `chat_settings.updated`. The AI and auto-assign switches are stored only: nothing reads them yet.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"typingSoundEnabled\": false,\n  \"autoAssignEnabled\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Callbacks (FR-14 to FR-27)",
+      "item": [
+        {
+          "name": "My callbacks",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/callbacks?status=PENDING",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "callbacks"],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "PENDING"
+                }
+              ]
+            },
+            "description": "Callbacks assigned to me or scheduled by me, soonest first. Filters: `status`, `from`/`to` (scheduled time, ISO 8601 with offset). `scope=all` lists everyone's and is for supervisors (403 otherwise)."
+          }
+        },
+        {
+          "name": "Callbacks of a conversation",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/callbacks",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "conversations", "{{convId}}", "callbacks"],
+              "query": []
+            },
+            "description": "Every callback of the conversation in any status, soonest first. Needs access to the conversation."
+          }
+        },
+        {
+          "name": "Schedule a callback",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/callbacks",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "conversations", "{{convId}}", "callbacks"],
+              "query": []
+            },
+            "description": "Anyone who can see the conversation. `scheduledAt` must be in the future (at most 365 days) and carry a UTC offset. The assignee defaults to the conversation's owner, else the caller; another agent must exist and be able to see the conversation. At most 20 pending per conversation (409). Notifies the assignee when it is someone else, adds a `CALLBACK` timeline entry and broadcasts `callback.created`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"scheduledAt\": \"2030-05-01T09:30:00+07:00\",\n  \"notes\": \"Ask about the repayment date\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "const d = j.data || {};",
+                  "const id = d.id || (d.reactions && d.reactions.length ? d.reactions[0].id : null);",
+                  "if (id) pm.collectionVariables.set('callbackId', String(id));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "One callback",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/callbacks/{{callbackId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "callbacks", "{{callbackId}}"],
+              "query": []
+            },
+            "description": "Its assignee, its creator, supervisors, or anyone who can see the conversation. Otherwise 404."
+          }
+        },
+        {
+          "name": "Reschedule or reassign a callback",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/callbacks/{{callbackId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "callbacks", "{{callbackId}}"],
+              "query": []
+            },
+            "description": "Assignee, creator or supervisor, on a PENDING or MISSED callback (409 once completed or cancelled). A new `scheduledAt` makes it PENDING again and allows a new reminder. Changing `assignedAgentId` notifies the new assignee. Broadcast as `callback.updated`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"scheduledAt\": \"2030-05-02T10:00:00+07:00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Mark a callback done",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/callbacks/{{callbackId}}/complete",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "callbacks", "{{callbackId}}", "complete"],
+              "query": []
+            },
+            "description": "Assignee, creator or supervisor. From PENDING or MISSED (a late call still counts). 409 if already closed. Broadcast as `callback.completed`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"completionNote\": \"Reached the customer\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Cancel a callback",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/callbacks/{{callbackId}}/cancel",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "callbacks", "{{callbackId}}", "cancel"],
+              "query": []
+            },
+            "description": "Assignee, creator or supervisor. From PENDING or MISSED. 409 if already closed. Broadcast as `callback.cancelled`."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Calls (FR-14 to FR-27)",
+      "item": [
+        {
+          "name": "ICE servers for a call",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/calls/config",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "calls", "config"],
+              "query": []
+            },
+            "description": "STUN and TURN servers for `RTCPeerConnection`. TURN credentials are short-lived and specific to the caller when a shared secret is configured. Responds with `Cache-Control: no-store`. Empty `iceServers` means none are configured (calls then only work on the same network)."
+          }
+        },
+        {
+          "name": "Call history of a conversation",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/calls",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "conversations", "{{convId}}", "calls"],
+              "query": []
+            },
+            "description": "Newest first, any status. Needs access to the conversation."
+          }
+        },
+        {
+          "name": "Call the customer",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/calls",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "conversations", "{{convId}}", "calls"],
+              "query": []
+            },
+            "description": "Only the owner of a conversation that is not closed. The call starts `RINGING`; a conversation can have one call that is not over (409). Adds a `CALL` timeline entry and sends `call.incoming` to the customer's channel. After `call.accepted`, the caller sends the offer over the WebSocket (`call.offer`). Unanswered calls become `MISSED` after the ring timeout.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"callType\": \"AUDIO\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "const d = j.data || {};",
+                  "const id = d.id || (d.reactions && d.reactions.length ? d.reactions[0].id : null);",
+                  "if (id) pm.collectionVariables.set('callId', String(id));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "One call",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/calls/{{callId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "calls", "{{callId}}"],
+              "query": []
+            },
+            "description": "Needs access to the call's conversation (otherwise 404)."
+          }
+        },
+        {
+          "name": "Answer a customer's call",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/calls/{{callId}}/accept",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "calls", "{{callId}}", "accept"],
+              "query": []
+            },
+            "description": "A ringing call a customer started: a supervisor, the owner, or any agent while nobody owns the conversation. The first to answer wins; the others get 409. The answering agent becomes a participant. Broadcast as `call.accepted`."
+          }
+        },
+        {
+          "name": "Decline a customer's call",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/calls/{{callId}}/decline",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "calls", "{{callId}}", "decline"],
+              "query": []
+            },
+            "description": "Same people as accept. The call becomes `DECLINED`. Broadcast as `call.declined`."
+          }
+        },
+        {
+          "name": "Cancel a call I started",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/calls/{{callId}}/cancel",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "calls", "{{callId}}", "cancel"],
+              "query": []
+            },
+            "description": "Only the caller, and only while it rings. The call becomes `CANCELLED`. Broadcast as `call.ended` with reason `cancelled`."
+          }
+        },
+        {
+          "name": "Hang up",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/calls/{{callId}}/end",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "calls", "{{callId}}", "end"],
+              "query": []
+            },
+            "description": "A participant, or a supervisor, on an answered call. Records the duration. Broadcast as `call.ended` with reason `ended`."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Moderation (FR-14 to FR-27)",
+      "item": [
+        {
+          "name": "Block the conversation's customer",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/customer-block",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "conversations", "{{convId}}", "customer-block"],
+              "query": []
+            },
+            "description": "The owner of the conversation, or a supervisor. The customer comes from the conversation. 409 if already blocked. Records the action in the moderation log and on the conversation timeline, and broadcasts `customer.blocked`. Open conversations stay open; the block stops what the customer does (messages, calls) once the customer channel exists.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Abusive language\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Block a customer by id",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/moderation/customers/{{customerId}}/block",
+              "host": ["{{baseUrl}}"],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "moderation",
+                "customers",
+                "00000000-0000-4000-8000-000000000101",
+                "block"
+              ],
+              "query": []
+            },
+            "description": "Supervisors only. 409 if already blocked.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Repeated spam\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Lift a block",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/moderation/customers/{{customerId}}/block",
+              "host": ["{{baseUrl}}"],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "moderation",
+                "customers",
+                "00000000-0000-4000-8000-000000000101",
+                "block"
+              ],
+              "query": []
+            },
+            "description": "A supervisor, or the agent who blocked the customer. Anyone else gets 404 (they cannot tell whether the customer is blocked)."
+          }
+        },
+        {
+          "name": "Blocked customers",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/moderation/blocks?active=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "moderation", "blocks"],
+              "query": [
+                {
+                  "key": "active",
+                  "value": "true"
+                }
+              ]
+            },
+            "description": "Current blocks (`active=false` for lifted ones), newest first. Supervisors see all; an agent sees the blocks they made. `customerName` comes from Backend 1 and is null when it cannot be reached."
+          }
+        },
+        {
+          "name": "Blocked keywords",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/moderation/keywords?q=wire",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "moderation", "keywords"],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "wire"
+                }
+              ]
+            },
+            "description": "Every keyword (active or not), alphabetical. Any dashboard user can read them. A message from a customer containing an active keyword (ignoring case) is stored and flagged for review, never rejected."
+          }
+        },
+        {
+          "name": "Add a keyword",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/moderation/keywords?q=wire",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "moderation", "keywords"],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "wire"
+                }
+              ]
+            },
+            "description": "Supervisors only. Unique ignoring case (409). At most 1000 active keywords.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"keyword\": \"wire transfer\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "const d = j.data || {};",
+                  "const id = d.id || (d.reactions && d.reactions.length ? d.reactions[0].id : null);",
+                  "if (id) pm.collectionVariables.set('keywordId', String(id));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Rename or switch a keyword",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/moderation/keywords/{{keywordId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "moderation", "keywords", "{{keywordId}}"],
+              "query": []
+            },
+            "description": "Supervisors only. Takes effect within about 15 seconds on every API instance.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isActive\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Remove a keyword",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/moderation/keywords/{{keywordId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "moderation", "keywords", "{{keywordId}}"],
+              "query": []
+            },
+            "description": "Supervisors only. Deletes it for good (the log keeps its text)."
+          }
+        },
+        {
+          "name": "Report spam or abuse",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/spam-reports",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "conversations", "{{convId}}", "spam-reports"],
+              "query": []
+            },
+            "description": "Anyone who can see the conversation, about the conversation or one of its messages (`messageId`, which must belong to it). One pending report per reporter and target (409). Broadcast as `spam.reported` to whoever can see the conversation, which includes supervisors.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Phishing links\",\n  \"messageId\": \"{{msgId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "const d = j.data || {};",
+                  "const id = d.id || (d.reactions && d.reactions.length ? d.reactions[0].id : null);",
+                  "if (id) pm.collectionVariables.set('reportId', String(id));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Spam reports of a conversation",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/spam-reports",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "conversations", "{{convId}}", "spam-reports"],
+              "query": []
+            },
+            "description": "Anyone who can see the conversation. Newest first."
+          }
+        },
+        {
+          "name": "Spam report queue",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/moderation/spam-reports?status=PENDING",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "moderation", "spam-reports"],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "PENDING"
+                }
+              ]
+            },
+            "description": "Supervisors see every report (filter by `status`, usually `PENDING`); an agent sees the ones they filed."
+          }
+        },
+        {
+          "name": "Confirm or dismiss a report",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/moderation/spam-reports/{{reportId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "moderation", "spam-reports", "{{reportId}}"],
+              "query": []
+            },
+            "description": "Supervisors only. A reviewed report cannot be reviewed again (409). With `CONFIRMED`, `blockCustomer: true` also blocks the conversation's customer in the same transaction (a customer who is already blocked stays blocked). Broadcast as `spam.reviewed`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"CONFIRMED\",\n  \"blockCustomer\": true,\n  \"resolutionNote\": \"Confirmed\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Moderation log",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/moderation/activities",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "moderation", "activities"],
+              "query": []
+            },
+            "description": "Supervisors only. Who blocked, unblocked, reported, reviewed or changed keywords, newest first. Filter by `targetType` or `actorId`."
           }
         }
       ]

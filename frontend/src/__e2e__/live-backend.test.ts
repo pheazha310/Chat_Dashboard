@@ -209,7 +209,8 @@ describe.skipIf(!live)("frontend against the live backend", () => {
 
     expect((await rest(`/conversations/${id}/transfer`, SUPERVISOR, "POST", { agentId: uid(4) })).status).toBe(200);
     await until(() => conv().byId[id] === undefined, "the conversation to leave the inbox");
-    expect(toasts).toContain("Conversation moved to Agent 4");
+    // The dev directory names agents "Agent <id>", and ids are UUIDs since the UUID migration.
+    expect(toasts).toContain(`Conversation moved to Agent ${uid(4)}`);
     // The notification is its own event and may land just after the removal.
     await until(() => toasts.some((t) => t.includes("transferred away from you")), "the notification");
     expect(conv().order).not.toContain(id);

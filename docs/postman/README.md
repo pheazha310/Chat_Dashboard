@@ -114,6 +114,29 @@ Send (201; a retry with the same `clientId` returns 200 with the original messag
 | GET    | `/api/v1/admin/conversations/{id}/customer/conversations` |
 | GET    | `/api/v1/admin/conversations/{id}/participants`           |
 
+## FR-14 to FR-27 (enhanced and advanced chat)
+
+The collection has one folder per feature, generated from the OpenAPI document (`/api/v1/admin/openapi.json`); each
+request carries its description. Run **Conversations > Create**, **Assignment > Take over**, then **Messages > Send**
+first: the requests below reuse `convId` and `msgId`, and the create requests save their ids (`noteId`, `tagId`,
+`templateId`, `escalationId`, `callbackId`, `callId`, `keywordId`, `reportId`, `reactionId`) for the next ones.
+
+| Folder                         | Guide                                                   | Needs                                                                                                                                                                   |
+| ------------------------------ | ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Workspace                      | [api-workspace.md](../api-workspace.md)                 | -                                                                                                                                                                       |
+| Message actions                | [api-message-actions.md](../api-message-actions.md)     | a sent message                                                                                                                                                          |
+| Attachments                    | [api-attachments.md](../api-attachments.md)             | pick a file in the two upload requests (form-data)                                                                                                                      |
+| Internal notes, Escalations    | [api-notes-escalations.md](../api-notes-escalations.md) | resolving an escalation needs the supervisor token                                                                                                                      |
+| Tags, Conversations (priority) | [api-tags-priority.md](../api-tags-priority.md)         | -                                                                                                                                                                       |
+| Canned responses               | [api-canned-responses.md](../api-canned-responses.md)   | creating a SHARED one needs the supervisor token                                                                                                                        |
+| Chat settings                  | [api-chat-settings.md](../api-chat-settings.md)         | -                                                                                                                                                                       |
+| Callbacks                      | [api-callbacks.md](../api-callbacks.md)                 | `scheduledAt` must be in the future: edit the sample date                                                                                                               |
+| Calls                          | [api-calls.md](../api-calls.md)                         | Accept/Decline of a customer's call need a call the customer started; there is no customer channel yet, so only an agent-started call can be driven here (it rings out) |
+| Moderation                     | [api-moderation.md](../api-moderation.md)               | keywords, reviews and the log need the supervisor token                                                                                                                 |
+
+New WebSocket frames (besides the list above): `call.offer`, `call.answer`, `call.ice_candidate`; see
+[../api-calls.md](../api-calls.md).
+
 ## WebSocket (Postman: New, WebSocket)
 
 Connect to `ws://localhost:4000/ws`. After `connection.established`, send `auth` within 10 seconds:

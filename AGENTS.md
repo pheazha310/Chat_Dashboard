@@ -75,6 +75,8 @@ Node 22, pnpm 10 (pinned in `.mise.toml` and root `package.json`).
 - Match surrounding style: Prettier (120 cols, trailing commas), TypeScript `strict`, no `any`.
 - Add or update tests with behaviour changes, and run `pnpm check` before declaring work done.
 - Keep docs consistent with the implementation in the same change.
+  `backend/src/__tests__/docs-consistency.test.ts` fails when a REST route is missing from the Postman collection, a WebSocket
+  event from `docs/websocket-events.md`, an env variable from `.env.example` or the docs, or an `api-*.md` guide from this file.
 
 ## Skills
 
