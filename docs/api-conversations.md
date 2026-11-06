@@ -81,7 +81,7 @@ Always the caller's own; another agent's notification is `404`. Realtime: `notif
 
 Types generated: `NEW_MESSAGE` (to the owner of a conversation a customer wrote in), `NEW_CONVERSATION` (to online
 AVAILABLE agents when a conversation starts waiting for a human), `ASSIGNED`, `TRANSFERRED`. Others exist in the schema
-but have no trigger yet (`MENTION`, `HANDOFF`, `SYSTEM`). `CALL` is stored for a customer's missed call (`api-calls.md`). `CALLBACK` is sent by the callback job (`api-callbacks.md`).
+but have no trigger yet (`MENTION`, `HANDOFF`, `SYSTEM`). The `MODERATION` timeline entry is written for blocks, spam reports and keyword flags (`api-moderation.md`). `CALL` is stored for a customer's missed call (`api-calls.md`). `CALLBACK` is sent by the callback job (`api-callbacks.md`).
 
 ### Customer information
 

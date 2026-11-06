@@ -129,6 +129,13 @@ Only with the real backend (`VITE_WS_URL` set); the mock server has no REST, so 
 - `PATCH /workspace/preferences` (`restoreTabs`, `persistTabs`) has a REST client (`shared/api/rest/workspace.ts`) but
   no settings UI yet.
 
+### Moderation (FR-27)
+
+The chat menu gains "Report spam or abuse" and "Block customer" (`features/moderate-conversation`). Against the real backend
+the message settings dialog's blocked-customers and keywords lists are team-wide and held by the server
+(`features/message-settings/model/moderation.ts`); with the mock transport they stay local. Details and limits:
+[api-moderation.md](api-moderation.md).
+
 ### Calls (FR-26)
 
 Against the real backend the call button starts a real WebRTC call (`features/customer-call/model/live-call.ts`): REST for

@@ -7,6 +7,7 @@ import type {
   ConversationAccess,
   CustomerConversationAccess,
 } from "@shared/ports/conversation-access.js";
+import type { CustomerGuard } from "@shared/ports/moderation.js";
 import type { RealtimeNotifier } from "@shared/ports/realtime.js";
 import { bestEffort } from "@shared/utils/best-effort.js";
 import { idToString } from "@shared/utils/ids.js";
@@ -58,6 +59,7 @@ export class CallService {
     private readonly options: CallOptions = DEFAULT_CALL_OPTIONS,
     private readonly ice: IceConfig = NO_ICE,
     private readonly clock: () => Date = () => new Date(),
+    private readonly guard?: () => CustomerGuard,
   ) {}
 
   // ─── reading ───────────────────────────────────────────────────────────────
@@ -124,6 +126,7 @@ export class CallService {
   async initiateFromCustomer(input: { customerId: string; conversationId: string; callType: CallType }) {
     const state = await this.conversations().requireForCustomer(input.customerId, input.conversationId);
     if (state.status === "CLOSED") throw new ConflictError("This conversation is closed");
+    if (await this.guard?.().isBlocked(input.customerId)) throw new ForbiddenError("This customer is blocked");
     const row = await this.create(state, input.callType, { type: "CUSTOMER", id: input.customerId }, null);
     await this.activity(row, { type: "CUSTOMER", id: input.customerId }, "Incoming call", "started");
     await bestEffort("realtime call.incoming", () =>

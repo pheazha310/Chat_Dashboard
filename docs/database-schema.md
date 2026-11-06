@@ -174,6 +174,7 @@ These were run against a scratch PostgreSQL (48 insert/update/delete cases) and 
 | The assistant participant has no id; others do; no backwards time ranges                                      | CHECK                                                                          |
 | Creator type and id set together                                                                              | CHECK                                                                          |
 | One active block per customer                                                                                 | partial UNIQUE index                                                           |
+| One pending spam report per reporter, conversation and message                                                | partial UNIQUE index                                                           |
 | No duplicate message order or optimistic send                                                                 | UNIQUE `(conversation_id, sequence_number)` and `(conversation_id, client_id)` |
 | `SYSTEM` messages have no sender id; `TEXT` messages have content                                             | CHECK                                                                          |
 | `TEAM` template <=> `team_id` set                                                                             | CHECK                                                                          |

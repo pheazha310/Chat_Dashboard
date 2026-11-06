@@ -1,6 +1,7 @@
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "@shared/errors/AppError.js";
 import type { AuthContext } from "@shared/auth/auth.types.js";
 import { canView, permissionsFor } from "@shared/policy/conversation-access.js";
+import type { CustomerGuard, MessageLookup } from "@shared/ports/moderation.js";
 import type { RealtimeNotifier } from "@shared/ports/realtime.js";
 import type { SystemMessagePort } from "@shared/ports/system-message.js";
 import { bestEffort } from "@shared/utils/best-effort.js";
@@ -16,12 +17,18 @@ const PREVIEW_LENGTH = 255;
 /** Cut by code points: a split surrogate pair would be rejected by PostgreSQL. */
 const toPreview = (text: string) => Array.from(text).slice(0, PREVIEW_LENGTH).join("");
 
-export class MessageService implements SystemMessagePort {
+export class MessageService implements SystemMessagePort, MessageLookup {
   constructor(
     private readonly repository: MessageRepository,
     private readonly notifications: NotificationService,
     private readonly realtime: RealtimeNotifier,
+    /** Moderation, built after this service, hence a function. Absent in tests that do not need it. */
+    private readonly guard?: () => CustomerGuard,
   ) {}
+
+  async existsInConversation(conversationId: string, messageId: string): Promise<boolean> {
+    return (await this.repository.findById(conversationId, messageId)) !== null;
+  }
 
   /**
    * An agent sends a message. Safe to retry: the same `clientId` returns the original message (`created: false`)
@@ -129,10 +136,35 @@ export class MessageService implements SystemMessagePort {
   }
 
   /**
+   * A message that contains a blocked keyword is kept (a legitimate question must not be lost) and flagged: a
+   * `MODERATION` timeline entry and a `message.flagged` event to whoever can see the conversation. The keyword list is
+   * not repeated in either, only how many matched.
+   */
+  private async flagIfNeeded(conversationId: string, messageId: string, text: string) {
+    await bestEffort("keyword check", async () => {
+      const matched = await this.guard?.().matchedKeywords(text);
+      if (!matched || matched.length === 0) return;
+      await this.repository.addActivity({
+        conversationId,
+        actorType: "SYSTEM",
+        activityType: "MODERATION",
+        description: "Message matched a blocked keyword",
+        metadata: { messageId, matches: matched.length },
+      });
+      await this.realtime.messageEvent(conversationId, "message.flagged", {
+        conversationId,
+        messageId,
+        matches: matched.length,
+      });
+    });
+  }
+
+  /**
    * A customer message. Used by the customer channel (not built yet; it needs its own authentication). Reopens a
    * resolved or closed conversation and notifies the owning agent.
    */
   async receiveFromCustomer(input: { customerId: string; conversationId: string; clientId: string; text: string }) {
+    if (await this.guard?.().isBlocked(input.customerId)) throw new ForbiddenError("This customer is blocked");
     const { message, created, owner } = await this.repository.inTransaction(async (tx) => {
       const conversation = await tx.lock(input.conversationId);
       if (!conversation || conversation.customerId !== input.customerId) {
@@ -184,6 +216,7 @@ export class MessageService implements SystemMessagePort {
     const dto = toMessage(message);
     if (created) {
       await bestEffort("realtime", () => this.realtime.messageCreated(dto, { conversationUpdated: true }));
+      await this.flagIfNeeded(input.conversationId, dto.id, input.text);
     }
     return { message: dto, created };
   }

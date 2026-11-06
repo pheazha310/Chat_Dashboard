@@ -164,6 +164,11 @@ CREATE UNIQUE INDEX agent_presence_history_one_open
   ON agent_presence_history (agent_id)
   WHERE ended_at IS NULL;
 
+-- One pending report per reporter, conversation and message (a message-less report counts as the nil UUID).
+CREATE UNIQUE INDEX spam_reports_pending_once
+  ON spam_reports (reported_by_type, reported_by_id, conversation_id, COALESCE(message_id, '00000000-0000-0000-0000-000000000000'::uuid))
+  WHERE status = 'PENDING';
+
 -- At most one active block per customer.
 CREATE UNIQUE INDEX customer_blocks_one_active
   ON customer_blocks (customer_id)

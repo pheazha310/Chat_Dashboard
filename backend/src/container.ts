@@ -31,6 +31,8 @@ import { DEFAULT_CALLBACK_OPTIONS, type CallbackOptions } from "@modules/callbac
 import { CallRepository } from "@modules/calls/call.repository.js";
 import { CallService } from "@modules/calls/call.service.js";
 import { DEFAULT_CALL_OPTIONS, type CallOptions, type IceConfig } from "@modules/calls/call.types.js";
+import { ModerationRepository } from "@modules/moderation/moderation.repository.js";
+import { ModerationService } from "@modules/moderation/moderation.service.js";
 import { ChatSettingsRepository } from "@modules/chat-settings/chat-settings.repository.js";
 import { ChatSettingsService } from "@modules/chat-settings/chat-settings.service.js";
 import { WorkspaceRepository } from "@modules/workspace/workspace.repository.js";
@@ -60,7 +62,8 @@ export function createContainer(
   const presence = new PresenceService(new PresenceRepository(redisClient), realtime);
   const notifications = new NotificationService(new NotificationRepository(), realtime, () => conversations);
   const messageRepository = new MessageRepository();
-  const messages = new MessageService(messageRepository, notifications, realtime);
+  let moderation!: ModerationService;
+  const messages = new MessageService(messageRepository, notifications, realtime, () => moderation);
   const messageActions = new MessageActionService(messageRepository, messages, realtime);
   conversations = new ConversationService(
     new ConversationRepository(),
@@ -91,6 +94,13 @@ export function createContainer(
     realtime,
     callbackOptions,
   );
+  moderation = new ModerationService(
+    new ModerationRepository(),
+    () => conversations,
+    () => messages,
+    directory,
+    realtime,
+  );
   const calls = new CallService(
     new CallRepository(),
     () => conversations,
@@ -98,6 +108,8 @@ export function createContainer(
     realtime,
     callConfig.options,
     callConfig.ice,
+    undefined,
+    () => moderation,
   );
   const chatSettings = new ChatSettingsService(new ChatSettingsRepository(), realtime);
   const customers = new CustomerService(new CustomerRepository(), directory, conversations, conversations);
@@ -121,6 +133,7 @@ export function createContainer(
     chatSettings,
     callbacks,
     calls,
+    moderation,
   };
 }
 

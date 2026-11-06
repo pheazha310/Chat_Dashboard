@@ -37,6 +37,19 @@ export {
   type Call,
   type CallConfig,
 } from "./calls";
+export {
+  blockConversationCustomer,
+  blockCustomerById,
+  createKeywordRequest,
+  deleteKeywordRequest,
+  listBlocks,
+  listKeywords,
+  reportSpamRequest,
+  unblockCustomer,
+  type BlockedKeyword,
+  type CustomerBlock,
+  type SpamReport,
+} from "./moderation";
 export { getChatSettings, updateChatSettings, type ChatSettings } from "./chat-settings";
 export {
   deleteMessageRequest,

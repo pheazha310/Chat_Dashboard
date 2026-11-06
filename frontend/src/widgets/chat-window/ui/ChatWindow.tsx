@@ -17,6 +17,7 @@ import { markConversationUnread } from "@/features/mark-unread";
 import { takeOverConversation } from "@/features/take-over-conversation";
 import { useSessionStore } from "@/shared/api/session";
 import { ChatSearchBar, filterByQuery, useChatSearchStore } from "@/features/search-in-chat";
+import { blockConversationCustomerAction, reportSpamAction } from "@/features/moderate-conversation";
 import { TemplatePicker } from "@/features/canned-responses";
 import { insertIntoDraft, MessageComposer, retryMessage, useComposerStore } from "@/features/send-message";
 import { API_URL, assets } from "@/shared/config";
@@ -203,6 +204,26 @@ export default function ChatWindow({
                   >
                     Callbacks
                   </button>
+                  <button
+                    onClick={() => {
+                      const reason = window.prompt("Why is this spam or abuse?");
+                      if (reason !== null && reason.trim()) void reportSpamAction(conversation.id, reason);
+                      setShowMore(false);
+                    }}
+                  >
+                    Report spam or abuse
+                  </button>
+                  {conversation.handoff === "assigned" && !handledByOther && (
+                    <button
+                      onClick={() => {
+                        const reason = window.prompt("Block this customer? Add a reason (optional)");
+                        if (reason !== null) void blockConversationCustomerAction(conversation.id, reason);
+                        setShowMore(false);
+                      }}
+                    >
+                      Block customer
+                    </button>
+                  )}
                   {conversation.handoff === "assigned" && !handledByOther && (
                     <button
                       onClick={() => {
