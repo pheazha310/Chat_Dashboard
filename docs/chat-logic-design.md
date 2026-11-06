@@ -169,7 +169,7 @@ Each reader has their own position, so unread is per agent.
 
 - **Typing:** a short-lived Redis key with a TTL plus a pub/sub event, so every server instance relays it;
   no database writes.
-- **`callback.request`:** insert a `callback_requests` row, notify the owner (or the queue if
+- **`callback.request`** (as built: REST instead of a socket event, see `api-callbacks.md`): insert a `callback_requests` row, notify the owner (or the queue if
   unassigned) and write a `conversation_activities` row.
 - **Internal notes:** stored in `internal_notes`, never in `messages`, so they cannot be delivered to a
   customer; mentions go to `note_mentions` and create notifications.

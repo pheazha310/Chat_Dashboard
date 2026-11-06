@@ -11,4 +11,8 @@ export const container = createContainer(
   redis,
   createDirectory(),
   new LocalStorage(env.STORAGE_DIR),
+  {
+    reminderLeadMs: env.CALLBACK_REMINDER_MINUTES * 60_000,
+    missedAfterMs: env.CALLBACK_MISSED_AFTER_MINUTES * 60_000,
+  },
 );

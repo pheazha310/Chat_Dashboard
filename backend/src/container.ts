@@ -25,6 +25,11 @@ import { CannedResponseRepository } from "@modules/canned-responses/canned-respo
 import { CannedResponseService } from "@modules/canned-responses/canned-response.service.js";
 import { PresenceRepository } from "@modules/presence/presence.repository.js";
 import { PresenceService } from "@modules/presence/presence.service.js";
+import { CallbackRepository } from "@modules/callbacks/callback.repository.js";
+import { CallbackService } from "@modules/callbacks/callback.service.js";
+import { DEFAULT_CALLBACK_OPTIONS, type CallbackOptions } from "@modules/callbacks/callback.types.js";
+import { ChatSettingsRepository } from "@modules/chat-settings/chat-settings.repository.js";
+import { ChatSettingsService } from "@modules/chat-settings/chat-settings.service.js";
 import { WorkspaceRepository } from "@modules/workspace/workspace.repository.js";
 import { WorkspaceService } from "@modules/workspace/workspace.service.js";
 import { RealtimeService } from "@modules/realtime/index.js";
@@ -33,7 +38,13 @@ import { RealtimeService } from "@modules/realtime/index.js";
  * Composition root: builds each service once so the REST routes and the WebSocket gateway share the same instances
  * (and therefore the same business rules). Modules never import this; only routes and the gateway do.
  */
-export function createContainer(bus: EventBus, redisClient: Redis, directory: Directory, storage: Storage) {
+export function createContainer(
+  bus: EventBus,
+  redisClient: Redis,
+  directory: Directory,
+  storage: Storage,
+  callbackOptions: CallbackOptions = DEFAULT_CALLBACK_OPTIONS,
+) {
   // The conversation service reports changes through the realtime service, which reads conversation state back from
   // the conversation service: the function breaks that cycle.
   let conversations!: ConversationService;
@@ -65,6 +76,15 @@ export function createContainer(bus: EventBus, redisClient: Redis, directory: Di
   const tags = new TagService(new TagRepository(), () => conversations, realtime);
   const cannedResponses = new CannedResponseService(new CannedResponseRepository());
   const workspace = new WorkspaceService(new WorkspaceRepository(), realtime, () => conversations);
+  const callbacks = new CallbackService(
+    new CallbackRepository(),
+    () => conversations,
+    directory,
+    notifications,
+    realtime,
+    callbackOptions,
+  );
+  const chatSettings = new ChatSettingsService(new ChatSettingsRepository(), realtime);
   const customers = new CustomerService(new CustomerRepository(), directory, conversations, conversations);
 
   return {
@@ -83,6 +103,8 @@ export function createContainer(bus: EventBus, redisClient: Redis, directory: Di
     presence,
     customers,
     workspace,
+    chatSettings,
+    callbacks,
   };
 }
 

@@ -8,7 +8,7 @@ import { MessageSettingsDialog } from "@/features/message-settings";
 export default function ChatPage({ onExpand }: { onExpand: () => void }) {
   const [showInbox, setShowInbox] = useState(false);
   const [showContext, setShowContext] = useState(false);
-  const [contextView, setContextView] = useState<"media" | "notes" | "organize" | null>(null);
+  const [contextView, setContextView] = useState<"media" | "notes" | "organize" | "callbacks" | null>(null);
 
   return (
     <main className="lending-crm">
@@ -23,6 +23,10 @@ export default function ChatPage({ onExpand }: { onExpand: () => void }) {
           }}
           onOpenOrganize={() => {
             setContextView("organize");
+            setShowContext(true);
+          }}
+          onOpenCallbacks={() => {
+            setContextView("callbacks");
             setShowContext(true);
           }}
           onOpenNotes={() => {

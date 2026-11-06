@@ -114,6 +114,20 @@ describe("workspace events", () => {
     ).toBe(true);
     expect(isServerEvent("workspace.preferences_updated", { preferences: { restoreTabs: true } })).toBe(false);
   });
+
+  it("validates chat settings changes from another window", () => {
+    const settings = {
+      typingSoundEnabled: true,
+      notificationSoundEnabled: true,
+      aiSuggestionsEnabled: false,
+      aiSummariesEnabled: true,
+      autoAssignEnabled: false,
+    };
+    expect(isServerEvent("chat_settings.updated", { settings })).toBe(true);
+    expect(isServerEvent("chat_settings.updated", { settings: { ...settings, autoAssignEnabled: "no" } })).toBe(false);
+    expect(isServerEvent("chat_settings.updated", { settings: { typingSoundEnabled: true } })).toBe(false);
+    expect(isServerEvent("chat_settings.updated", {})).toBe(false);
+  });
 });
 
 describe("message action events", () => {

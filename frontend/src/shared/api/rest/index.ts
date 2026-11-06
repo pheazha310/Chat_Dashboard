@@ -21,6 +21,14 @@ export {
   type WorkspaceTab,
 } from "./workspace";
 export {
+  cancelCallbackRequest,
+  completeCallbackRequest,
+  listCallbacks,
+  scheduleCallbackRequest,
+  type Callback,
+} from "./callbacks";
+export { getChatSettings, updateChatSettings, type ChatSettings } from "./chat-settings";
+export {
   deleteMessageRequest,
   editMessageRequest,
   forwardRequest,

@@ -12,6 +12,8 @@ import { conversationEscalationRoutes, escalationRoutes } from "@modules/escalat
 import { conversationNoteRoutes, noteRoutes } from "@modules/notes/index.js";
 import { conversationTagRoutes, tagRoutes } from "@modules/tags/index.js";
 import { cannedResponseRoutes } from "@modules/canned-responses/index.js";
+import { callbackRoutes, conversationCallbackRoutes } from "@modules/callbacks/index.js";
+import { chatSettingsRoutes } from "@modules/chat-settings/index.js";
 import { workspaceRoutes } from "@modules/workspace/index.js";
 import { buildOpenApiDocument } from "./openapi.js";
 
@@ -40,10 +42,13 @@ apiRouter.use(
   conversationNoteRoutes,
   conversationEscalationRoutes,
   conversationTagRoutes,
+  conversationCallbackRoutes,
 );
 apiRouter.use("/presence", authenticate(authClient), presenceRoutes);
 apiRouter.use("/notifications", authenticate(authClient), notificationRoutes);
 apiRouter.use("/workspace", authenticate(authClient), workspaceRoutes);
+apiRouter.use("/callbacks", authenticate(authClient), callbackRoutes);
+apiRouter.use("/agents", authenticate(authClient), chatSettingsRoutes);
 apiRouter.use("/messages", authenticate(authClient), messageActionRoutes, messageAudioRoutes);
 apiRouter.use("/canned-responses", authenticate(authClient), cannedResponseRoutes);
 apiRouter.use("/tags", authenticate(authClient), tagRoutes);

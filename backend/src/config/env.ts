@@ -17,6 +17,12 @@ const schema = z.object({
   // Uploaded files. "local" keeps them on this server's disk under STORAGE_DIR (object storage can be added as a driver).
   STORAGE_DRIVER: z.enum(["local"]).default("local"),
   STORAGE_DIR: z.string().min(1).default("./storage"),
+  // Callbacks (FR-25). The job runs inside the API process; 0 turns it off (tests, or a dedicated worker later).
+  CALLBACK_JOB_INTERVAL_SECONDS: z.coerce.number().int().min(0).default(30),
+  // How long before the scheduled time the assignee is reminded.
+  CALLBACK_REMINDER_MINUTES: z.coerce.number().int().min(1).max(1440).default(10),
+  // How long after the scheduled time a still-pending callback is marked MISSED.
+  CALLBACK_MISSED_AFTER_MINUTES: z.coerce.number().int().min(1).max(1440).default(15),
   // Hard cap for one upload; each file type also has its own, lower limit.
   MAX_UPLOAD_BYTES: z.coerce
     .number()

@@ -77,7 +77,7 @@ supervisors keep seeing it.
 | Archive / Restore                                    | local                   | `POST /conversations/:id/archive`, undone locally if refused                                        |
 | inbox tabs (All, Mine, Unread, Unassigned, Archived) | local filter            | local filter on the synced inbox (first 100); _Archived_ loads `GET /conversations?filter=archived` |
 | Load earlier messages                                | —                       | `GET …/messages?before=`                                                                            |
-| Request callback                                     | event                   | not supported by the backend: a notice says so                                                      |
+| Request callback                                     | event                   | replaced by REST: "Callbacks" panel (`api-callbacks.md`); the old hidden button still gets a notice |
 
 ### What the conversation DTO shows
 
@@ -128,3 +128,15 @@ Only with the real backend (`VITE_WS_URL` set); the mock server has no REST, so 
   `workspace.tab_opened`, `.tab_closed` and `.draft_updated` from the agent's other windows into those stores.
 - `PATCH /workspace/preferences` (`restoreTabs`, `persistTabs`) has a REST client (`shared/api/rest/workspace.ts`) but
   no settings UI yet.
+
+### Callbacks (FR-25)
+
+`features/request-callback` adds a "Callbacks" panel (schedule, mark done, cancel) opened from the chat's more menu, using
+`shared/api/rest/callbacks.ts`. Reminders arrive as notifications. Details: [api-callbacks.md](api-callbacks.md).
+
+### Chat settings (FR-24)
+
+`features/message-settings` syncs typing sound, auto-assign and the two AI switches with `GET|PATCH /agents/me/chat-settings`
+(`shared/api/rest/chat-settings.ts`); a failed save puts the switch back. `app/providers/realtime.ts` loads the values
+after the first `sync` and applies `chat_settings.updated` from the agent's other windows. "New conversation alerts"
+stays browser-local. Details: [api-chat-settings.md](api-chat-settings.md).

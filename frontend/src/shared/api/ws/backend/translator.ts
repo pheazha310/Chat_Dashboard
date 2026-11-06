@@ -181,6 +181,7 @@ export class BackendTranslator {
       case "workspace.tab_closed":
       case "workspace.draft_updated":
       case "workspace.preferences_updated":
+      case "chat_settings.updated":
         return [{ type: frame.type, payload }];
 
       case "error":

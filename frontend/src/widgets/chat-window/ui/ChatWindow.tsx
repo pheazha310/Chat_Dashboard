@@ -35,11 +35,13 @@ export default function ChatWindow({
   onOpenMedia,
   onOpenNotes,
   onOpenOrganize,
+  onOpenCallbacks,
 }: {
   onOpenContext: () => void;
   onOpenMedia: () => void;
   onOpenNotes: () => void;
   onOpenOrganize: () => void;
+  onOpenCallbacks: () => void;
 }) {
   const conversation = useSelectedConversation();
   const messages = useConversationMessages(conversation?.id ?? null);
@@ -192,6 +194,14 @@ export default function ChatWindow({
                     }}
                   >
                     Priority & tags
+                  </button>
+                  <button
+                    onClick={() => {
+                      onOpenCallbacks();
+                      setShowMore(false);
+                    }}
+                  >
+                    Callbacks
                   </button>
                   {conversation.handoff === "assigned" && !handledByOther && (
                     <button

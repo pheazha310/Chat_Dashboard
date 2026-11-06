@@ -5,7 +5,7 @@ import { isMockTransport, wsClient } from "@/shared/api/ws";
 import { useNotesStore } from "@/features/internal-notes";
 import { useChatTabsStore } from "@/features/chat-tabs";
 import { applyRemoteDraft, hydrateDrafts } from "@/features/send-message";
-import { getWorkspace } from "@/shared/api/rest";
+import { getChatSettings, getWorkspace } from "@/shared/api/rest";
 import { API_URL } from "@/shared/config";
 import { useMessageSettingsStore } from "@/features/message-settings";
 import { requestBrowserNotificationPermission, showBrowserNotification } from "@/shared/lib/browser-notification";
@@ -71,6 +71,18 @@ export function startRealtime() {
       });
   };
 
+  /** Brings the agent's saved switches (sounds, AI, auto-assign) from the backend. Runs once, like the workspace. */
+  let settingsLoaded = false;
+  const loadChatSettings = () => {
+    if (settingsLoaded || !API_URL || isMockTransport) return;
+    settingsLoaded = true;
+    void getChatSettings()
+      .then((settings) => useMessageSettingsStore.getState().applyRemote(settings))
+      .catch(() => {
+        settingsLoaded = false; // try again after the next sync
+      });
+  };
+
   const offs = [
     wsClient.onStatus((status) => status === "open" && wsClient.send("sync.request", syncRequest())),
     wsClient.on("sync", (payload) => {
@@ -85,6 +97,7 @@ export function startRealtime() {
       }
       payload.incomplete?.forEach((id) => void catchUp(id));
       loadWorkspace();
+      loadChatSettings();
     }),
     // Another window of this agent changed the workspace.
     wsClient.on("workspace.tab_opened", ({ conversationId }) => useChatTabsStore.getState().add(conversationId)),
@@ -92,6 +105,7 @@ export function startRealtime() {
     wsClient.on("workspace.draft_updated", ({ conversationId, content, updatedAt }) =>
       applyRemoteDraft(conversationId, content, updatedAt),
     ),
+    wsClient.on("chat_settings.updated", ({ settings }) => useMessageSettingsStore.getState().applyRemote(settings)),
     wsClient.on("message.failed", ({ conversationId, clientId, reason }) => {
       messages.getState().setStatus(conversationId, clientId, "failed");
       notify(reason ?? "Message could not be sent");

@@ -1,3 +1,5 @@
+import type { ChatSettings } from "../rest/chat-settings";
+
 export type MessageSide = "customer" | "assistant" | "agent" | "system";
 export type DeliveryStatus = "sending" | "sent" | "delivered" | "read" | "failed";
 export type HandoffStatus = "ai" | "needs-human" | "assigned";
@@ -207,6 +209,8 @@ export type ServerEventMap = {
   /** `content: null` means the draft was deleted. Ignore when `updatedAt` is older than the local edit. */
   "workspace.draft_updated": { conversationId: string; content: string | null; updatedAt: string };
   "workspace.preferences_updated": { preferences: { restoreTabs: boolean; persistTabs: boolean } };
+  /** Another window of this agent changed its chat switches (docs/api-chat-settings.md). */
+  "chat_settings.updated": { settings: ChatSettings };
 };
 
 /** Events the client sends to the server. */
@@ -224,6 +228,14 @@ export type ClientEventMap = {
 };
 
 export type Envelope<T extends string = string, P = unknown> = { type: T; payload: P };
+
+const CHAT_SETTING_KEYS: (keyof ChatSettings)[] = [
+  "typingSoundEnabled",
+  "notificationSoundEnabled",
+  "aiSuggestionsEnabled",
+  "aiSummariesEnabled",
+  "autoAssignEnabled",
+];
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -366,6 +378,11 @@ export function isServerEvent(type: string, payload: unknown): payload is Server
         isRecord(payload.preferences) &&
         typeof payload.preferences.restoreTabs === "boolean" &&
         typeof payload.preferences.persistTabs === "boolean"
+      );
+    case "chat_settings.updated":
+      return (
+        isRecord(payload.settings) &&
+        CHAT_SETTING_KEYS.every((key) => typeof (payload.settings as Record<string, unknown>)[key] === "boolean")
       );
     default:
       return false;
