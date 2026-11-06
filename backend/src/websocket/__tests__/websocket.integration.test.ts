@@ -1,6 +1,6 @@
 import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createTestContainer } from "../../__tests__/support/container.js";
 import { TestClient } from "../../__tests__/support/ws-client.js";
 import { uid } from "../../__tests__/support/ids.js";
@@ -48,7 +48,7 @@ describe.skipIf(!url || !redisUrl)("WebSocket gateway", () => {
   });
 
   beforeEach(async () => {
-    await db.$executeRaw`TRUNCATE conversations, notifications, notification_preferences, tags, agent_presence_history RESTART IDENTITY CASCADE`;
+    await db.$executeRaw`TRUNCATE conversations, notifications, notification_preferences, tags, calls, agent_presence_history RESTART IDENTITY CASCADE`;
     await c.redis.flushdb();
     c.events.length = 0;
     const { conversation } = await c.conversations.create(
@@ -557,6 +557,90 @@ describe.skipIf(!url || !redisUrl)("WebSocket gateway", () => {
       });
       await busy.expectNone("notification.new");
       await creator.expectNone("notification.new");
+    });
+  });
+  describe("call signalling", () => {
+    const owner = { userId: uid(1), role: "AGENT" as const };
+    const sdp = "v=0\r\no=- 1 1 IN IP4 127.0.0.1";
+
+    it("delivers lifecycle events to whoever may see the conversation and answers only to the caller", async () => {
+      await takeOver();
+      const caller = await connect(1);
+      const stranger = await connect(2);
+      const boss = await connect(9, "SUPERVISOR");
+
+      const call = await c.calls.start(owner, cid, { callType: "AUDIO" });
+      await c.calls.acceptByCustomer(uid(100), call.id);
+      const accepted = await caller.waitFor("call.accepted");
+      expect(accepted.call).toMatchObject({ id: call.id, status: "ACTIVE" });
+      await boss.waitFor("call.accepted");
+      await stranger.expectNone("call.accepted");
+
+      // the customer's answer reaches the caller's socket and nobody else's
+      await c.calls.relay({ type: "CUSTOMER", id: uid(100) }, "answer", { callId: call.id, sdp });
+      expect(await caller.waitFor("call.answer")).toEqual({
+        callId: call.id,
+        from: { type: "CUSTOMER", id: uid(100) },
+        sdp,
+      });
+      await boss.expectNone("call.answer");
+      await stranger.expectNone("call.answer");
+
+      await c.calls.relay({ type: "CUSTOMER", id: uid(100) }, "ice_candidate", { callId: call.id, candidate: null });
+      expect((await caller.waitFor("call.ice_candidate")).candidate).toBeNull();
+    });
+
+    it("relays what the caller's socket sends to the customer, and reports problems as error frames", async () => {
+      await takeOver();
+      const caller = await connect(1);
+      const stranger = await connect(2);
+      const call = await c.calls.start(owner, cid, { callType: "AUDIO" });
+
+      caller.send("call.offer", { callId: call.id, sdp });
+      expect(await caller.waitFor("error", (p) => p.event === "call.offer")).toMatchObject({ code: "CONFLICT" }); // not answered yet
+
+      await c.calls.acceptByCustomer(uid(100), call.id);
+      c.events.length = 0;
+      caller.send("call.offer", { callId: call.id, sdp });
+      await vi.waitFor(() => expect(c.published("call.offer")).toHaveLength(1));
+      expect(c.published("call.offer")[0]).toMatchObject({
+        audience: { kind: "users", userIds: [uid(100)] },
+        payload: { callId: call.id, from: { type: "AGENT", id: uid(1) }, sdp },
+      });
+
+      stranger.send("call.offer", { callId: call.id, sdp });
+      expect(await stranger.waitFor("error", (p) => p.event === "call.offer")).toMatchObject({ code: "FORBIDDEN" });
+      caller.send("call.answer", { callId: call.id, sdp });
+      expect(await caller.waitFor("error", (p) => p.event === "call.answer")).toMatchObject({ code: "FORBIDDEN" });
+      caller.send("call.offer", { callId: uid(777), sdp });
+      expect(await caller.waitFor("error", (p) => p.event === "call.offer" && p.code === "NOT_FOUND")).toBeDefined();
+      caller.send("call.offer", { callId: call.id, sdp: "x".repeat(20_001) });
+      expect(await caller.waitFor("error", (p) => p.code === "BAD_REQUEST")).toBeDefined();
+      expect(c.published("call.offer")).toHaveLength(1); // none of the failures relayed anything
+    });
+
+    it("rings the owner and supervisors for a customer's call, not agents who cannot see the conversation", async () => {
+      await takeOver();
+      const ownerSocket = await connect(1);
+      const other = await connect(2);
+      const boss = await connect(9, "SUPERVISOR");
+
+      const call = await c.calls.initiateFromCustomer({ customerId: uid(100), conversationId: cid, callType: "AUDIO" });
+      expect((await ownerSocket.waitFor("call.incoming")).call).toMatchObject({ id: call.id, status: "RINGING" });
+      await boss.waitFor("call.incoming");
+      await other.expectNone("call.incoming");
+
+      // taking the call shows on the other windows so their dialogs close
+      await c.calls.accept(owner, call.id);
+      await boss.waitFor("call.accepted");
+    });
+
+    it("rings every agent while nobody owns the conversation", async () => {
+      const first = await connect(1);
+      const second = await connect(2);
+      await c.calls.initiateFromCustomer({ customerId: uid(100), conversationId: cid, callType: "AUDIO" });
+      await first.waitFor("call.incoming");
+      await second.waitFor("call.incoming");
     });
   });
 });

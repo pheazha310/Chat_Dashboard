@@ -28,6 +28,9 @@ import { PresenceService } from "@modules/presence/presence.service.js";
 import { CallbackRepository } from "@modules/callbacks/callback.repository.js";
 import { CallbackService } from "@modules/callbacks/callback.service.js";
 import { DEFAULT_CALLBACK_OPTIONS, type CallbackOptions } from "@modules/callbacks/callback.types.js";
+import { CallRepository } from "@modules/calls/call.repository.js";
+import { CallService } from "@modules/calls/call.service.js";
+import { DEFAULT_CALL_OPTIONS, type CallOptions, type IceConfig } from "@modules/calls/call.types.js";
 import { ChatSettingsRepository } from "@modules/chat-settings/chat-settings.repository.js";
 import { ChatSettingsService } from "@modules/chat-settings/chat-settings.service.js";
 import { WorkspaceRepository } from "@modules/workspace/workspace.repository.js";
@@ -44,6 +47,10 @@ export function createContainer(
   directory: Directory,
   storage: Storage,
   callbackOptions: CallbackOptions = DEFAULT_CALLBACK_OPTIONS,
+  callConfig: { options: CallOptions; ice: IceConfig } = {
+    options: DEFAULT_CALL_OPTIONS,
+    ice: { stunUrls: [], turnUrls: [], turnTtlSeconds: 3600 },
+  },
 ) {
   // The conversation service reports changes through the realtime service, which reads conversation state back from
   // the conversation service: the function breaks that cycle.
@@ -84,6 +91,14 @@ export function createContainer(
     realtime,
     callbackOptions,
   );
+  const calls = new CallService(
+    new CallRepository(),
+    () => conversations,
+    notifications,
+    realtime,
+    callConfig.options,
+    callConfig.ice,
+  );
   const chatSettings = new ChatSettingsService(new ChatSettingsRepository(), realtime);
   const customers = new CustomerService(new CustomerRepository(), directory, conversations, conversations);
 
@@ -105,6 +120,7 @@ export function createContainer(
     workspace,
     chatSettings,
     callbacks,
+    calls,
   };
 }
 

@@ -41,7 +41,7 @@ export class WebSocketHandler {
     private readonly registry: ConnectionRegistry,
     private readonly typingTtlMs: number = TYPING_TTL_MS,
   ) {
-    const { messages, conversations, assignments, presence, notifications } = services;
+    const { messages, conversations, assignments, presence, notifications, calls } = services;
     this.handlers = {
       "sync.request": (context, payload) => this.sync(context, payload),
       "message.send": async ({ connection, auth }, { conversationId, ...input }) => {
@@ -68,6 +68,10 @@ export class WebSocketHandler {
           ? await notifications.markAllRead(auth)
           : await notifications.markRead(auth, p.notificationId)),
       "presence.set": async ({ auth }, p) => void (await presence.setStatus(auth, p)),
+      "call.offer": async ({ auth }, p) => void (await calls.relay({ type: "AGENT", auth }, "offer", p)),
+      "call.answer": async ({ auth }, p) => void (await calls.relay({ type: "AGENT", auth }, "answer", p)),
+      "call.ice_candidate": async ({ auth }, p) =>
+        void (await calls.relay({ type: "AGENT", auth }, "ice_candidate", p)),
     };
   }
 

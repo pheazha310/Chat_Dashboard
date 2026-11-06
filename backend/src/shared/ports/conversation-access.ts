@@ -13,6 +13,14 @@ export interface ConversationAccess {
   requireVisible(auth: AuthContext, conversationId: string): Promise<AccessibleConversationState>;
 }
 
+/**
+ * For the customer channel (not built yet): resolves a conversation for the customer it belongs to. Customers have no
+ * AuthContext, so this is separate from `requireVisible`. Throws NotFoundError when the conversation is not theirs.
+ */
+export interface CustomerConversationAccess {
+  requireForCustomer(customerId: string, conversationId: string): Promise<AccessibleConversationState>;
+}
+
 /** Batch lookup for views that list several conversations (workspace tabs). */
 export interface ConversationSummaries {
   /** Summaries (with the caller's unread count) of the listed conversations the caller may see; hidden ones are omitted. */

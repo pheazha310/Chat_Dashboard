@@ -5,6 +5,7 @@ import type { AvailableAgents } from "@shared/ports/available-agents.js";
 import type {
   AccessibleConversationState,
   ConversationAccess,
+  CustomerConversationAccess,
   ConversationSummaries,
 } from "@shared/ports/conversation-access.js";
 import type { AgentProfile, Directory } from "@shared/ports/directory.js";
@@ -30,7 +31,7 @@ import type {
 } from "./conversation.types.js";
 import type { ConversationActivity } from "../../../prisma/generated/prisma/client.js";
 
-export class ConversationService implements ConversationAccess, ConversationSummaries {
+export class ConversationService implements ConversationAccess, CustomerConversationAccess, ConversationSummaries {
   constructor(
     private readonly repository: ConversationRepository,
     private readonly systemMessages: SystemMessagePort,
@@ -209,6 +210,14 @@ export class ConversationService implements ConversationAccess, ConversationSumm
 
   async requireVisible(auth: AuthContext, id: string): Promise<AccessibleConversationState> {
     return this.load(auth, id);
+  }
+
+  async requireForCustomer(customerId: string, id: string): Promise<AccessibleConversationState> {
+    const conversation = await this.repository.findForAccess(id, customerId);
+    if (!conversation || conversation.customerId !== customerId) {
+      throw new NotFoundError(`Conversation ${idToString(id)} not found`);
+    }
+    return conversation;
   }
 
   /** A conversation is waiting for a human: tell the agents who are online and AVAILABLE (not the one who opened it). */

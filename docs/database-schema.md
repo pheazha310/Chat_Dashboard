@@ -165,6 +165,7 @@ These were run against a scratch PostgreSQL (48 insert/update/delete cases) and 
 | One open OWNER per conversation; one open membership per participant                                          | partial UNIQUE indexes                                                         |
 | `conversations.assigned_agent_id` always equals the open OWNER row's agent (checked at COMMIT)                | deferred constraint trigger                                                    |
 | One pending escalation per conversation                                                                       | partial UNIQUE index                                                           |
+| At most one open call (ringing or in progress) per conversation                                               | partial UNIQUE index                                                           |
 | `is_edited` agrees with `edited_at`; `deleted_by` needs `deleted_at`; a receipt is read after it is delivered | CHECK                                                                          |
 | A participant joins a call once                                                                               | UNIQUE `(call_id, participant_type, participant_id)`                           |
 | One open presence period per agent                                                                            | partial UNIQUE index                                                           |

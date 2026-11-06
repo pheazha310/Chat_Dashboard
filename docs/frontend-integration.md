@@ -129,6 +129,13 @@ Only with the real backend (`VITE_WS_URL` set); the mock server has no REST, so 
 - `PATCH /workspace/preferences` (`restoreTabs`, `persistTabs`) has a REST client (`shared/api/rest/workspace.ts`) but
   no settings UI yet.
 
+### Calls (FR-26)
+
+Against the real backend the call button starts a real WebRTC call (`features/customer-call/model/live-call.ts`): REST for
+control, the WebSocket for `call.offer`/`call.answer`/`call.ice_candidate`, ICE servers from `GET /calls/config`. With the
+mock transport the old preview dialog stays. Details and limits (no customer channel yet, audio only):
+[api-calls.md](api-calls.md).
+
 ### Callbacks (FR-25)
 
 `features/request-callback` adds a "Callbacks" panel (schedule, mark done, cancel) opened from the chat's more menu, using

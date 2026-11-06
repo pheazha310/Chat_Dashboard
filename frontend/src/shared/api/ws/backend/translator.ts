@@ -182,6 +182,13 @@ export class BackendTranslator {
       case "workspace.draft_updated":
       case "workspace.preferences_updated":
       case "chat_settings.updated":
+      case "call.incoming":
+      case "call.accepted":
+      case "call.declined":
+      case "call.ended":
+      case "call.offer":
+      case "call.answer":
+      case "call.ice_candidate":
         return [{ type: frame.type, payload }];
 
       case "error":

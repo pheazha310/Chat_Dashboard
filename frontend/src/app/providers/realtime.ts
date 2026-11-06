@@ -7,6 +7,15 @@ import { useChatTabsStore } from "@/features/chat-tabs";
 import { applyRemoteDraft, hydrateDrafts } from "@/features/send-message";
 import { getChatSettings, getWorkspace } from "@/shared/api/rest";
 import { API_URL } from "@/shared/config";
+import {
+  onCallAccepted,
+  onCallAnswer,
+  onCallCandidate,
+  onCallDeclined,
+  onCallEnded,
+  onCallIncoming,
+  onCallOffer,
+} from "@/features/customer-call";
 import { useMessageSettingsStore } from "@/features/message-settings";
 import { requestBrowserNotificationPermission, showBrowserNotification } from "@/shared/lib/browser-notification";
 import { notify } from "@/shared/ui";
@@ -106,6 +115,13 @@ export function startRealtime() {
       applyRemoteDraft(conversationId, content, updatedAt),
     ),
     wsClient.on("chat_settings.updated", ({ settings }) => useMessageSettingsStore.getState().applyRemote(settings)),
+    wsClient.on("call.incoming", onCallIncoming),
+    wsClient.on("call.accepted", (payload) => void onCallAccepted(payload)),
+    wsClient.on("call.declined", onCallDeclined),
+    wsClient.on("call.ended", onCallEnded),
+    wsClient.on("call.offer", (payload) => void onCallOffer(payload)),
+    wsClient.on("call.answer", (payload) => void onCallAnswer(payload)),
+    wsClient.on("call.ice_candidate", (payload) => void onCallCandidate(payload)),
     wsClient.on("message.failed", ({ conversationId, clientId, reason }) => {
       messages.getState().setStatus(conversationId, clientId, "failed");
       notify(reason ?? "Message could not be sent");

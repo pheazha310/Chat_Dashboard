@@ -1,3 +1,4 @@
+import type { Call } from "../rest/calls";
 import type { ChatSettings } from "../rest/chat-settings";
 
 export type MessageSide = "customer" | "assistant" | "agent" | "system";
@@ -211,6 +212,21 @@ export type ServerEventMap = {
   "workspace.preferences_updated": { preferences: { restoreTabs: boolean; persistTabs: boolean } };
   /** Another window of this agent changed its chat switches (docs/api-chat-settings.md). */
   "chat_settings.updated": { settings: ChatSettings };
+  /** A customer is calling (docs/api-calls.md). Sent to everyone who may see the conversation. */
+  "call.incoming": { call: Call };
+  /** Someone answered. `by` tells the other windows whether it was them. */
+  "call.accepted": { call: Call; by: { type: "AGENT" | "CUSTOMER"; id: string } };
+  "call.declined": { call: Call; by: { type: "AGENT" | "CUSTOMER"; id: string } };
+  /** `reason`: ended, cancelled, missed or timeout. */
+  "call.ended": { call: Call; reason: string };
+  /** Signalling from the other side of an answered call. `candidate: null` means no more candidates. */
+  "call.offer": { callId: string; from: { type: string; id: string }; sdp: string };
+  "call.answer": { callId: string; from: { type: string; id: string }; sdp: string };
+  "call.ice_candidate": {
+    callId: string;
+    from: { type: string; id: string };
+    candidate: { candidate: string; sdpMid?: string | null; sdpMLineIndex?: number | null } | null;
+  };
 };
 
 /** Events the client sends to the server. */
@@ -225,6 +241,12 @@ export type ClientEventMap = {
   "conversation.unread": { conversationId: string };
   "conversation.takeover": { conversationId: string };
   "callback.request": { conversationId: string };
+  "call.offer": { callId: string; sdp: string };
+  "call.answer": { callId: string; sdp: string };
+  "call.ice_candidate": {
+    callId: string;
+    candidate: { candidate: string; sdpMid?: string | null; sdpMLineIndex?: number | null } | null;
+  };
 };
 
 export type Envelope<T extends string = string, P = unknown> = { type: T; payload: P };
@@ -240,6 +262,8 @@ const CHAT_SETTING_KEYS: (keyof ChatSettings)[] = [
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 const isString = (value: unknown): value is string => typeof value === "string";
+const isCall = (value: unknown): boolean =>
+  isRecord(value) && isString(value.id) && isString(value.conversationId) && isString(value.status);
 const isAgent = (value: unknown): value is AgentDto =>
   isRecord(value) && isString(value.id) && isString(value.name) && isString(value.avatar);
 const isConversation = (value: unknown): value is ConversationDto =>
@@ -383,6 +407,22 @@ export function isServerEvent(type: string, payload: unknown): payload is Server
       return (
         isRecord(payload.settings) &&
         CHAT_SETTING_KEYS.every((key) => typeof (payload.settings as Record<string, unknown>)[key] === "boolean")
+      );
+    case "call.incoming":
+      return isCall(payload.call);
+    case "call.accepted":
+    case "call.declined":
+      return isCall(payload.call) && isRecord(payload.by) && isString(payload.by.id);
+    case "call.ended":
+      return isCall(payload.call) && isString(payload.reason);
+    case "call.offer":
+    case "call.answer":
+      return isString(payload.callId) && isRecord(payload.from) && isString(payload.sdp);
+    case "call.ice_candidate":
+      return (
+        isString(payload.callId) &&
+        isRecord(payload.from) &&
+        (payload.candidate === null || (isRecord(payload.candidate) && isString(payload.candidate.candidate)))
       );
     default:
       return false;

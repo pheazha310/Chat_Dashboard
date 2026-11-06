@@ -115,6 +115,22 @@ describe("workspace events", () => {
     expect(isServerEvent("workspace.preferences_updated", { preferences: { restoreTabs: true } })).toBe(false);
   });
 
+  it("validates call events", () => {
+    const call = { id: "c1", conversationId: "a", status: "RINGING" };
+    const by = { type: "AGENT", id: "u" };
+    expect(isServerEvent("call.incoming", { call })).toBe(true);
+    expect(isServerEvent("call.incoming", { call: { id: "c1" } })).toBe(false);
+    expect(isServerEvent("call.accepted", { call, by })).toBe(true);
+    expect(isServerEvent("call.accepted", { call })).toBe(false);
+    expect(isServerEvent("call.ended", { call, reason: "ended" })).toBe(true);
+    expect(isServerEvent("call.ended", { call })).toBe(false);
+    expect(isServerEvent("call.offer", { callId: "c1", from: by, sdp: "v=0" })).toBe(true);
+    expect(isServerEvent("call.answer", { callId: "c1", from: by })).toBe(false);
+    expect(isServerEvent("call.ice_candidate", { callId: "c1", from: by, candidate: null })).toBe(true);
+    expect(isServerEvent("call.ice_candidate", { callId: "c1", from: by, candidate: { candidate: "x" } })).toBe(true);
+    expect(isServerEvent("call.ice_candidate", { callId: "c1", from: by, candidate: { sdpMid: "0" } })).toBe(false);
+  });
+
   it("validates chat settings changes from another window", () => {
     const settings = {
       typingSoundEnabled: true,

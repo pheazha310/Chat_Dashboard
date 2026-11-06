@@ -27,6 +27,16 @@ export {
   scheduleCallbackRequest,
   type Callback,
 } from "./callbacks";
+export {
+  acceptCallRequest,
+  cancelCallRequest,
+  declineCallRequest,
+  endCallRequest,
+  getCallConfig,
+  startCallRequest,
+  type Call,
+  type CallConfig,
+} from "./calls";
 export { getChatSettings, updateChatSettings, type ChatSettings } from "./chat-settings";
 export {
   deleteMessageRequest,

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { ApplicationsPage, ChatPage } from "@/pages";
-import { CustomerCallDialog } from "@/features/customer-call";
+import { CustomerCallDialog, LiveCallDialog } from "@/features/customer-call";
 import { Toaster } from "@/shared/ui";
 import { startRealtime } from "./providers/realtime";
 
@@ -20,6 +20,7 @@ export default function App() {
         <ChatPage onExpand={() => setExpanded(true)} />
       )}
       <CustomerCallDialog />
+      <LiveCallDialog />
       <Toaster />
     </>
   );

@@ -169,6 +169,11 @@ CREATE UNIQUE INDEX customer_blocks_one_active
   ON customer_blocks (customer_id)
   WHERE unblocked_at IS NULL;
 
+-- A conversation has at most one call that is not over (ringing or in progress).
+CREATE UNIQUE INDEX calls_one_open_per_conversation
+  ON calls (conversation_id)
+  WHERE status IN ('INITIATING', 'RINGING', 'ACTIVE');
+
 -- Call and callback timestamps must be consistent.
 ALTER TABLE calls ADD CONSTRAINT calls_end_after_start CHECK (ended_at IS NULL OR started_at IS NULL OR ended_at >= started_at);
 ALTER TABLE callback_requests ADD CONSTRAINT callback_requests_completed_matches_status CHECK (

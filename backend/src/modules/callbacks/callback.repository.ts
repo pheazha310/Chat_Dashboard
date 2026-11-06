@@ -107,7 +107,7 @@ export class CallbackRepository {
   async claimMissed(overdueBefore: Date, limit: number): Promise<CallbackRow[]> {
     const rows = await this.db.$queryRaw<{ id: string }[]>`
       UPDATE callback_requests SET status = 'MISSED'
-       WHERE id IN (
+       WHERE status = 'PENDING' AND id IN (
          SELECT id FROM callback_requests
           WHERE status = 'PENDING' AND scheduled_at < ${overdueBefore}
           ORDER BY scheduled_at LIMIT ${limit} FOR UPDATE SKIP LOCKED)
@@ -119,7 +119,7 @@ export class CallbackRepository {
   async claimReminders(dueBefore: Date, notBefore: Date, limit: number): Promise<CallbackRow[]> {
     const rows = await this.db.$queryRaw<{ id: string }[]>`
       UPDATE callback_requests SET reminder_sent_at = now()
-       WHERE id IN (
+       WHERE status = 'PENDING' AND reminder_sent_at IS NULL AND id IN (
          SELECT id FROM callback_requests
           WHERE status = 'PENDING' AND reminder_sent_at IS NULL AND assigned_agent_id IS NOT NULL
             AND scheduled_at <= ${dueBefore} AND scheduled_at >= ${notBefore}

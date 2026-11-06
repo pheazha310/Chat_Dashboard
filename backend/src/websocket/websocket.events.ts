@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { assignBody, transferBody, unassignBody } from "@modules/assignments/assignment.schema.js";
 import { statusBody } from "@modules/conversations/conversation.schema.js";
+import { candidateSignal, sdpSignal } from "@modules/calls/call.schema.js";
 import { readBody, sendBody } from "@modules/messages/message.schema.js";
 import { setPresenceBody } from "@modules/presence/presence.schema.js";
 import { idSchema } from "@shared/utils/ids.js";
@@ -35,6 +36,10 @@ export const clientEvents = {
   /** Omit `notificationId` to mark all of the caller's notifications read. */
   "notification.read": z.object({ notificationId: idSchema.optional() }),
   "presence.set": setPresenceBody,
+  /** WebRTC signalling for an answered call (docs/api-calls.md). Sent by the party who is a participant. */
+  "call.offer": sdpSignal,
+  "call.answer": sdpSignal,
+  "call.ice_candidate": candidateSignal,
 } as const;
 
 export type ClientEventName = keyof typeof clientEvents;
