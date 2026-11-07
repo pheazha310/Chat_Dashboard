@@ -78,6 +78,14 @@
     {
       "key": "customerId",
       "value": "00000000-0000-4000-8000-000000000101"
+    },
+    {
+      "key": "customerToken",
+      "value": "dev:00000000-0000-4000-8000-000000000101:CUSTOMER"
+    },
+    {
+      "key": "customerConvId",
+      "value": ""
     }
   ],
   "item": [
@@ -2491,6 +2499,333 @@
             "auth": {
               "type": "noauth"
             }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Mobile (customer) API",
+      "description": "Customer mobile app. Dev auth: Bearer dev:<customerUuid>:CUSTOMER (AUTH_MODE=dev). Run 'Join room' first: it saves the conversation id to {{customerConvId}} (set it from the response). See docs/api-customer-mobile.md.",
+      "item": [
+        {
+          "name": "Join room (find or create)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/customer/conversations/join",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "customer", "conversations", "join"],
+              "query": []
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"applicationId\": \"00000000-0000-4000-8000-000000000201\",\n  \"subject\": \"Question about my loan\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Get conversation",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/customer/conversations/{{customerConvId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "customer", "conversations", "{{customerConvId}}"],
+              "query": []
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Retrieve messages (latest page)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/customer/conversations/{{customerConvId}}/messages",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "customer", "conversations", "{{customerConvId}}", "messages"],
+              "query": []
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Send text message",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/customer/conversations/{{customerConvId}}/messages",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "customer", "conversations", "{{customerConvId}}", "messages"],
+              "query": []
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientId\": \"mobile-1\",\n  \"text\": \"Hello, I need help with my loan\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Send file (pdf, image...)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/customer/conversations/{{customerConvId}}/files",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "customer", "conversations", "{{customerConvId}}", "files"],
+              "query": []
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "clientId",
+                  "value": "mobile-file-1",
+                  "type": "text"
+                },
+                {
+                  "key": "text",
+                  "value": "My ID card",
+                  "type": "text"
+                },
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Send voice message",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/customer/conversations/{{customerConvId}}/voice-messages",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "customer", "conversations", "{{customerConvId}}", "voice-messages"],
+              "query": []
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "clientId",
+                  "value": "mobile-voice-1",
+                  "type": "text"
+                },
+                {
+                  "key": "durationMs",
+                  "value": "4200",
+                  "type": "text"
+                },
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Download a file",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/customer/attachments/{{attachmentId}}/download",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "customer", "attachments", "{{attachmentId}}", "download"],
+              "query": []
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Play a voice message",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/customer/messages/{{msgId}}/audio",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "customer", "messages", "{{msgId}}", "audio"],
+              "query": []
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Who am I (customer)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/customer/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "customer", "me"],
+              "query": []
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "My conversations (customer)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/customer/me/conversations",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "customer", "me", "conversations"],
+              "query": []
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Profile (me)",
+      "item": [
+        {
+          "name": "Who am I (agent)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/agents/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "agents", "me"],
+              "query": []
+            },
+            "description": "The signed-in staff user and their availability."
+          }
+        },
+        {
+          "name": "My conversations (agent)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/agents/me/conversations",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "agents", "me", "conversations"],
+              "query": []
+            },
+            "description": "Conversations the agent owns; inbox filters except `filter`."
           }
         }
       ]

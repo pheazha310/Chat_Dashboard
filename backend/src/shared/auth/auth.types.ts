@@ -8,6 +8,8 @@ export const DASHBOARD_ROLES: readonly Role[] = ["AGENT", "SUPERVISOR", "ADMIN"]
 export interface AuthContext {
   userId: string;
   role: Role;
+  /** This backend's own id for the user (`chat_users.id`), set once the identity is mapped. Other tables still key on `userId`. */
+  chatUserId?: string;
 }
 
 /**

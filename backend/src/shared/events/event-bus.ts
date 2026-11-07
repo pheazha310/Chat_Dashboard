@@ -17,6 +17,8 @@ export interface ConversationVisibility {
   handoffStatus: string;
   assignedAgentId: string | null;
   viewerIds: string[];
+  /** The customer the conversation belongs to. Customer sockets receive only their own conversations' events. */
+  customerId?: string | null;
 }
 
 export interface BusEvent {

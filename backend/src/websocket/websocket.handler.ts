@@ -16,9 +16,18 @@ import {
   type ClientEventName,
   type ClientPayload,
 } from "./websocket.events.js";
-import { sendTo, type Connection, type ConnectionRegistry } from "./websocket.rooms.js";
+import { isCustomer, sendTo, type Connection, type ConnectionRegistry } from "./websocket.rooms.js";
 
 type Context = { connection: Connection; auth: AuthContext };
+
+/** What a customer's socket may send. Everything else is dashboard-only and refused with FORBIDDEN. */
+const CUSTOMER_COMMANDS: ReadonlySet<string> = new Set([
+  "room.join",
+  "room.leave",
+  "message.send",
+  "typing.start",
+  "typing.stop",
+]);
 type Handlers = { [K in ClientEventName]?: (context: Context, payload: ClientPayload<K>) => Promise<void> };
 
 const toError = (error: unknown): { code: string; message: string } => {
@@ -44,7 +53,27 @@ export class WebSocketHandler {
     const { messages, conversations, assignments, presence, notifications, calls } = services;
     this.handlers = {
       "sync.request": (context, payload) => this.sync(context, payload),
+      "room.join": (context, p) => this.joinRoom(context, p.conversationId),
+      "room.leave": async ({ connection }, p) => {
+        connection.rooms.delete(p.conversationId);
+        sendTo(connection, "room.left", { conversationId: p.conversationId });
+      },
       "message.send": async ({ connection, auth }, { conversationId, ...input }) => {
+        if (isCustomer(auth)) {
+          // The same service the mobile REST API calls: one persistence path, whatever the transport.
+          const { message, created } = await messages.receiveFromCustomer({
+            customerId: auth.userId,
+            conversationId,
+            clientId: input.clientId,
+            text: input.text,
+            origin: connection.id,
+          });
+          return void sendTo(connection, "message.ack", {
+            clientId: message.clientId,
+            created,
+            message: { ...message, metadata: null },
+          });
+        }
         const { message, created } = await messages.send(auth, conversationId, input, connection.id);
         sendTo(connection, "message.ack", { clientId: message.clientId, created, message });
       },
@@ -88,13 +117,14 @@ export class WebSocketHandler {
   async closed(connection: Connection) {
     this.registry.remove(connection);
     const { auth } = connection;
+    connection.rooms.clear();
     if (!auth) return;
     for (const [conversation, timer] of connection.typing) {
       clearTimeout(timer);
       await this.publishTyping(connection, auth, conversation, false);
     }
     connection.typing.clear();
-    await this.services.presence.disconnect(auth, connection.id);
+    if (!isCustomer(auth)) await this.services.presence.disconnect(auth, connection.id);
   }
 
   private async process(connection: Connection, raw: string) {
@@ -123,6 +153,13 @@ export class WebSocketHandler {
     }
 
     const context: Context = { connection, auth: connection.auth };
+    if (isCustomer(connection.auth) && !CUSTOMER_COMMANDS.has(type)) {
+      return void sendTo(connection, "error", {
+        code: "FORBIDDEN",
+        message: "Not available on a customer connection",
+        event: type,
+      });
+    }
     try {
       const parsed = clientEvents[type].parse(payload ?? {});
       const handler = this.handlers[type] as ((c: Context, p: unknown) => Promise<void>) | undefined;
@@ -141,7 +178,7 @@ export class WebSocketHandler {
       const { token, reconnect } = clientEvents.auth.parse(payload);
       const auth = await authenticateSocket(this.authClient, token);
       connection.auth = auth;
-      await this.services.presence.connect(auth, connection.id);
+      if (!isCustomer(auth)) await this.services.presence.connect(auth, connection.id);
       sendTo(connection, reconnect ? "connection.reconnected" : "connection.authenticated", {
         connectionId: connection.id,
         userId: idToString(auth.userId),
@@ -156,6 +193,16 @@ export class WebSocketHandler {
 
   private reportFailure(connection: Connection, type: string, payload: unknown, error: unknown) {
     const { code, message } = toError(error);
+    if (type === "room.join" || type === "room.leave") {
+      const raw = (payload ?? {}) as Record<string, unknown>;
+      sendTo(connection, "room.error", {
+        event: type,
+        conversationId: typeof raw.conversationId === "string" ? raw.conversationId : null,
+        code,
+        message,
+      });
+      return;
+    }
     if (type === "message.send") {
       // A failed send names the clientId so the client can mark exactly that optimistic message as failed.
       const raw = (payload ?? {}) as Record<string, unknown>;
@@ -222,6 +269,16 @@ export class WebSocketHandler {
     });
   }
 
+  /** Joins a room after the same access check REST uses, then reports where the client's history should resume. */
+  private async joinRoom({ connection, auth }: Context, conversationId: string) {
+    const { conversations } = this.services;
+    const { lastSequenceNumber } = isCustomer(auth)
+      ? await conversations.getForCustomer(auth.userId, conversationId)
+      : await conversations.get(auth, conversationId);
+    connection.rooms.add(conversationId);
+    sendTo(connection, "room.joined", { conversationId, lastSequenceNumber });
+  }
+
   private async typing({ connection, auth }: Context, conversationId: string, active: boolean) {
     const key = conversationId.toString();
     const existing = connection.typing.get(key);
@@ -232,7 +289,8 @@ export class WebSocketHandler {
       return this.publishTyping(connection, auth, conversationId, false);
     }
 
-    await this.services.conversations.assertCanType(auth, conversationId);
+    if (isCustomer(auth)) await this.services.conversations.requireForCustomer(auth.userId, conversationId);
+    else await this.services.conversations.assertCanType(auth, conversationId);
     if (existing) clearTimeout(existing);
     else await this.publishTyping(connection, auth, conversationId, true);
     // The indicator ends by itself if the client stops sending (closed tab, lost connection, forgot to send stop).
@@ -246,7 +304,13 @@ export class WebSocketHandler {
 
   private async publishTyping(connection: Connection, auth: AuthContext, conversationId: string, active: boolean) {
     try {
-      await this.services.realtime.typing(conversationId, auth.userId, active, connection.id);
+      await this.services.realtime.typing(
+        conversationId,
+        auth.userId,
+        active,
+        connection.id,
+        isCustomer(auth) ? "customer" : "agent",
+      );
     } catch (error) {
       logger.warn({ err: error }, "typing event failed");
     }

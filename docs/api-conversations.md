@@ -123,3 +123,13 @@ Example: `POST /api/v1/admin/conversations/12/assign` with `{}` as agent 1 →
   }
 }
 ```
+
+## Who am I and my conversations (agent)
+
+`GET /api/v1/admin/agents/me` returns the signed-in staff user: `userId` (the Backend 1 id), `chatUserId` (this
+backend's own id, see `chat_users` in [database-schema.md](database-schema.md)), `role`, `profile` (name and avatar from
+Backend 1, `null` if unreachable) and `availability` (the chosen status while online, otherwise `OFFLINE`; change it with
+`PUT /presence/me`). `GET /api/v1/admin/agents/me/conversations` is the inbox with the `mine` filter fixed: the
+conversations the agent owns, with the other inbox filters (`status`, `priority`, `tag`, `tags`, `sort`, `q`, `page`,
+`size`). There is no separate "list agents" or availability endpoint: `GET /presence` lists agents who are online and
+`PUT /presence/me` sets availability; a full agent directory needs Backend 1's contract.

@@ -34,10 +34,12 @@ const repo = {
 };
 const notifications = { notifyAgent: vi.fn() };
 const realtime = fakeRealtime();
+const guard = { isBlocked: vi.fn(), matchedKeywords: vi.fn() };
 const service = new MessageService(
   fromPartial<MessageRepository>(repo),
   fromPartial<NotificationService>(notifications),
   realtime,
+  () => guard,
 );
 
 const owner: AuthContext = { userId: uid(1), role: "AGENT" };
@@ -329,5 +331,78 @@ describe("markUnread / markDelivered", () => {
     repo.findById.mockResolvedValue(null);
     await expect(service.markDelivered(owner, uid(10), uid(50))).rejects.toBeInstanceOf(NotFoundError);
     await expect(service.markDelivered(other, uid(10), uid(50))).rejects.toBeInstanceOf(NotFoundError); // hidden chat
+  });
+});
+
+describe("receiveFileFromCustomer", () => {
+  const input = {
+    customerId: uid(100),
+    conversationId: uid(10),
+    clientId: "cf1",
+    messageType: "IMAGE",
+    preview: "Photo: a.png",
+    attachment: {
+      storageKey: "k",
+      fileName: "a.png",
+      mimeType: "image/png",
+      fileSize: 3,
+      checksumSha256: "0".repeat(64),
+    },
+  };
+  const stored = () => msg({ senderType: "CUSTOMER", senderId: uid(100), clientId: "cf1", messageType: "IMAGE" });
+
+  it("stores a CUSTOMER message with the file attributed to the customer, and notifies the owner", async () => {
+    repo.append.mockResolvedValue(stored());
+    repo.addAttachment.mockResolvedValue({
+      id: uid(60),
+      conversationId: uid(10),
+      uploadedByType: "CUSTOMER",
+      uploadedById: uid(100),
+      fileName: "a.png",
+      mimeType: "image/png",
+      fileSize: 3n,
+      durationMs: null,
+      waveform: null,
+      createdAt: at,
+    });
+    const result = await service.receiveFileFromCustomer(input);
+    expect(result.created).toBe(true);
+    expect(result.message.attachments).toHaveLength(1);
+    expect(repo.append).toHaveBeenCalledWith(
+      expect.objectContaining({ senderType: "CUSTOMER", senderId: uid(100), preview: "Photo: a.png" }),
+    );
+    expect(repo.addAttachment).toHaveBeenCalledWith(
+      expect.objectContaining({ uploadedByType: "CUSTOMER", uploadedById: uid(100), messageId: uid(50) }),
+    );
+    expect(notifications.notifyAgent).toHaveBeenCalledWith(expect.objectContaining({ agentId: uid(1) }));
+    expect(realtime.messageCreated).toHaveBeenCalled();
+  });
+
+  it("refuses a blocked customer before touching the database", async () => {
+    guard.isBlocked.mockResolvedValue(true);
+    await expect(service.receiveFileFromCustomer(input)).rejects.toBeInstanceOf(ForbiddenError);
+    expect(repo.inTransaction).not.toHaveBeenCalled();
+  });
+
+  it("is idempotent, and rejects another customer's conversation", async () => {
+    repo.findByClientId.mockResolvedValue(stored());
+    repo.attachmentsFor.mockResolvedValue(new Map());
+    expect((await service.receiveFileFromCustomer(input)).created).toBe(false);
+    expect(repo.addAttachment).not.toHaveBeenCalled();
+    expect(realtime.messageCreated).not.toHaveBeenCalled();
+    await expect(service.receiveFileFromCustomer({ ...input, customerId: uid(999) })).rejects.toBeInstanceOf(
+      NotFoundError,
+    );
+  });
+});
+
+describe("historyForCustomer", () => {
+  it("leaves SYSTEM messages out and never sends metadata", async () => {
+    repo.history.mockResolvedValue({ items: [msg({ metadata: { agentId: uid(1) } as never })], hasMore: false });
+    repo.reactionsFor.mockResolvedValue(new Map());
+    repo.attachmentsFor.mockResolvedValue(new Map());
+    const result = await service.historyForCustomer(uid(10), { limit: 10 });
+    expect(repo.history).toHaveBeenCalledWith(uid(10), { limit: 10 }, { excludeSystem: true });
+    expect(result.items[0]?.metadata).toBeNull();
   });
 });

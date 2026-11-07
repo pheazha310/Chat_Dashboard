@@ -1,6 +1,9 @@
 import { env } from "@config/env.js";
 import { redis } from "@config/redis.js";
 import { LocalStorage } from "@shared/storage/local-storage.js";
+import { createAuthClient } from "@shared/auth/auth.js";
+import { MappedAuthClient } from "@shared/auth/mapped-auth-client.js";
+import { ChatIdentityRepository, ChatIdentityService } from "@modules/chat-identity/index.js";
 import { createDirectory } from "@shared/directory/directory.js";
 import { createContainer } from "./container.js";
 import { MemoryEventBus, RedisEventBus } from "./websocket/websocket.bus.js";
@@ -32,4 +35,10 @@ export const container = createContainer(
       turnCredential: env.CALL_TURN_CREDENTIAL,
     },
   },
+);
+
+/** Verifies tokens with Backend 1, then maps the identity to a chat user. Shared by REST and the WebSocket gateway. */
+export const authClient = new MappedAuthClient(
+  createAuthClient(),
+  new ChatIdentityService(new ChatIdentityRepository()),
 );

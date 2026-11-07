@@ -24,6 +24,8 @@ const repo = {
   findManyForAccess: vi.fn(),
   findForEvent: vi.fn(),
   findByApplication: vi.fn(),
+  findOpenForCustomer: vi.fn(),
+  listForCustomer: vi.fn(),
   lockCustomer: vi.fn(),
   create: vi.fn(),
   addCustomerParticipant: vi.fn(),
@@ -143,7 +145,12 @@ describe("assigned agent profile", () => {
     repo.findForEvent.mockResolvedValue({ conversation: row(), viewerIds: [uid(4)] });
     const snapshot = await service.snapshot(uid(10));
     expect(snapshot?.conversation.assignedAgent?.name).toBe("Sarah Chen");
-    expect(snapshot?.audience).toEqual({ handoffStatus: "ASSIGNED", assignedAgentId: uid(1), viewerIds: [uid(4)] });
+    expect(snapshot?.audience).toEqual({
+      handoffStatus: "ASSIGNED",
+      assignedAgentId: uid(1),
+      viewerIds: [uid(4)],
+      customerId: uid(100),
+    });
     expect(snapshot?.conversation).not.toHaveProperty("unreadCount");
   });
 });
@@ -380,3 +387,93 @@ describe("activities", () => {
 function supervisorLike() {
   return supervisor;
 }
+
+describe("joinForCustomer", () => {
+  const customer = uid(100);
+
+  beforeEach(() => {
+    repo.inTransaction.mockImplementation((fn: (tx: unknown) => unknown) => fn(repo));
+    repo.findByApplication.mockResolvedValue(null);
+    repo.findOpenForCustomer.mockResolvedValue(null);
+    repo.create.mockResolvedValue(row({ id: uid(11), assignedAgentId: null, handoffStatus: "NEEDS_HUMAN" }));
+    repo.findForAccess.mockResolvedValue(row({ id: uid(11), assignedAgentId: null }));
+    availableAgents.availableAgentIds.mockResolvedValue([uid(1)]);
+    realtime.conversationEvent.mockResolvedValue(undefined);
+    notifications.notifyAgent.mockResolvedValue(true);
+  });
+
+  it("creates a customer-owned conversation that waits for a human, and tells the available agents", async () => {
+    const result = await service.joinForCustomer(customer, { applicationId: uid(200), subject: "Loan" });
+    expect(result.created).toBe(true);
+    expect(repo.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        customerId: customer,
+        applicationId: uid(200),
+        createdByType: "CUSTOMER",
+        createdById: customer,
+        conversationMode: "HUMAN",
+        handoffStatus: "NEEDS_HUMAN",
+      }),
+    );
+    expect(repo.addCustomerParticipant).toHaveBeenCalledWith(uid(11), customer);
+    expect(notifications.notifyAgent).toHaveBeenCalledWith(
+      expect.objectContaining({ agentId: uid(1), type: "NEW_CONVERSATION" }),
+    );
+  });
+
+  it("returns the customer-safe shape: no agent id, priority or tags", async () => {
+    const { conversation } = await service.joinForCustomer(customer, {});
+    expect(conversation).toEqual({
+      id: uid(11),
+      applicationId: null,
+      subject: null,
+      status: "OPEN",
+      agentAssigned: false,
+      lastMessageAt: now.toISOString(),
+      lastMessagePreview: "hi",
+      lastSequenceNumber: "3",
+      createdAt: now.toISOString(),
+    });
+  });
+
+  it("joins the existing conversation of the application instead of creating another", async () => {
+    repo.findByApplication.mockResolvedValue(row({ id: uid(12), customerId: customer }));
+    repo.findForAccess.mockResolvedValue(row({ id: uid(12), customerId: customer }));
+    const result = await service.joinForCustomer(customer, { applicationId: uid(200) });
+    expect(result).toMatchObject({ created: false, conversation: { id: uid(12), agentAssigned: true } });
+    expect(repo.create).not.toHaveBeenCalled();
+    expect(notifications.notifyAgent).not.toHaveBeenCalled();
+  });
+
+  it("without an application, reuses the latest open conversation", async () => {
+    repo.findOpenForCustomer.mockResolvedValue(row({ id: uid(13), customerId: customer }));
+    repo.findForAccess.mockResolvedValue(row({ id: uid(13), customerId: customer }));
+    expect((await service.joinForCustomer(customer, {})).created).toBe(false);
+    expect(repo.findOpenForCustomer).toHaveBeenCalledWith(customer);
+  });
+
+  it("does not reveal that an application belongs to another customer", async () => {
+    repo.findByApplication.mockResolvedValue(row({ customerId: uid(999) }));
+    await expect(service.joinForCustomer(customer, { applicationId: uid(200) })).rejects.toBeInstanceOf(NotFoundError);
+    expect(repo.create).not.toHaveBeenCalled();
+  });
+});
+
+describe("getForCustomer", () => {
+  it("is 404 for a conversation that belongs to someone else", async () => {
+    repo.findForAccess.mockResolvedValue(row({ customerId: uid(999) }));
+    await expect(service.getForCustomer(uid(100), uid(10))).rejects.toBeInstanceOf(NotFoundError);
+  });
+});
+
+describe("listForCustomer", () => {
+  it("returns the customer-safe shape with page meta", async () => {
+    repo.listForCustomer.mockResolvedValue({ items: [row({ assignedAgentId: null })], total: 1 });
+    const { items, meta } = await service.listForCustomer(uid(100), { page: 1, size: 25 });
+    expect(repo.listForCustomer).toHaveBeenCalledWith(uid(100), { page: 1, size: 25 });
+    expect(items[0]).toMatchObject({ id: uid(10), agentAssigned: false, lastSequenceNumber: "3" });
+    expect(items[0]).not.toHaveProperty("assignedAgentId");
+    expect(items[0]).not.toHaveProperty("priority");
+    expect(meta).toMatchObject({ total: 1, page: 1, size: 25 });
+  });
+});

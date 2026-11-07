@@ -12,6 +12,60 @@ export interface Connection {
   typing: Map<string, NodeJS.Timeout>;
   /** Frames are handled one at a time, in arrival order. */
   queue: Promise<void>;
+  /** Conversations this socket joined (`room.join`). A customer socket only receives events of joined rooms. */
+  rooms: Set<string>;
+}
+
+export const isCustomer = (auth: AuthContext) => auth.role === "CUSTOMER";
+
+/** The only events a customer socket may receive. Everything else (notes, tags, assignments, presence...) is staff-only. */
+const CUSTOMER_EVENTS = new Set([
+  "message.new",
+  "message.status",
+  "message.updated",
+  "message.deleted",
+  "attachment.uploaded",
+  "attachment.deleted",
+  "typing",
+]);
+
+type Loose = { [key: string]: unknown };
+const asObject = (value: unknown): Loose => (typeof value === "object" && value !== null ? (value as Loose) : {});
+
+/** The conversation an event is about, wherever its payload carries the id. */
+function conversationOf(payload: unknown): string | undefined {
+  const p = asObject(payload);
+  const nested = asObject(p.message).conversationId ?? asObject(p.attachment).conversationId;
+  const id = p.conversationId ?? nested;
+  return typeof id === "string" ? id : undefined;
+}
+
+/**
+ * What a customer socket receives for an event, or null. Rules: only whitelisted events, only the customer's own
+ * conversation, only after `room.join`, and never internal data: SYSTEM messages are dropped, `metadata` is removed
+ * and typing does not reveal the agent's id.
+ */
+export function customerView(event: BusEvent, connection: Connection): { type: string; payload: unknown } | null {
+  const { auth } = connection;
+  const { audience } = event;
+  if (!auth || !CUSTOMER_EVENTS.has(event.type) || audience.kind !== "conversation") return null;
+  if (!audience.customerId || audience.customerId !== auth.userId) return null;
+  const conversationId = conversationOf(event.payload);
+  if (!conversationId || !connection.rooms.has(conversationId)) return null;
+
+  const payload = asObject(event.payload);
+  if (event.type === "message.new" || event.type === "message.updated") {
+    const message = asObject(payload.message);
+    if (message.senderType === "SYSTEM") return null;
+    return { type: event.type, payload: { ...payload, message: { ...message, metadata: null } } };
+  }
+  if (event.type === "typing") {
+    // Only the agent's typing matters to the customer, and their id stays internal.
+    if (payload.side !== "agent") return null;
+    const { userId: _internal, ...rest } = payload;
+    return { type: event.type, payload: rest };
+  }
+  return { type: event.type, payload: event.payload };
 }
 
 const MAX_BUFFERED_BYTES = 4 * 1024 * 1024;
@@ -21,6 +75,7 @@ const MAX_BUFFERED_BYTES = 4 * 1024 * 1024;
  * evaluated against the conversation state carried in the event, so nothing leaks to agents who could not open it.
  */
 export function canReceive(audience: Audience, auth: AuthContext): boolean {
+  if (isCustomer(auth)) return false; // customers are served by `customerView`
   const userId = auth.userId.toString();
   switch (audience.kind) {
     case "dashboard":
@@ -84,7 +139,12 @@ export class ConnectionRegistry {
   deliver(event: BusEvent) {
     for (const connection of this.connections.values()) {
       if (!connection.auth || connection.id === event.except) continue;
-      if (canReceive(event.audience, connection.auth)) sendTo(connection, event.type, event.payload);
+      if (isCustomer(connection.auth)) {
+        const view = customerView(event, connection);
+        if (view) sendTo(connection, view.type, view.payload);
+      } else if (canReceive(event.audience, connection.auth)) {
+        sendTo(connection, event.type, event.payload);
+      }
     }
   }
 }

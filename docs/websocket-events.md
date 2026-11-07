@@ -12,7 +12,8 @@ Event names are dotted (`message.send`); the colon names in the original brief m
 1. Open `ws://host/ws`. Browsers send an `Origin` header; it must be in `CORS_ORIGIN` or the upgrade is refused (401).
 2. The server sends `connection.established` `{ connectionId, authTimeoutMs }`.
 3. Within `authTimeoutMs` (10 s) the client sends `auth` `{ token, reconnect? }`. The token is verified through the
-   `AuthClient` (Backend 1; `dev:<userUuid>:<ROLE>` in dev). Only `AGENT`, `SUPERVISOR`, `ADMIN` are accepted.
+   `AuthClient` (Backend 1; `dev:<userUuid>:<ROLE>` in dev). `AGENT`, `SUPERVISOR`, `ADMIN` get the dashboard events; `CUSTOMER` (the mobile app) gets the restricted set in
+   [Customer connections](#customer-connections).
 4. Reply `connection.authenticated` (or `connection.reconnected` when `reconnect: true`) `{ connectionId, userId, role }`.
 5. Failures: `error` then close `4401` (missing/invalid token, timeout, any event before `auth`) or `4403` (role not
    allowed). An oversized frame closes with `1009`; binary frames are refused.
@@ -99,6 +100,26 @@ conversation they could not open. Supervisors see everything. "Owner's sessions"
 for each `message.new` from someone else in a chat they are not viewing, and replace it with the authoritative value on
 `conversation.read`, `sync`, or any REST response.
 
+### Customer connections
+
+The mobile app uses the same `/ws` and the same frame format with a `CUSTOMER` token (dev: `dev:<uuid>:CUSTOMER`).
+
+- **Allowed client events:** `room.join`, `room.leave`, `message.send`, `typing.start`, `typing.stop`. Anything else
+  answers `error` `FORBIDDEN`. `sync.request` is not available: catch up over REST (`GET /api/v1/customer/conversations/:id/messages?after=`).
+- **Rooms.** `room.join` `{ conversationId }` checks that the conversation is the customer's own and replies
+  `room.joined` `{ conversationId, lastSequenceNumber }` (resume history after that number), or `room.error`
+  `{ event, conversationId, code, message }`. `room.leave` replies `room.left`. A customer socket only receives events
+  of rooms it joined, and re-joins after a reconnect. Agents may send `room.join` too (same replies, staff access
+  check); it does not change what agents receive.
+- **`message.send`** takes the same payload as for agents but is stored through the customer path (same rules as
+  `POST /api/v1/customer/conversations/:id/messages`: blocked customers, reopen, idempotent `clientId`). Reply
+  `message.ack`, or `message.failed`. Files and voice are sent over REST; they arrive as `message.new`.
+- **Events a customer receives** (own conversation, joined room only): `message.new`, `message.updated`,
+  `message.deleted`, `message.status`, `attachment.uploaded`, `attachment.deleted`, and `typing` for the agent (with
+  `side: "agent"`, without the agent's id). Never: notes, tags, assignments, priority, escalations, presence, moderation,
+  `conversation.*`. SYSTEM messages are not delivered and `metadata` is always `null`.
+- Customers do not take part in agent presence, and agents see the customer's typing as `typing` with `side: "customer"`.
+
 ### Typing
 
 `typing.start` is announced once; repeating it only extends the indicator. It ends on `typing.stop`, after 5 s without
@@ -109,7 +130,7 @@ another `typing.start`, or when the socket closes. Nothing is stored.
 An agent is `OFFLINE` without an open socket, otherwise the status they chose (default `AVAILABLE`, remembered across
 sessions). Going online/offline is announced only for the first/last socket. Live state is in Redis, history in
 `agent_presence_history`. If Redis is down, presence is skipped and connections still work. Customer presence is not
-available (no customer channel yet).
+available.
 
 ## Reconnection and synchronization
 

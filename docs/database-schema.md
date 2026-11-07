@@ -106,13 +106,22 @@ and `customer_identifier` are snapshots kept so the inbox can be searched and so
 
 ### Callbacks, calls, moderation, mobile and workspace
 
-| Table                                                                                                | Purpose                                                                                                                                                                                                                          |
-| ---------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `callback_requests`                                                                                  | `scheduled_at`, `assigned_agent_id`, `created_by`, `status`, `notes`, `completion_note`, `reminder_sent_at`, `completed_at`.                                                                                                     |
-| `calls`, `call_participants`                                                                         | Call history: `call_type`, `status`, `started_at`, `ended_at`; participants with join/leave times. Media is not stored.                                                                                                          |
-| `spam_reports`, `customer_blocks`, `blocked_keywords`, `moderation_activities`                       | Spam reports (optionally of a message), customer blocks (one active per customer), keyword rules (unique ignoring case) and a moderation audit log.                                                                              |
-| `push_devices`                                                                                       | FCM/APNs tokens for a `user_id` (external `users.id`, customer or agent): `platform`, `device_token`, `is_active`; unique `(platform, device_token)`.                                                                            |
-| `workspace_preferences`, `workspace_open_conversations`, `conversation_drafts`, `user_chat_settings` | Per-agent layout JSON (and tab preferences), restorable open tabs, unsent composer drafts per agent and conversation; per-user chat switches (typing and notification sounds, AI suggestions and summaries, auto-assign opt-in). |
+| Table                                                                                                | Purpose                                                                                                                                                                                                                                 |
+| ---------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `callback_requests`                                                                                  | `scheduled_at`, `assigned_agent_id`, `created_by`, `status`, `notes`, `completion_note`, `reminder_sent_at`, `completed_at`.                                                                                                            |
+| `calls`, `call_participants`                                                                         | Call history: `call_type`, `status`, `started_at`, `ended_at`; participants with join/leave times. Media is not stored.                                                                                                                 |
+| `spam_reports`, `customer_blocks`, `blocked_keywords`, `moderation_activities`                       | Spam reports (optionally of a message), customer blocks (one active per customer), keyword rules (unique ignoring case) and a moderation audit log.                                                                                     |
+| `push_devices`                                                                                       | FCM/APNs tokens for a `user_id` (external `users.id`, customer or agent): `platform`, `device_token`, `is_active`; unique `(platform, device_token)`.                                                                                   |
+| `workspace_preferences`, `workspace_open_conversations`, `conversation_drafts`, `user_chat_settings` | Per-agent layout JSON (and tab preferences), restorable open tabs, unsent composer drafts per agent and conversation; per-user chat switches (typing and notification sounds, AI suggestions and summaries, auto-assign opt-in).        |
+| `chat_users`                                                                                         | Identity mapping: `(user_type, external_id)` (the Backend 1 id) to this backend's own `id`, with `role` and `status` (`ACTIVE`/`DISABLED`). Created on first sign-in from the verified token; other tables still store the external id. |
+
+## Chat identity (`chat_users`)
+
+Every verified token is mapped to a `chat_users` row (`MappedAuthClient`, used by REST and the WebSocket): looked up by
+`(CUSTOMER|STAFF, Backend 1 id)` and created on first sign-in, with the role refreshed on each sign-in. `AuthContext.chatUserId`
+carries the internal id. The identity always comes from the verified token, never from the request, and never from the
+email. Setting `status = 'DISABLED'` refuses that user on REST and `/ws` (within 60 s, the mapping cache time); there is no
+admin endpoint for it yet, so it is an SQL update. This backend still issues no tokens.
 
 ## Value sets (proposed)
 

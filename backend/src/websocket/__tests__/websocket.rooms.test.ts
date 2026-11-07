@@ -55,7 +55,14 @@ describe("canReceive", () => {
 describe("ConnectionRegistry.deliver", () => {
   const connection = (id: string, auth?: AuthContext) => {
     const socket = { OPEN: 1, readyState: 1, bufferedAmount: 0, send: vi.fn(), terminate: vi.fn() };
-    return { id, auth, socket, typing: new Map(), queue: Promise.resolve() } as unknown as Connection & {
+    return {
+      id,
+      auth,
+      socket,
+      typing: new Map(),
+      queue: Promise.resolve(),
+      rooms: new Set<string>(),
+    } as unknown as Connection & {
       socket: { send: ReturnType<typeof vi.fn>; terminate: ReturnType<typeof vi.fn>; bufferedAmount: number };
     };
   };
@@ -116,5 +123,90 @@ describe("ConnectionRegistry.deliver", () => {
     expect(owner1.socket.send).toHaveBeenCalledTimes(1);
     expect(owner2.socket.send).toHaveBeenCalledTimes(1);
     expect(stranger.socket.send).not.toHaveBeenCalled();
+  });
+});
+
+describe("customer sockets", () => {
+  const customer: AuthContext = { userId: uid(100), role: "CUSTOMER" };
+  const convId = uid(10);
+  const make = (auth: AuthContext, rooms: string[] = []) => {
+    const socket = { OPEN: 1, readyState: 1, bufferedAmount: 0, send: vi.fn(), terminate: vi.fn() };
+    return {
+      id: "c",
+      auth,
+      socket,
+      typing: new Map(),
+      queue: Promise.resolve(),
+      rooms: new Set(rooms),
+    } as unknown as Connection & {
+      socket: { send: ReturnType<typeof vi.fn> };
+    };
+  };
+  const own = conversation({ customerId: uid(100) });
+  const event = (type: string, payload: unknown, audience: Audience = own) => ({ type, payload, audience });
+  const sent = (c: { socket: { send: ReturnType<typeof vi.fn> } }) =>
+    c.socket.send.mock.calls.map((call) => JSON.parse(call[0] as string) as { type: string; payload: any });
+  const deliver = (c: Connection, e: ReturnType<typeof event>) => {
+    const registry = new ConnectionRegistry();
+    registry.add(c);
+    registry.deliver(e);
+  };
+
+  it("never goes through the staff rule", () => {
+    expect(canReceive(conversation(), customer)).toBe(false);
+    expect(canReceive({ kind: "dashboard" }, customer)).toBe(false);
+  });
+
+  it("receives a message of its own conversation only after joining the room", () => {
+    const message = { id: uid(50), conversationId: convId, senderType: "AGENT", metadata: { secret: 1 } };
+    const before = make(customer);
+    deliver(before, event("message.new", { message }));
+    expect(sent(before)).toHaveLength(0);
+
+    const joined = make(customer, [convId]);
+    deliver(joined, event("message.new", { message }));
+    expect(sent(joined)).toEqual([{ type: "message.new", payload: { message: { ...message, metadata: null } } }]);
+  });
+
+  it("does not receive another customer's conversation, even in a joined room", () => {
+    const c = make(customer, [convId]);
+    deliver(
+      c,
+      event(
+        "message.new",
+        { message: { conversationId: convId, senderType: "AGENT" } },
+        conversation({ customerId: uid(101) }),
+      ),
+    );
+    expect(sent(c)).toHaveLength(0);
+  });
+
+  it("never receives staff-only events or SYSTEM messages", () => {
+    const c = make(customer, [convId]);
+    for (const type of [
+      "note.created",
+      "conversation.updated",
+      "conversation.assigned",
+      "message.flagged",
+      "presence.updated",
+    ]) {
+      deliver(c, event(type, { conversationId: convId }));
+    }
+    deliver(c, event("message.new", { message: { conversationId: convId, senderType: "SYSTEM" } }));
+    deliver(c, event("presence.updated", { userId: uid(1) }, { kind: "dashboard" }));
+    expect(sent(c)).toHaveLength(0);
+  });
+
+  it("sees the agent typing without the agent's id, and not its own typing echo", () => {
+    const c = make(customer, [convId]);
+    deliver(c, event("typing", { conversationId: convId, userId: uid(1), side: "agent", active: true }));
+    deliver(c, event("typing", { conversationId: convId, userId: uid(100), side: "customer", active: true }));
+    expect(sent(c)).toEqual([{ type: "typing", payload: { conversationId: convId, side: "agent", active: true } }]);
+  });
+
+  it("agents keep receiving staff events as before", () => {
+    const a = make(agent2);
+    deliver(a, event("note.created", { conversationId: convId }, conversation()));
+    expect(sent(a)).toHaveLength(1);
   });
 });

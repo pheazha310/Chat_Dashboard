@@ -57,3 +57,18 @@ export interface ActivityDto {
 }
 
 export type { ConversationPermissions };
+
+/** A conversation as the customer's mobile app sees it: no agent ids, priority, tags or other staff-side fields. */
+export interface CustomerConversationDto {
+  id: string;
+  applicationId: string | null;
+  subject: string | null;
+  status: string;
+  /** True once a human agent owns the conversation; false while it waits for one. */
+  agentAssigned: boolean;
+  lastMessageAt: string;
+  lastMessagePreview: string | null;
+  /** Newest message sequence number; compare with the last one the app holds to know it is up to date. */
+  lastSequenceNumber: string;
+  createdAt: string;
+}

@@ -160,10 +160,17 @@ export class MessageService implements SystemMessagePort, MessageLookup {
   }
 
   /**
-   * A customer message. Used by the customer channel (not built yet; it needs its own authentication). Reopens a
+   * A customer text message. Used by the mobile customer API (`/api/v1/customer`). Reopens a
    * resolved or closed conversation and notifies the owning agent.
    */
-  async receiveFromCustomer(input: { customerId: string; conversationId: string; clientId: string; text: string }) {
+  async receiveFromCustomer(input: {
+    customerId: string;
+    conversationId: string;
+    clientId: string;
+    text: string;
+    /** The WebSocket connection that sent it, if any: it gets an ack instead of its own `message.new`. */
+    origin?: string | undefined;
+  }) {
     if (await this.guard?.().isBlocked(input.customerId)) throw new ForbiddenError("This customer is blocked");
     const { message, created, owner } = await this.repository.inTransaction(async (tx) => {
       const conversation = await tx.lock(input.conversationId);
@@ -215,8 +222,95 @@ export class MessageService implements SystemMessagePort, MessageLookup {
     }
     const dto = toMessage(message);
     if (created) {
-      await bestEffort("realtime", () => this.realtime.messageCreated(dto, { conversationUpdated: true }));
+      await bestEffort("realtime", () =>
+        this.realtime.messageCreated(dto, {
+          conversationUpdated: true,
+          ...(input.origin ? { origin: input.origin } : {}),
+        }),
+      );
       await this.flagIfNeeded(input.conversationId, dto.id, input.text);
+    }
+    return { message: dto, created };
+  }
+
+  /**
+   * A customer sends a file or voice message (the bytes are already in storage). Same rules as `receiveFromCustomer`:
+   * blocked customers are refused, a resolved or closed conversation is reopened, the owner is notified, and a retry
+   * with the same `clientId` returns the original message with `created: false` (the caller then discards the file).
+   */
+  async receiveFileFromCustomer(input: {
+    customerId: string;
+    conversationId: string;
+    clientId: string;
+    text?: string | undefined;
+    messageType: string;
+    preview: string;
+    attachment: NewAttachment;
+  }) {
+    if (await this.guard?.().isBlocked(input.customerId)) throw new ForbiddenError("This customer is blocked");
+    const { message, attachments, created, owner } = await this.repository.inTransaction(async (tx) => {
+      const conversation = await tx.lock(input.conversationId);
+      if (!conversation || conversation.customerId !== input.customerId) {
+        throw new NotFoundError("Conversation not found");
+      }
+      const existing = await tx.findByClientId(input.conversationId, input.clientId);
+      if (existing) {
+        if (existing.senderType !== "CUSTOMER" || existing.senderId !== input.customerId) {
+          throw new ConflictError("clientId is already used by another message");
+        }
+        const files = (await tx.attachmentsFor([existing.id])).get(existing.id) ?? [];
+        return { message: existing, attachments: files, created: false, owner: null };
+      }
+      const stored = await tx.append({
+        conversationId: input.conversationId,
+        clientId: input.clientId,
+        senderType: "CUSTOMER",
+        senderId: input.customerId,
+        messageType: input.messageType,
+        content: input.text ?? null,
+        preview: toPreview(input.text || input.preview),
+      });
+      const file = await tx.addAttachment({
+        ...input.attachment,
+        conversationId: input.conversationId,
+        messageId: stored.id,
+        uploadedById: input.customerId,
+        uploadedByType: "CUSTOMER",
+      });
+      if (conversation.status !== "OPEN") {
+        await tx.reopen(input.conversationId);
+        await tx.addActivity({
+          conversationId: input.conversationId,
+          actorType: "CUSTOMER",
+          actorId: input.customerId,
+          activityType: "STATUS_CHANGED",
+          description: `Reopened by a new customer message (was ${conversation.status})`,
+          metadata: { from: conversation.status, to: "OPEN", reason: "customer_message" },
+        });
+      }
+      return { message: stored, attachments: [file], created: true, owner: conversation.assignedAgentId };
+    });
+
+    const dto = toMessage(
+      message,
+      [],
+      attachments.map((row) => toAttachment(row, message.id)),
+    );
+    if (created) {
+      if (owner !== null) {
+        await bestEffort("new-message notification", async () => {
+          await this.notifications.notifyAgent({
+            agentId: owner,
+            type: "NEW_MESSAGE",
+            title: "New message",
+            body: toPreview(input.text || input.preview),
+            conversationId: input.conversationId,
+            messageId: message.id,
+          });
+        });
+      }
+      await bestEffort("realtime", () => this.realtime.messageCreated(dto, { conversationUpdated: true }));
+      if (input.text) await this.flagIfNeeded(input.conversationId, dto.id, input.text);
     }
     return { message: dto, created };
   }
@@ -245,7 +339,20 @@ export class MessageService implements SystemMessagePort, MessageLookup {
    */
   async history(auth: AuthContext, conversationId: string, query: CursorQuery) {
     await this.requireVisible(auth, conversationId);
-    const { items, hasMore } = await this.repository.history(conversationId, query);
+    return this.loadHistory(conversationId, query, false);
+  }
+
+  /**
+   * History for the customer's own conversation (the caller has already proved ownership). Internal SYSTEM messages
+   * (takeover, transfer, status changes) are left out and `metadata` is never sent.
+   */
+  async historyForCustomer(conversationId: string, query: CursorQuery) {
+    const page = await this.loadHistory(conversationId, query, true);
+    return { ...page, items: page.items.map((item) => ({ ...item, metadata: null })) };
+  }
+
+  private async loadHistory(conversationId: string, query: CursorQuery, excludeSystem: boolean) {
+    const { items, hasMore } = await this.repository.history(conversationId, query, { excludeSystem });
     const ids = items.map((item) => item.id);
     const [reactions, attachments] = await Promise.all([
       this.repository.reactionsFor(ids),

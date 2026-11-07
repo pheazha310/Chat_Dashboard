@@ -35,6 +35,7 @@ import { ModerationRepository } from "@modules/moderation/moderation.repository.
 import { ModerationService } from "@modules/moderation/moderation.service.js";
 import { ChatSettingsRepository } from "@modules/chat-settings/chat-settings.repository.js";
 import { ChatSettingsService } from "@modules/chat-settings/chat-settings.service.js";
+import { ProfileService } from "@modules/profile/profile.service.js";
 import { WorkspaceRepository } from "@modules/workspace/workspace.repository.js";
 import { WorkspaceService } from "@modules/workspace/workspace.service.js";
 import { RealtimeService } from "@modules/realtime/index.js";
@@ -112,6 +113,7 @@ export function createContainer(
     () => moderation,
   );
   const chatSettings = new ChatSettingsService(new ChatSettingsRepository(), realtime);
+  const profile = new ProfileService(directory, presence, conversations);
   const customers = new CustomerService(new CustomerRepository(), directory, conversations, conversations);
 
   return {
@@ -129,6 +131,7 @@ export function createContainer(
     assignments,
     presence,
     customers,
+    profile,
     workspace,
     chatSettings,
     callbacks,

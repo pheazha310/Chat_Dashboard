@@ -859,6 +859,20 @@ Table conversation_drafts {
   }
 }
 
+Table chat_users {
+  id uuid [pk, default: `gen_random_uuid()`]
+  user_type varchar(20) [not null, note: 'CUSTOMER or STAFF']
+  external_id uuid [not null, note: 'Backend 1 customers.id or agent/user id. Never the email']
+  role varchar(20) [not null, note: 'Last role seen in a verified token']
+  status varchar(20) [not null, default: 'ACTIVE', note: 'ACTIVE or DISABLED']
+  created_at timestamptz [not null, default: `now()`]
+  last_seen_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (user_type, external_id) [unique]
+  }
+}
+
 Table user_chat_settings {
   id uuid [pk, default: `gen_random_uuid()`]
   user_id uuid [not null, unique, note: 'External users.id']

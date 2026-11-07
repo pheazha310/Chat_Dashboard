@@ -6,7 +6,7 @@ import { uid } from "../../../__tests__/support/ids.js";
 
 const snapshot = (handoffStatus: string, assignedAgentId: string | null): ConversationSnapshot => ({
   conversation: { id: uid(10), handoffStatus, assignedAgentId } as ConversationSnapshot["conversation"],
-  audience: { handoffStatus, assignedAgentId, viewerIds: [uid(4)] },
+  audience: { handoffStatus, assignedAgentId, viewerIds: [uid(4)], customerId: uid(100) },
 });
 
 function setup(found: ConversationSnapshot | null) {

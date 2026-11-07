@@ -620,3 +620,18 @@ model UserChatSetting {
 
   @@map("user_chat_settings")
 }
+
+/// Chat identity: maps a Backend 1 user (customer or staff) to this backend's own id. Created on first sign-in from the
+/// verified token; `external_id` is the Backend 1 id (never the email). Other tables still store the external id.
+model ChatUser {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userType   String   @map("user_type") @db.VarChar(20) /// CUSTOMER or STAFF
+  externalId String   @map("external_id") @db.Uuid /// Backend 1 customers.id or agents/users.id
+  role       String   @db.VarChar(20) /// Last role seen in a verified token: CUSTOMER, AGENT, SUPERVISOR, ADMIN
+  status     String   @default("ACTIVE") @db.VarChar(20) /// ACTIVE or DISABLED; a disabled user is refused everywhere
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  lastSeenAt DateTime @default(now()) @map("last_seen_at") @db.Timestamptz(6)
+
+  @@unique([userType, externalId])
+  @@map("chat_users")
+}
