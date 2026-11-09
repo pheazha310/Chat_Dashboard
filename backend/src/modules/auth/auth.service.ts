@@ -4,6 +4,7 @@ import type { AuthContext, Role } from "@shared/auth/auth.types.js";
 import { AppError, ConflictError, ForbiddenError, NotFoundError, UnauthorizedError } from "@shared/errors/AppError.js";
 import { burnPasswordCheck, hashPassword, needsRehash, verifyPassword } from "./auth.password.js";
 import { isUniqueViolation, type AuthRepository } from "./auth.repository.js";
+import type { LosTokenVerifier } from "./auth.los.js";
 import type { ChangePasswordInput, LoginInput, RegisterInput } from "./auth.schema.js";
 import { hashRefreshToken, newRefreshToken, type AccessTokens } from "./auth.tokens.js";
 import {
@@ -20,11 +21,19 @@ import {
 
 /** Copies the account's name and role to its chat identity (ChatIdentityService). */
 export interface IdentitySync {
-  sync(user: { id: string; role: Role; displayName: string }): Promise<void>;
+  sync(user: { id: string; role: Role; displayName: string; losUserId?: number | null }): Promise<void>;
+}
+
+/** The refresh being rotated: the new session joins its sign-in and keeps its end. */
+interface Rotation {
+  familyId: string;
+  replaces: string;
+  expiresAt: Date;
 }
 
 const INVALID_LOGIN = "Invalid email or password";
 const INVALID_REFRESH = "Invalid or expired refresh token";
+const NO_PASSWORD = "This account signs in with LOS and has no password";
 
 /** 429 while an account is locked after too many failed sign-ins. */
 export class AccountLockedError extends AppError {
@@ -46,6 +55,8 @@ export class AuthService {
     private readonly options: AuthOptions = DEFAULT_AUTH_OPTIONS,
     private readonly now: () => Date = () => new Date(),
     private readonly identities: IdentitySync = { sync: async () => {} },
+    /** Sign in with LOS; null when LOS is not configured (LOS_ISSUER unset). */
+    private readonly los: LosTokenVerifier | null = null,
   ) {}
 
   /** Mobile self-registration. Always creates a CUSTOMER; staff accounts are created by an admin. */
@@ -81,10 +92,49 @@ export class AuthService {
 
     await this.repository.recordSuccessfulLogin(user.id);
     await this.syncIdentity(user);
-    if (needsRehash(user.passwordHash)) {
+    if (user.passwordHash && needsRehash(user.passwordHash)) {
       await this.repository.setPassword(user.id, await hashPassword(input.password));
     }
     return this.startSession({ ...user, lastLoginAt: now }, client);
+  }
+
+  /**
+   * Sign in with LOS: the mobile app sends the LOS customer access token it holds, the dashboard a short-lived LOS staff
+   * hand-off token. The token proves who the caller is; the account is found by its LOS id or created (no email, no
+   * password), and from then on the caller uses this backend's tokens only. For staff the role comes from LOS on every
+   * sign-in; a changed role signs the account out of its other devices, as an admin role change does.
+   */
+  async losSignIn(audience: Audience, token: string, client: ClientInfo): Promise<AuthTokensDto> {
+    if (!this.los) throw new AppError(503, "LOS_SIGN_IN_DISABLED", "Sign in with LOS is not configured");
+    const los =
+      audience === "customer" ? await this.los.verifyCustomer(token) : await this.los.verifyStaffHandoff(token);
+
+    let user = await this.repository.findUserByLos(los.losUserType, los.losUserId);
+    if (!user) {
+      try {
+        user = await this.repository.createLosUser({
+          losUserType: los.losUserType,
+          losUserId: los.losUserId,
+          role: los.role,
+          displayName: los.username,
+        });
+      } catch (error) {
+        // Two first sign-ins at once: the other one created the account.
+        if (!isUniqueViolation(error)) throw error;
+        user = await this.repository.findUserByLos(los.losUserType, los.losUserId);
+        if (!user) throw error;
+      }
+    }
+    if (user.status !== "ACTIVE") throw new ForbiddenError("This account is disabled");
+
+    const roleChanged = user.role !== los.role;
+    if (roleChanged || user.displayName !== los.username) {
+      user = await this.repository.updateUser(user.id, { role: los.role, displayName: los.username });
+      if (roleChanged) await this.repository.revokeAllForUser(user.id);
+    }
+    await this.repository.recordSuccessfulLogin(user.id);
+    await this.syncIdentity(user);
+    return this.startSession({ ...user, lastLoginAt: this.now() }, client);
   }
 
   /**
@@ -105,7 +155,13 @@ export class AuthService {
     }
     const rotated = await this.repository.inTransaction(async (tx) =>
       // Two requests with the same token: one rotates it, the other is treated as reuse.
-      (await tx.revokeIfActive(session.id)) ? this.startSession(user, client, session.familyId, tx) : null,
+      (await tx.revokeIfActive(session.id))
+        ? this.startSession(user, client, tx, {
+            familyId: session.familyId,
+            replaces: session.id,
+            expiresAt: session.expiresAt,
+          })
+        : null,
     );
     if (!rotated) {
       // Outside the transaction above, so throwing does not roll the revocation back.
@@ -136,6 +192,7 @@ export class AuthService {
   async changePassword(auth: AuthContext, input: ChangePasswordInput, client: ClientInfo): Promise<AuthTokensDto> {
     const user = await this.repository.findUserById(auth.userId);
     if (!user) throw new NotFoundError("Account not found");
+    if (!user.passwordHash) throw new ConflictError(NO_PASSWORD);
     // Counts toward the sign-in lock, so a stolen access token cannot be used to guess the password.
     if (!(await this.checkPassword(user, input.currentPassword, this.now()))) {
       throw new ForbiddenError("The current password is wrong");
@@ -144,7 +201,7 @@ export class AuthService {
     return this.repository.inTransaction(async (tx) => {
       await tx.setPassword(user.id, passwordHash);
       await tx.revokeAllForUser(user.id);
-      return this.startSession(user, client, randomUUID(), tx);
+      return this.startSession(user, client, tx);
     });
   }
 
@@ -155,6 +212,10 @@ export class AuthService {
   private async checkPassword(user: UserRow, password: string, now: Date): Promise<boolean> {
     if (user.lockedUntil && user.lockedUntil > now) {
       throw new AccountLockedError(Math.ceil((user.lockedUntil.getTime() - now.getTime()) / 1000));
+    }
+    if (user.passwordHash === null) {
+      await burnPasswordCheck(password);
+      return false;
     }
     if (await verifyPassword(password, user.passwordHash)) return true;
     await this.repository.recordFailedLogin(
@@ -168,28 +229,41 @@ export class AuthService {
   /** Keeps `chat_users.username` and its role in step with the account ("refreshed on sign-in"). Best effort. */
   private async syncIdentity(user: UserRow) {
     try {
-      await this.identities.sync({ id: user.id, role: user.role as Role, displayName: user.displayName });
+      await this.identities.sync({
+        id: user.id,
+        role: user.role as Role,
+        displayName: user.displayName,
+        losUserId: user.losUserId,
+      });
     } catch (error) {
       logger.error({ err: error, userId: user.id }, "could not sync the account to chat_users");
     }
   }
 
+  /**
+   * Issues a token pair. Without `rotation` this is a new sign-in: a new family that lasts `refreshTtlMs`, and the
+   * user's expired sessions are deleted. With it, the new session continues that sign-in and keeps its end, so
+   * refreshing never makes a sign-in last longer than `refreshTtlMs`.
+   */
   private async startSession(
     user: UserRow,
     client: ClientInfo,
-    familyId: string = randomUUID(),
     repository: AuthRepository = this.repository,
+    rotation?: Rotation,
   ): Promise<AuthTokensDto> {
+    const now = this.now();
+    if (!rotation) await repository.deleteExpiredSessions(user.id, now);
     const refreshToken = newRefreshToken();
-    const refreshExpiresAt = new Date(this.now().getTime() + this.options.refreshTtlMs);
-    await repository.createSession({
+    const refreshExpiresAt = rotation?.expiresAt ?? new Date(now.getTime() + this.options.refreshTtlMs);
+    const created = await repository.createSession({
       userId: user.id,
-      familyId,
+      familyId: rotation?.familyId ?? randomUUID(),
       tokenHash: hashRefreshToken(refreshToken),
       expiresAt: refreshExpiresAt,
       userAgent: client.userAgent?.slice(0, 255) ?? null,
       ipAddress: client.ipAddress?.slice(0, 45) ?? null,
     });
+    if (rotation) await repository.markReplaced(rotation.replaces, created.id);
     const access = await this.tokens.issue(user);
     return {
       tokenType: "Bearer",

@@ -1,0 +1,108 @@
+// 02. Conversations
+// The hub: one row per chat, its participants, ownership history and audit trail.
+// Same tables as docs/database/02-conversations.dbml.
+
+/// CUSTOMER_SUPPORT or INTERNAL. Customer and application are external references.
+model Conversation {
+  id                               String                            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  customerId                       String?                           @map("customer_id") @db.Uuid /// chat_users.external_id (= users.id). Required for CUSTOMER_SUPPORT, NULL for INTERNAL (CHECK)
+  applicationId                    String?                           @map("application_id") @db.Uuid /// External loan_applications.id
+  customerName                     String?                           @map("customer_name") @db.VarChar(150) /// Snapshot of the Backend 1 customer name so the inbox can be searched and sorted in SQL (FR-07); refresh when Backend 1 reports a change
+  customerIdentifier               String?                           @map("customer_identifier") @db.VarChar(100) /// Snapshot of a searchable identifier (customer_code, phone, application_number)
+  conversationType                 String                            @default("CUSTOMER_SUPPORT") @map("conversation_type") @db.VarChar(30)
+  channel                          String                            @default("web") @db.VarChar(32) /// web or mobile
+  createdByType                    String?                           @map("created_by_type") @db.VarChar(30) /// CUSTOMER or AGENT; NULL when created by the system
+  createdById                      String?                           @map("created_by_id") @db.Uuid /// External customers.id or agents.id; set exactly when created_by_type is set
+  status                           String                            @default("OPEN") @db.VarChar(30)
+  priority                         String                            @default("MEDIUM") @db.VarChar(20)
+  conversationMode                 String                            @default("AI") @map("conversation_mode") @db.VarChar(20)
+  handoffStatus                    String                            @default("NONE") @map("handoff_status") @db.VarChar(30)
+  assignedAgentId                  String?                           @map("assigned_agent_id") @db.Uuid /// External agents.id. Denormalized current OWNER from conversation_assignments for fast Mine/Unassigned filters; set exactly when handoff_status = ASSIGNED (CHECK)
+  subject                          String?                           @db.VarChar(255)
+  summary                          String?                           @db.Text
+  isArchived                       Boolean                           @default(false) @map("is_archived")
+  archivedAt                       DateTime?                         @map("archived_at") @db.Timestamptz(6)
+  resolvedAt                       DateTime?                         @map("resolved_at") @db.Timestamptz(6)
+  closedAt                         DateTime?                         @map("closed_at") @db.Timestamptz(6)
+  lastMessageAt                    DateTime                          @default(now()) @map("last_message_at") @db.Timestamptz(6)
+  lastMessagePreview               String?                           @map("last_message_preview") @db.VarChar(255) /// Denormalized; updated in the same transaction as the message insert
+  lastSequenceNumber               BigInt                            @default(0) @map("last_sequence_number") /// Last messages.sequence_number issued. Allocate with UPDATE ... SET last_sequence_number = last_sequence_number + 1 RETURNING
+  createdAt                        DateTime                          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                        DateTime                          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  customer                         ChatUser?                         @relation(fields: [customerId], references: [externalId], onDelete: Restrict)
+  conversationParticipants         ConversationParticipant[]
+  conversationAssignments          ConversationAssignment[]
+  conversationActivities           ConversationActivity[]
+  messages                         Message[]
+  conversationReads                ConversationRead[]
+  attachments                      Attachment[]
+  internalNotes                    InternalNote[]
+  conversationEscalations          ConversationEscalation[]
+  conversationTags                 ConversationTag[]
+  notifications                    Notification[]
+  conversationNotificationSettings ConversationNotificationSetting[]
+  automationLogs                   AutomationLog[]
+  callbackRequests                 CallbackRequest[]
+  calls                            Call[]
+  spamReports                      SpamReport[]
+  workspaceOpenConversations       WorkspaceOpenConversation[]
+  conversationDrafts               ConversationDraft[]
+
+  @@index([status, lastMessageAt])
+  @@index([customerId])
+  @@index([applicationId])
+  @@index([priority, lastMessageAt])
+  @@index([assignedAgentId, lastMessageAt])
+  @@index([isArchived, lastMessageAt])
+  @@index([conversationType])
+  @@map("conversations")
+}
+
+model ConversationParticipant {
+  id              String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conversationId  String       @map("conversation_id") @db.Uuid
+  participantType String       @map("participant_type") @db.VarChar(30) /// CUSTOMER, AGENT, ASSISTANT
+  participantId   String?      @map("participant_id") @db.Uuid /// External customers.id or agents.id; NULL exactly when ASSISTANT (CHECK)
+  participantRole String       @default("MEMBER") @map("participant_role") @db.VarChar(30) /// OWNER, VIEWER, MEMBER
+  joinedAt        DateTime     @default(now()) @map("joined_at") @db.Timestamptz(6)
+  leftAt          DateTime?    @map("left_at") @db.Timestamptz(6)
+  conversation    Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+  @@index([participantType, participantId])
+  @@map("conversation_participants")
+}
+
+model ConversationAssignment {
+  id               String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conversationId   String       @map("conversation_id") @db.Uuid
+  agentId          String       @map("agent_id") @db.Uuid /// External agents.id
+  assignedBy       String?      @map("assigned_by") @db.Uuid /// External agents.id
+  assignmentType   String       @default("OWNER") @map("assignment_type") @db.VarChar(30) /// OWNER or VIEWER
+  assignmentAction String       @default("ASSIGNED") @map("assignment_action") @db.VarChar(30) /// TAKEOVER, ASSIGNED, TRANSFERRED, AUTO_ASSIGNED
+  note             String?      @db.VarChar(500)
+  assignedAt       DateTime     @default(now()) @map("assigned_at") @db.Timestamptz(6)
+  endedAt          DateTime?    @map("ended_at") @db.Timestamptz(6)
+  endedBy          String?      @map("ended_by") @db.Uuid /// External agents.id; NULL when ended by the system
+  conversation     Conversation @relation(fields: [conversationId], references: [id], onDelete: Restrict)
+
+  @@index([conversationId, endedAt])
+  @@index([agentId, endedAt])
+  @@map("conversation_assignments")
+}
+
+model ConversationActivity {
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conversationId String       @map("conversation_id") @db.Uuid
+  actorType      String       @map("actor_type") @db.VarChar(30)
+  actorId        String?      @map("actor_id") @db.Uuid /// External actor ID; null for system
+  activityType   String       @map("activity_type") @db.VarChar(50)
+  description    String?      @db.Text
+  metadata       Json?
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Restrict)
+
+  @@index([conversationId, createdAt])
+  @@index([conversationId, activityType])
+  @@map("conversation_activities")
+}

@@ -1,0 +1,26 @@
+Project Chat_Dashboard {
+  database_type: 'PostgreSQL'
+  Note: '''
+  Chat database (Backend 2) of the loan-support chat dashboard.
+  The tables are grouped by domain (01-12), one file per domain in docs/database/.
+  Group 12 (Backend 1) is context only: those tables are not created here.
+  '''
+}
+
+// HOW TO READ THESE FILES
+// - One file per domain: its TableGroup, its tables, then the relations that start in those tables.
+// - Coloured header  = the domain a table belongs to (same colour as its TableGroup).
+// - Solid line       = a real foreign key in PostgreSQL.
+// - Grey line        = a logical link to Backend 1 (an id is stored, no foreign key).
+// - "users.id" / "Staff users.id" / "Customer users.id" in a note = the column stores a users.id but has no
+//   foreign key (only conversations.customer_id, messages.sender_id and attachments.uploaded_by_id do, through
+//   chat_users.external_id). Lines for these are not drawn, to keep the diagram readable.
+// - Rules Prisma cannot express (CHECKs, partial unique indexes) are in backend/prisma/sql/constraints.sql.
+//
+// HOW TO ADD A TABLE
+// 1. Put it in the file of its domain (or add a new numbered file, e.g. 12-ai.dbml, and renumber Backend 1 to stay
+//    last), list it in that TableGroup and give it the group's headercolor.
+// 2. Write its Refs in the same file. A person column stores users.id; note it, do not draw it.
+// 3. Run `pnpm db:dbml` to rebuild docs/database-schema.dbml (the one-file copy for https://dbdiagram.io/d).
+// 4. Mirror the change in the same-numbered file of backend/prisma/schema/ with a migration, and in
+//    docs/database-schema.md.

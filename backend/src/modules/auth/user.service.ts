@@ -47,7 +47,17 @@ export class UserService {
 
   /** Creates the first admin from the command line (`pnpm --filter @chat-dashboard/backend user:create-admin`). */
   async bootstrapAdmin(input: { email: string; displayName: string; password: string }): Promise<UserDto> {
-    return toUser(await this.createAccount({ ...input, role: "ADMIN", createdBy: null }));
+    return this.bootstrapAccount({ ...input, role: "ADMIN" });
+  }
+
+  /** Creates an account of any role from the command line, without a signed-in admin (first admin, test accounts). */
+  async bootstrapAccount(input: {
+    email: string;
+    displayName: string;
+    password: string;
+    role: Role;
+  }): Promise<UserDto> {
+    return toUser(await this.createAccount({ ...input, createdBy: null }));
   }
 
   async update(auth: AuthContext, userId: string, input: UpdateUserInput): Promise<UserDto> {
@@ -113,6 +123,8 @@ export class UserService {
   async resetPassword(auth: AuthContext, userId: string, password: string): Promise<UserDto> {
     requireAdmin(auth);
     const user = await this.find(userId);
+    // A password needs an email to sign in with; an LOS-only account has none.
+    if (user.email === null) throw new ConflictError("This account signs in with LOS and has no password");
     const passwordHash = await hashPassword(password);
     await this.repository.inTransaction(async (tx) => {
       await tx.setPassword(user.id, passwordHash);

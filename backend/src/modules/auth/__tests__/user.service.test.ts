@@ -29,6 +29,20 @@ describe("UserService", () => {
     admin = { userId: created.id, role: "ADMIN" };
   });
 
+  it("creates an account of any role from the command line, and refuses a taken email", async () => {
+    const customer = {
+      email: "c@example.com",
+      displayName: "Cust",
+      password: "x".repeat(8),
+      role: "CUSTOMER" as const,
+    };
+    const user = await service.bootstrapAccount(customer);
+    expect(user).toMatchObject({ email: "c@example.com", role: "CUSTOMER", status: "ACTIVE" });
+    expect(repo.users.get(user.id)).toMatchObject({ createdBy: null });
+    expect(status.sync).toHaveBeenCalledWith({ id: user.id, role: "CUSTOMER", displayName: "Cust" });
+    await expect(service.bootstrapAccount(customer)).rejects.toBeInstanceOf(ConflictError);
+  });
+
   it("lets only admins create staff, and refuses a taken email", async () => {
     await expect(service.create({ userId: uid(1), role: "SUPERVISOR" }, staff)).rejects.toBeInstanceOf(ForbiddenError);
     await expect(service.create({ userId: uid(1), role: "AGENT" }, staff)).rejects.toBeInstanceOf(ForbiddenError);
@@ -124,6 +138,12 @@ describe("UserService", () => {
     });
   });
 
+  it("refuses to give an LOS-only account a password (it has no email to sign in with)", async () => {
+    const los = await repo.createLosUser({ losUserType: "STAFF", losUserId: 7, role: "AGENT", displayName: "Sophea" });
+    await expect(service.resetPassword(admin, los.id, "another-pass")).rejects.toBeInstanceOf(ConflictError);
+    expect(repo.users.get(los.id)?.passwordHash).toBeNull();
+  });
+
   it("resets a password: the new one works and every session ends", async () => {
     const user = await service.create(admin, staff);
     await repo.createSession({
@@ -138,7 +158,7 @@ describe("UserService", () => {
       service.resetPassword({ userId: uid(1), role: "SUPERVISOR" }, user.id, "another-pass"),
     ).rejects.toBeInstanceOf(ForbiddenError);
     await service.resetPassword(admin, user.id, "another-pass");
-    await expect(verifyPassword("another-pass", repo.users.get(user.id)!.passwordHash)).resolves.toBe(true);
+    await expect(verifyPassword("another-pass", repo.users.get(user.id)?.passwordHash ?? "")).resolves.toBe(true);
     expect(repo.live(user.id)).toHaveLength(0);
   });
 

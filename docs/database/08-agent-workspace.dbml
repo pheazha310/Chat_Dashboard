@@ -1,0 +1,68 @@
+// ==============================================================================================================
+// 08. AGENT WORKSPACE
+// Per-person UI state: layout, open tabs, unsent drafts and chat settings.
+// ==============================================================================================================
+
+TableGroup "08 Agent workspace" [color: #4B5563] {
+  workspace_preferences
+  workspace_open_conversations
+  conversation_drafts
+  user_chat_settings
+}
+
+Table workspace_preferences [headercolor: #4B5563] {
+  id uuid [pk, default: `gen_random_uuid()`]
+  agent_id uuid [not null, unique, note: 'Staff users.id']
+
+  layout jsonb
+  sidebar_width int
+  settings jsonb
+
+  updated_at timestamptz [not null, default: `now()`]
+}
+
+Table workspace_open_conversations [headercolor: #4B5563] {
+  id uuid [pk, default: `gen_random_uuid()`]
+  agent_id uuid [not null, note: 'Staff users.id']
+  conversation_id uuid [not null]
+
+  sort_order int [not null, default: 0]
+  last_opened_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (agent_id, conversation_id) [unique]
+    conversation_id
+  }
+}
+
+Table conversation_drafts [headercolor: #4B5563] {
+  id uuid [pk, default: `gen_random_uuid()`]
+  agent_id uuid [not null, note: 'Staff users.id']
+  conversation_id uuid [not null]
+
+  content text [not null, note: 'Unsent composer text, at most 10000 characters. An empty draft is deleted, not stored.']
+
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (agent_id, conversation_id) [unique]
+    conversation_id
+  }
+}
+
+Table user_chat_settings [headercolor: #4B5563] {
+  id uuid [pk, default: `gen_random_uuid()`]
+  user_id uuid [not null, unique, note: 'users.id']
+
+  typing_sound_enabled boolean [not null, default: true]
+  notification_sound_enabled boolean [not null, default: true]
+  ai_suggestions_enabled boolean [not null, default: true]
+  ai_summaries_enabled boolean [not null, default: true]
+  auto_assign_enabled boolean [not null, default: false, note: 'Opt in to auto-assignment (only when authorized)']
+
+  updated_at timestamptz [not null, default: `now()`]
+}
+
+// Relations of agent workspace
+Ref: conversations.id < workspace_open_conversations.conversation_id [delete: cascade]
+Ref: conversations.id < conversation_drafts.conversation_id [delete: cascade]

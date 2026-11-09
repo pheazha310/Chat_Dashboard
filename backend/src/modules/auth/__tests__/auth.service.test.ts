@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { ConflictError, ForbiddenError, UnauthorizedError } from "@shared/errors/AppError.js";
+import { AppError, ConflictError, ForbiddenError, UnauthorizedError } from "@shared/errors/AppError.js";
 import { hashPassword, verifyPassword } from "../auth.password.js";
 import { AccountLockedError, AuthService } from "../auth.service.js";
 import { AccessTokens, hashRefreshToken } from "../auth.tokens.js";
+import type { LosIdentity, LosTokenVerifier } from "../auth.los.js";
 import { DEFAULT_AUTH_OPTIONS } from "../auth.types.js";
 import { FakeAuthRepository } from "./fake-auth-repository.js";
 
@@ -18,7 +19,7 @@ describe("AuthService", () => {
   const addUser = async (email: string, role: string, status = "ACTIVE") =>
     repo
       .createUser({ email, passwordHash: await hashPassword(PASSWORD), role, displayName: email })
-      .then((u) => repo.updateUser(u.id, { status }));
+      .then(async (u) => (await repo.updateUser(u.id, { status })) as typeof u);
 
   beforeEach(() => {
     repo = new FakeAuthRepository();
@@ -121,12 +122,22 @@ describe("AuthService", () => {
         { email: "dara@example.com", password: "long-enough", displayName: "Dara" },
         client,
       );
-      expect(identities.sync).toHaveBeenCalledWith({ id: registered.user.id, role: "CUSTOMER", displayName: "Dara" });
+      expect(identities.sync).toHaveBeenCalledWith({
+        id: registered.user.id,
+        role: "CUSTOMER",
+        displayName: "Dara",
+        losUserId: null,
+      });
 
       const user = await addUser("ann@example.com", "AGENT");
       identities.sync.mockRejectedValueOnce(new Error("db hiccup"));
       await expect(service.login("staff", { email: user.email, password: PASSWORD }, client)).resolves.toBeDefined();
-      expect(identities.sync).toHaveBeenLastCalledWith({ id: user.id, role: "AGENT", displayName: user.email });
+      expect(identities.sync).toHaveBeenLastCalledWith({
+        id: user.id,
+        role: "AGENT",
+        displayName: user.email,
+        losUserId: null,
+      });
     });
   });
 
@@ -138,6 +149,16 @@ describe("AuthService", () => {
       expect(second.refreshToken).not.toBe(first.refreshToken);
       expect(repo.live()).toHaveLength(1);
       await expect(service.refresh("staff", second.refreshToken, client)).resolves.toBeDefined();
+    });
+
+    it("links each rotated session to the one that replaced it", async () => {
+      await addUser("ann@example.com", "AGENT");
+      const first = await service.login("staff", { email: "ann@example.com", password: PASSWORD }, client);
+      await service.refresh("staff", first.refreshToken, client);
+      const [old, current] = repo.sessions;
+      expect(old?.replacedById).toBe(current?.id);
+      expect(current?.replacedById).toBeNull();
+      expect(current?.familyId).toBe(old?.familyId);
     });
 
     it("revokes the whole sign-in when a used refresh token comes back", async () => {
@@ -221,7 +242,142 @@ describe("AuthService", () => {
       await expect(service.login("staff", { email: user.email, password: PASSWORD }, client)).rejects.toBeInstanceOf(
         AccountLockedError,
       );
-      expect(await verifyPassword(PASSWORD, repo.users.get(user.id)!.passwordHash)).toBe(true);
+      expect(await verifyPassword(PASSWORD, repo.users.get(user.id)?.passwordHash ?? "")).toBe(true);
+    });
+  });
+
+  describe("sign-in lifetime", () => {
+    it("keeps the sign-in's end when refreshing, so a sign-in never outlives REFRESH_TOKEN_TTL_DAYS", async () => {
+      await addUser("ann@example.com", "AGENT");
+      const first = await service.login("staff", { email: "ann@example.com", password: PASSWORD }, client);
+      now = new Date(now.getTime() + 10 * 24 * 60 * 60 * 1000);
+      const second = await service.refresh("staff", first.refreshToken, client);
+      expect(second.refreshTokenExpiresAt).toBe(first.refreshTokenExpiresAt);
+      now = new Date(first.refreshTokenExpiresAt);
+      await expect(service.refresh("staff", second.refreshToken, client)).rejects.toBeInstanceOf(UnauthorizedError);
+    });
+
+    it("deletes the user's expired sessions on a new sign-in, and only those", async () => {
+      const ann = await addUser("ann@example.com", "AGENT");
+      await addUser("bob@example.com", "AGENT");
+      await service.login("staff", { email: ann.email, password: PASSWORD }, client);
+      await service.login("staff", { email: "bob@example.com", password: PASSWORD }, client);
+      now = new Date(now.getTime() + DEFAULT_AUTH_OPTIONS.refreshTtlMs + 1000);
+      await service.login("staff", { email: ann.email, password: PASSWORD }, client);
+      expect(repo.sessions.filter((s) => s.userId === ann.id)).toHaveLength(1);
+      expect(repo.sessions).toHaveLength(2); // Bob's expired session stays until Bob signs in again.
+    });
+
+    it("gives customers and staff their own access-token lifetime", async () => {
+      const perAudience = new AccessTokens("k".repeat(40), { staff: 900, customer: 3600 });
+      expect(perAudience.ttlFor("AGENT")).toBe(900);
+      expect(perAudience.ttlFor("ADMIN")).toBe(900);
+      expect(perAudience.ttlFor("CUSTOMER")).toBe(3600);
+      const issued = await perAudience.issue({ id: "8c4f1f7e-2d1a-4c56-9a3e-0f1b2c3d4e5f", role: "CUSTOMER" });
+      expect(issued.expiresAt.getTime() - Date.now()).toBeGreaterThan(3500 * 1000);
+    });
+  });
+
+  describe("sign in with LOS", () => {
+    const los = {
+      verifyCustomer: vi.fn<(t: string) => Promise<LosIdentity>>(),
+      verifyStaffHandoff: vi.fn<(t: string) => Promise<LosIdentity>>(),
+    };
+    const customer: LosIdentity = { losUserType: "CUSTOMER", losUserId: 2, username: "Dara", role: "CUSTOMER" };
+    const agent: LosIdentity = { losUserType: "STAFF", losUserId: 7, username: "Sophea", role: "AGENT" };
+    const identities = { sync: vi.fn(async () => {}) };
+
+    beforeEach(() => {
+      los.verifyCustomer.mockReset().mockResolvedValue(customer);
+      los.verifyStaffHandoff.mockReset().mockResolvedValue(agent);
+      identities.sync.mockClear();
+      service = new AuthService(
+        repo.asRepository(),
+        tokens,
+        DEFAULT_AUTH_OPTIONS,
+        () => now,
+        identities,
+        los as unknown as LosTokenVerifier,
+      );
+    });
+
+    it("creates an LOS-only account on the first sign-in and reuses it after", async () => {
+      const first = await service.losSignIn("customer", "los-token", client);
+      expect(los.verifyCustomer).toHaveBeenCalledWith("los-token");
+      expect(first.user).toMatchObject({ email: null, losUserId: 2, displayName: "Dara", role: "CUSTOMER" });
+      expect(identities.sync).toHaveBeenCalledWith({
+        id: first.user.id,
+        role: "CUSTOMER",
+        displayName: "Dara",
+        losUserId: 2,
+      });
+      await expect(tokens.verifyToken(first.accessToken)).resolves.toEqual({ userId: first.user.id, role: "CUSTOMER" });
+
+      const second = await service.losSignIn("customer", "los-token", client);
+      expect(second.user.id).toBe(first.user.id);
+      expect(repo.users.size).toBe(1);
+    });
+
+    it("keeps customers and staff with the same LOS number apart", async () => {
+      const a = await service.losSignIn("customer", "t", client);
+      los.verifyStaffHandoff.mockResolvedValue({ ...agent, losUserId: 2 });
+      const b = await service.losSignIn("staff", "t", client);
+      expect(a.user.id).not.toBe(b.user.id);
+      expect(b.user.role).toBe("AGENT");
+    });
+
+    it("follows the LOS name and role, and signs other devices out when the role changes", async () => {
+      const first = await service.losSignIn("staff", "t", client);
+      await service.losSignIn("staff", "t", client);
+      expect(repo.live(first.user.id)).toHaveLength(2);
+
+      los.verifyStaffHandoff.mockResolvedValue({ ...agent, username: "Sophea P.", role: "SUPERVISOR" });
+      const promoted = await service.losSignIn("staff", "t", client);
+      expect(promoted.user).toMatchObject({ id: first.user.id, role: "SUPERVISOR", displayName: "Sophea P." });
+      expect(repo.live(first.user.id)).toHaveLength(1);
+    });
+
+    it("refuses a disabled account even with a valid LOS token", async () => {
+      const { user } = await service.losSignIn("customer", "t", client);
+      await repo.updateUser(user.id, { status: "DISABLED" });
+      await expect(service.losSignIn("customer", "t", client)).rejects.toBeInstanceOf(ForbiddenError);
+    });
+
+    it("passes the verifier's 401 through and creates nothing", async () => {
+      los.verifyCustomer.mockRejectedValue(new UnauthorizedError("Invalid LOS token"));
+      await expect(service.losSignIn("customer", "t", client)).rejects.toBeInstanceOf(UnauthorizedError);
+      expect(repo.users.size).toBe(0);
+    });
+
+    it("finds the account a parallel first sign-in created", async () => {
+      const created = await repo.createLosUser({
+        losUserType: "CUSTOMER",
+        losUserId: 2,
+        role: "CUSTOMER",
+        displayName: "Dara",
+      });
+      const findUserByLos = vi.spyOn(repo, "findUserByLos").mockResolvedValueOnce(null);
+      const result = await service.losSignIn("customer", "t", client);
+      expect(result.user.id).toBe(created.id);
+      findUserByLos.mockRestore();
+    });
+
+    it("answers 503 when LOS is not configured", async () => {
+      service = new AuthService(repo.asRepository(), tokens, DEFAULT_AUTH_OPTIONS, () => now);
+      await expect(service.losSignIn("customer", "t", client)).rejects.toMatchObject({
+        status: 503,
+        code: "LOS_SIGN_IN_DISABLED",
+      });
+      await expect(service.losSignIn("customer", "t", client)).rejects.toBeInstanceOf(AppError);
+    });
+
+    it("has no password to sign in with or to change", async () => {
+      const { user, accessToken } = await service.losSignIn("customer", "t", client);
+      const auth = await tokens.verifyToken(accessToken);
+      await expect(
+        service.changePassword(auth, { currentPassword: "x", newPassword: "long-enough-1" }, client),
+      ).rejects.toBeInstanceOf(ConflictError);
+      expect(repo.users.get(user.id)?.passwordHash).toBeNull();
     });
   });
 });

@@ -10,6 +10,7 @@ interface SessionRow {
   tokenHash: string;
   expiresAt: Date;
   revokedAt: Date | null;
+  replacedById: string | null;
   userAgent: string | null;
   ipAddress: string | null;
 }
@@ -53,10 +54,35 @@ export class FakeAuthRepository {
     });
   }
 
-  async createUser(data: { email: string; passwordHash: string; role: string; displayName: string }) {
-    if (await this.findUserByEmail(data.email)) throw Object.assign(new Error("unique"), { code: "P2002" });
+  async findUserByLos(losUserType: string, losUserId: number) {
+    return [...this.users.values()].find((u) => u.losUserType === losUserType && u.losUserId === losUserId) ?? null;
+  }
+
+  async createLosUser(data: { losUserType: string; losUserId: number; role: string; displayName: string }) {
+    if (await this.findUserByLos(data.losUserType, data.losUserId)) {
+      throw Object.assign(new Error("unique"), { code: "P2002" });
+    }
     const row: UserRow = {
       id: randomUUID(),
+      email: null,
+      passwordHash: null,
+      status: "ACTIVE",
+      failedLoginCount: 0,
+      lockedUntil: null,
+      lastLoginAt: null,
+      createdAt: new Date(),
+      ...data,
+    };
+    this.users.set(row.id, row);
+    return row;
+  }
+
+  async createUser(data: { email: string; passwordHash: string; role: string; displayName: string }) {
+    if (await this.findUserByEmail(data.email)) throw Object.assign(new Error("unique"), { code: "P2002" });
+    const row: UserRow & { email: string; passwordHash: string } = {
+      id: randomUUID(),
+      losUserId: null,
+      losUserType: null,
       status: "ACTIVE",
       failedLoginCount: 0,
       lockedUntil: null,
@@ -99,8 +125,16 @@ export class FakeAuthRepository {
     return { items, total: items.length };
   }
 
-  async createSession(data: Omit<SessionRow, "id" | "revokedAt">) {
-    this.sessions.push({ id: randomUUID(), revokedAt: null, ...data });
+  async createSession(data: Omit<SessionRow, "id" | "revokedAt" | "replacedById">) {
+    const id = randomUUID();
+    this.sessions.push({ id, revokedAt: null, replacedById: null, ...data });
+    return { id };
+  }
+
+  async markReplaced(id: string, replacedById: string) {
+    const session = this.sessions.find((s) => s.id === id);
+    if (!session?.revokedAt || id === replacedById) throw new Error("only a revoked session can be replaced"); // CHECKs
+    session.replacedById = replacedById;
   }
 
   async findSessionByHash(tokenHash: string) {
@@ -121,6 +155,12 @@ export class FakeAuthRepository {
 
   async revokeFamily(familyId: string) {
     for (const s of this.sessions) if (s.familyId === familyId && !s.revokedAt) s.revokedAt = new Date();
+  }
+
+  async deleteExpiredSessions(userId: string, now: Date) {
+    const before = this.sessions.length;
+    this.sessions = this.sessions.filter((s) => s.userId !== userId || s.expiresAt >= now);
+    return before - this.sessions.length;
   }
 
   async revokeAllForUser(userId: string) {

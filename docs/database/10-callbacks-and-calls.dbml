@@ -1,0 +1,80 @@
+// ==============================================================================================================
+// 10. CALLBACKS AND CALLS
+// Scheduled callbacks and in-app call signalling history (media is not stored).
+// ==============================================================================================================
+
+TableGroup "10 Callbacks and calls" [color: #0284C7] {
+  callback_requests
+  calls
+  call_participants
+}
+
+Table callback_requests [headercolor: #0284C7] {
+  id uuid [pk, default: `gen_random_uuid()`]
+  conversation_id uuid [not null]
+
+  customer_id uuid [not null, note: 'Customer users.id']
+  assigned_agent_id uuid [note: 'Staff users.id']
+
+  created_by uuid [note: 'Staff users.id']
+
+  scheduled_at timestamptz [not null]
+  status varchar(30) [not null, default: 'PENDING']
+
+  notes text
+  completion_note text
+  reminder_sent_at timestamptz [note: 'Set when the upcoming-callback notification was sent']
+
+  created_at timestamptz [not null, default: `now()`]
+  completed_at timestamptz
+
+  indexes {
+    (assigned_agent_id, status, scheduled_at)
+    (status, scheduled_at)
+    conversation_id
+    customer_id
+  }
+}
+
+Table calls [headercolor: #0284C7] {
+  id uuid [pk, default: `gen_random_uuid()`]
+  conversation_id uuid [not null]
+
+  initiated_by_type varchar(30) [not null]
+  initiated_by_id uuid [not null]
+
+  call_type varchar(20) [not null]
+  status varchar(30) [not null, default: 'INITIATING']
+
+  started_at timestamptz
+  ended_at timestamptz
+
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (conversation_id, created_at)
+  }
+
+  Note: 'Signalling record and call history; media is not stored.'
+}
+
+Table call_participants [headercolor: #0284C7] {
+  id uuid [pk, default: `gen_random_uuid()`]
+  call_id uuid [not null]
+
+  participant_type varchar(30) [not null]
+  participant_id uuid [not null]
+
+  joined_at timestamptz
+  left_at timestamptz
+
+  indexes {
+    (call_id, participant_type, participant_id) [unique]
+    (participant_type, participant_id)
+  }
+}
+
+// Relations of callbacks and calls
+Ref: conversations.id < callback_requests.conversation_id [delete: restrict]
+Ref: conversations.id < calls.conversation_id [delete: restrict]
+Ref: calls.id < call_participants.call_id [delete: cascade]

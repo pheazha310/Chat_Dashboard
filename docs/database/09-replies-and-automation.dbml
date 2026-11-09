@@ -1,0 +1,75 @@
+// ==============================================================================================================
+// 09. REPLIES AND AUTOMATION
+// Saved reply templates and rule-based automatic replies with their execution log.
+// ==============================================================================================================
+
+TableGroup "09 Replies and automation" [color: #059669] {
+  canned_responses
+  automation_rules
+  automation_logs
+}
+
+Table canned_responses [headercolor: #059669] {
+  id uuid [pk, default: `gen_random_uuid()`]
+  title varchar(255) [not null]
+  content text [not null]
+
+  shortcut varchar(50) [note: 'e.g. /greeting']
+
+  scope varchar(30) [not null, default: 'PERSONAL', note: 'PERSONAL, SHARED (everyone) or TEAM (unused until Backend 1 defines teams)']
+  team_id uuid [note: 'Backend 1 team id; set exactly when scope = TEAM (CHECK)']
+  created_by uuid [not null, note: 'Staff users.id']
+
+  is_active boolean [not null, default: true]
+
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (created_by, is_active)
+    (team_id, is_active)
+  }
+}
+
+Table automation_rules [headercolor: #059669] {
+  id uuid [pk, default: `gen_random_uuid()`]
+  name varchar(255) [not null]
+
+  trigger_type varchar(50) [not null]
+  conditions jsonb
+  response_content text [not null]
+
+  priority int [not null, default: 0]
+  is_active boolean [not null, default: true]
+
+  created_by uuid [note: 'Staff users.id']
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (is_active, trigger_type, priority)
+  }
+}
+
+Table automation_logs [headercolor: #059669] {
+  id uuid [pk, default: `gen_random_uuid()`]
+  rule_id uuid [not null]
+  conversation_id uuid [not null]
+  message_id uuid
+
+  execution_status varchar(30) [not null]
+  error_message text
+
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (rule_id, created_at)
+    conversation_id
+    message_id
+  }
+}
+
+// Relations of replies and automation
+Ref: automation_rules.id < automation_logs.rule_id [delete: restrict]
+Ref: conversations.id < automation_logs.conversation_id [delete: restrict]
+Ref: messages.id < automation_logs.message_id [delete: set null]

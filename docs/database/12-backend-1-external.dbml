@@ -1,0 +1,54 @@
+// ==============================================================================================================
+// 12. BACKEND 1 — EXTERNAL, NOT CREATED HERE
+// Loan-system data owned by Backend 1 (its API is not known yet). Shown for context only:
+// these tables do not exist in the chat database and nothing has a foreign key to them.
+// ==============================================================================================================
+
+TableGroup "12 Backend 1 (external)" [color: #94A3B8] {
+  customers
+  agents
+  loan_applications
+}
+
+Table customers [headercolor: #94A3B8] {
+  id uuid [pk, default: `gen_random_uuid()`]
+  user_id uuid [not null]
+  customer_code varchar(100)
+  phone varchar(30)
+  address text
+  created_at timestamptz
+  updated_at timestamptz
+
+  Note: 'EXTERNAL TABLE — customer profiles owned by Backend 1'
+}
+
+Table agents [headercolor: #94A3B8] {
+  id uuid [pk, default: `gen_random_uuid()`]
+  user_id uuid [not null]
+  employee_code varchar(100)
+  department varchar(100)
+  is_available boolean
+  created_at timestamptz
+  updated_at timestamptz
+
+  Note: 'EXTERNAL TABLE — agent profiles owned by Backend 1'
+}
+
+Table loan_applications [headercolor: #94A3B8] {
+  id uuid [pk, default: `gen_random_uuid()`]
+  customer_id uuid [not null]
+  application_number varchar(100)
+  loan_type varchar(100)
+  amount decimal(15,2)
+  status varchar(50)
+  submitted_at timestamptz
+  created_at timestamptz
+  updated_at timestamptz
+
+  Note: 'EXTERNAL TABLE — loan application data owned by Backend 1'
+}
+
+// Relations of backend 1
+Ref: users.id - customers.user_id [color: #9CA3AF]
+Ref: users.id - agents.user_id [color: #9CA3AF]
+Ref: customers.id < loan_applications.customer_id [color: #9CA3AF]

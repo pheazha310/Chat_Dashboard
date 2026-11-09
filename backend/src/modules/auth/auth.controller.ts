@@ -6,6 +6,8 @@ import {
   createUserBody,
   listUsersQuery,
   loginBody,
+  losCustomerBody,
+  losStaffBody,
   refreshBody,
   registerBody,
   resetPasswordBody,
@@ -38,6 +40,16 @@ export class AuthController {
     noStore(res);
     const tokens = await this.service.login(this.audience, parsed(req, "body", loginBody), clientOf(req));
     res.json({ status: "success", data: tokens });
+  };
+
+  /** Sign in with LOS: `{ losToken }` on the customer API, `{ handoffToken }` on the staff API. */
+  losSignIn = async (req: Request, res: Response) => {
+    noStore(res);
+    const token =
+      this.audience === "customer"
+        ? parsed(req, "body", losCustomerBody).losToken
+        : parsed(req, "body", losStaffBody).handoffToken;
+    res.json({ status: "success", data: await this.service.losSignIn(this.audience, token, clientOf(req)) });
   };
 
   refresh = async (req: Request, res: Response) => {

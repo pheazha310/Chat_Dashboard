@@ -8,6 +8,6 @@ Run from the repo root and report each step's actual outcome (quote failures; ne
 
 1. `pnpm check`
 2. `pnpm build` and `npx prettier --check backend/src` (backend has no format script)
-3. If `backend/prisma/schema.prisma` changed: `pnpm db:validate`
+3. If anything in `backend/prisma/schema/` changed: `pnpm db:validate`
 
 If something fails, fix only what your change caused; mention unrelated pre-existing failures instead of fixing them.

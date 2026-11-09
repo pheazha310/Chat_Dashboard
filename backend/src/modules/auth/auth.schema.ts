@@ -27,6 +27,13 @@ export type RegisterInput = z.infer<typeof registerBody>;
 
 export const refreshBody = z.object({ refreshToken: z.string().min(20).max(200) }).strict();
 
+/** A signed JWT from LOS; bounded so a huge body is refused before any crypto runs. */
+const losToken = z.string().min(20).max(8192);
+/** Mobile: the LOS customer access token the app already holds. */
+export const losCustomerBody = z.object({ losToken }).strict();
+/** Dashboard: the short-lived LOS staff hand-off token. */
+export const losStaffBody = z.object({ handoffToken: losToken }).strict();
+
 export const changePasswordBody = z
   .object({ currentPassword: passwordSchema, newPassword: newPasswordSchema })
   .strict()

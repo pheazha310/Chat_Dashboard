@@ -68,7 +68,10 @@ export default function CallbacksPanel({ conversationId, onBack }: { conversatio
     setSaving(true);
     const saved = await scheduleCallback(conversationId, time, notes);
     setSaving(false);
-    if (saved) (setTime(""), setNotes(""));
+    if (saved) {
+      setTime("");
+      setNotes("");
+    }
   };
 
   const open = callbacks.filter((item) => item.status === "PENDING" || item.status === "MISSED");

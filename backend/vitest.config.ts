@@ -12,6 +12,7 @@ export default defineConfig({
     // Integration tests share one database and truncate it, so test files must not run in parallel.
     fileParallelism: false,
     include: ["src/**/*.test.ts"],
+    setupFiles: ["src/__tests__/support/setup-env.ts"],
     coverage: {
       provider: "v8",
       include: ["src/**/*.ts"],

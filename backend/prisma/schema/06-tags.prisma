@@ -1,0 +1,26 @@
+// 06. Tags
+// Tags on conversations (many to many).
+// Same tables as docs/database/06-tags.dbml.
+
+model Tag {
+  id               String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name             String            @unique @db.VarChar(100)
+  color            String?           @db.VarChar(30)
+  createdBy        String?           @map("created_by") @db.Uuid /// External agents.id
+  createdAt        DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  conversationTags ConversationTag[]
+
+  @@map("tags")
+}
+
+model ConversationTag {
+  conversationId String       @map("conversation_id") @db.Uuid
+  tagId          String       @map("tag_id") @db.Uuid
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  tag            Tag          @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([conversationId, tagId])
+  @@index([tagId])
+  @@map("conversation_tags")
+}

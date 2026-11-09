@@ -1,0 +1,107 @@
+// 03. Messages
+// Messages in order, and per-person state: receipts, read positions, edit history, reactions.
+// Same tables as docs/database/03-messages.dbml.
+
+model Message {
+  id                     String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conversationId         String               @map("conversation_id") @db.Uuid
+  clientId               String?              @map("client_id") @db.VarChar(100) /// Client-generated ID for duplicate prevention
+  sequenceNumber         BigInt               @map("sequence_number")
+  senderType             String               @map("sender_type") @db.VarChar(30) /// CUSTOMER, AGENT, ASSISTANT, SYSTEM
+  senderId               String?              @map("sender_id") @db.Uuid /// chat_users.external_id (= users.id) of a CUSTOMER or AGENT sender; null for SYSTEM and ASSISTANT
+  messageType            String               @default("TEXT") @map("message_type") @db.VarChar(30)
+  content                String?              @db.Text
+  metadata               Json? /// Payload for SYSTEM messages, e.g. who took over; call or callback references
+  replyToMessageId       String?              @map("reply_to_message_id") @db.Uuid /// Must be in the same conversation (composite FK with conversation_id)
+  forwardedFromMessageId String?              @map("forwarded_from_message_id") @db.Uuid
+  status                 String               @default("SENT") @db.VarChar(20) /// Sender-facing summary: SENDING, SENT, DELIVERED, READ, FAILED. Per-recipient detail is in message_receipts
+  isEdited               Boolean              @default(false) @map("is_edited")
+  editedAt               DateTime?            @map("edited_at") @db.Timestamptz(6)
+  deletedAt              DateTime?            @map("deleted_at") @db.Timestamptz(6)
+  deletedBy              String?              @map("deleted_by") @db.Uuid /// External agents.id
+  createdAt              DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime             @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  conversation           Conversation         @relation(fields: [conversationId], references: [id], onDelete: Restrict)
+  sender                 ChatUser?            @relation(fields: [senderId], references: [externalId], onDelete: Restrict)
+  replyToMessage         Message?             @relation(name: "MessageReplyToMessage", fields: [replyToMessageId, conversationId], references: [id, conversationId], onDelete: Restrict)
+  replies                Message[]            @relation("MessageReplyToMessage")
+  forwardedFromMessage   Message?             @relation(name: "MessageForwardedFromMessage", fields: [forwardedFromMessageId], references: [id], onDelete: SetNull)
+  forwards               Message[]            @relation("MessageForwardedFromMessage")
+  messageReceipts        MessageReceipt[]
+  conversationReads      ConversationRead[]
+  messageEditHistories   MessageEditHistory[]
+  messageReactions       MessageReaction[]
+  messageAttachments     MessageAttachment[]
+  notifications          Notification[]
+  automationLogs         AutomationLog[]
+  spamReports            SpamReport[]
+
+  @@unique([conversationId, sequenceNumber])
+  @@unique([conversationId, clientId])
+  @@unique([id, conversationId], map: "messages_id_conversation_key")
+  @@index([conversationId, createdAt])
+  @@index([senderType, senderId])
+  @@index([replyToMessageId])
+  @@index([forwardedFromMessageId])
+  @@map("messages")
+}
+
+model MessageReceipt {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  messageId     String    @map("message_id") @db.Uuid
+  recipientType String    @map("recipient_type") @db.VarChar(30)
+  recipientId   String    @map("recipient_id") @db.Uuid
+  deliveredAt   DateTime? @map("delivered_at") @db.Timestamptz(6)
+  readAt        DateTime? @map("read_at") @db.Timestamptz(6)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  message       Message   @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, recipientType, recipientId])
+  @@index([recipientType, recipientId, readAt])
+  @@map("message_receipts")
+}
+
+model ConversationRead {
+  id                     String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conversationId         String       @map("conversation_id") @db.Uuid
+  readerType             String       @map("reader_type") @db.VarChar(30)
+  readerId               String       @map("reader_id") @db.Uuid
+  lastReadMessageId      String?      @map("last_read_message_id") @db.Uuid
+  lastReadSequenceNumber BigInt       @default(0) @map("last_read_sequence_number") /// Unread count = conversations.last_sequence_number - this (approximate: includes own and system messages)
+  lastReadAt             DateTime?    @map("last_read_at") @db.Timestamptz(6)
+  markedUnread           Boolean      @default(false) @map("marked_unread") /// Agent manually marked the conversation unread (FR-05)
+  createdAt              DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  conversation           Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  lastReadMessage        Message?     @relation(fields: [lastReadMessageId, conversationId], references: [id, conversationId], onDelete: Restrict)
+
+  @@unique([conversationId, readerType, readerId])
+  @@index([lastReadMessageId])
+  @@map("conversation_reads")
+}
+
+model MessageEditHistory {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  messageId       String   @map("message_id") @db.Uuid
+  editorType      String   @map("editor_type") @db.VarChar(30)
+  editorId        String   @map("editor_id") @db.Uuid
+  previousContent String   @map("previous_content") @db.Text
+  editedAt        DateTime @default(now()) @map("edited_at") @db.Timestamptz(6)
+  message         Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId, editedAt])
+  @@map("message_edit_history")
+}
+
+model MessageReaction {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  messageId String   @map("message_id") @db.Uuid
+  userType  String   @map("user_type") @db.VarChar(30)
+  userId    String   @map("user_id") @db.Uuid
+  emoji     String   @db.VarChar(50)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userType, userId, emoji])
+  @@map("message_reactions")
+}

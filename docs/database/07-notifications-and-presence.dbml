@@ -1,0 +1,105 @@
+// ==============================================================================================================
+// 07. NOTIFICATIONS AND PRESENCE
+// In-app notifications, per-agent and per-conversation switches, push devices and presence history.
+// ==============================================================================================================
+
+TableGroup "07 Notifications and presence" [color: #DC2626] {
+  notifications
+  notification_preferences
+  conversation_notification_settings
+  push_devices
+  agent_presence_history
+}
+
+Table notifications [headercolor: #DC2626] {
+  id uuid [pk, default: `gen_random_uuid()`]
+
+  recipient_type varchar(30) [not null]
+  recipient_id uuid [not null, note: 'users.id']
+
+  conversation_id uuid
+  message_id uuid
+
+  notification_type varchar(50) [not null]
+  title varchar(255) [not null]
+  body text
+
+  read_at timestamptz
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (recipient_type, recipient_id, created_at)
+    (recipient_type, recipient_id, read_at)
+    conversation_id
+    message_id
+  }
+}
+
+Table notification_preferences [headercolor: #DC2626] {
+  id uuid [pk, default: `gen_random_uuid()`]
+  agent_id uuid [not null, unique, note: 'Staff users.id']
+
+  new_message_enabled boolean [not null, default: true]
+  assignment_enabled boolean [not null, default: true]
+  transfer_enabled boolean [not null, default: true]
+  mention_enabled boolean [not null, default: true]
+
+  sound_enabled boolean [not null, default: true]
+  browser_enabled boolean [not null, default: true]
+
+  updated_at timestamptz [not null, default: `now()`]
+}
+
+Table conversation_notification_settings [headercolor: #DC2626] {
+  id uuid [pk, default: `gen_random_uuid()`]
+  conversation_id uuid [not null]
+  agent_id uuid [not null, note: 'Staff users.id']
+
+  is_muted boolean [not null, default: false]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (conversation_id, agent_id) [unique]
+    agent_id
+  }
+}
+
+Table push_devices [headercolor: #DC2626] {
+  id uuid [pk, default: `gen_random_uuid()`]
+  user_id uuid [not null, note: 'users.id of a customer or staff member']
+
+  platform varchar(30) [not null]
+  device_token varchar(512) [not null]
+  is_active boolean [not null, default: true]
+
+  last_seen_at timestamptz
+
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (platform, device_token) [unique]
+    user_id
+  }
+}
+
+Table agent_presence_history [headercolor: #DC2626] {
+  id uuid [pk, default: `gen_random_uuid()`]
+  agent_id uuid [not null, note: 'Staff users.id']
+
+  status varchar(30) [not null, note: 'AVAILABLE, BUSY, AWAY, OFFLINE']
+
+  started_at timestamptz [not null, default: `now()`]
+  ended_at timestamptz
+
+  indexes {
+    (agent_id, ended_at)
+  }
+
+  Note: 'History only. Live presence (Available/Busy/Away/Offline) is kept in Redis.'
+}
+
+// Relations of notifications and presence
+Ref: conversations.id < notifications.conversation_id [delete: set null]
+Ref: messages.id < notifications.message_id [delete: set null]
+Ref: conversations.id < conversation_notification_settings.conversation_id [delete: cascade]

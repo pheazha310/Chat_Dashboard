@@ -17,7 +17,8 @@
     "check": "pnpm typecheck && pnpm lint && pnpm check:fsd && pnpm format:check && pnpm test",
     "db:generate": "pnpm --filter @chat-dashboard/backend db:generate",
     "db:validate": "pnpm --filter @chat-dashboard/backend db:validate",
-    "db:migrate": "pnpm --filter @chat-dashboard/backend db:migrate"
+    "db:migrate": "pnpm --filter @chat-dashboard/backend db:migrate",
+    "db:dbml": "pnpm --filter @chat-dashboard/backend db:dbml"
   },
   "devDependencies": {
     "prettier": "3"

@@ -1,6 +1,6 @@
 -- PostgreSQL 16+ constraints Prisma cannot express. Append to the first generated
 -- migration (prisma migrate dev --create-only, then paste this into migration.sql).
--- Table and column names follow docs/database-schema.dbml (Backend 2 only).
+-- Table and column names follow docs/database/*.dbml (Backend 2 only).
 
 -- ─── Value sets (no database enums) ─────────────────────────────────────────
 -- PROPOSED sets: the DBML only names some of them in column notes. Confirm or change them here and in
@@ -94,7 +94,7 @@ ALTER TABLE messages ADD CONSTRAINT messages_sender_matches_type CHECK (
 );
 
 -- Message numbers start at 1. (Replies and last-read markers stay in the same conversation through the composite
--- foreign keys (x_message_id, conversation_id) -> messages (id, conversation_id) declared in schema.prisma.)
+-- foreign keys (x_message_id, conversation_id) -> messages (id, conversation_id) declared in prisma/schema/.)
 ALTER TABLE messages ADD CONSTRAINT messages_sequence_positive CHECK (sequence_number > 0);
 
 -- Sizes, durations and counters are never negative.
@@ -250,7 +250,7 @@ CREATE UNIQUE INDEX blocked_keywords_keyword_lower_key ON blocked_keywords (lowe
 
 -- Chat identity mapping.
 ALTER TABLE chat_users ADD CONSTRAINT chat_users_user_type_check CHECK (user_type IN ('CUSTOMER', 'STAFF'));
--- chat_users.role_id references roles (the role name CHECK lives on roles).
+-- chat_users (role_id, user_type) references roles (id, kind) (the role name CHECK lives on roles).
 ALTER TABLE chat_users ADD CONSTRAINT chat_users_status_check CHECK (status IN ('ACTIVE', 'DISABLED'));
 
 -- users / auth_sessions (sign-in accounts; this backend owns authentication)
@@ -258,6 +258,17 @@ ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('CUSTOMER', 'A
 ALTER TABLE users ADD CONSTRAINT users_status_check CHECK (status IN ('ACTIVE', 'DISABLED'));
 ALTER TABLE users ADD CONSTRAINT users_email_lower_check CHECK (email = lower(email));
 ALTER TABLE users ADD CONSTRAINT users_failed_login_count_check CHECK (failed_login_count >= 0);
+-- Password and LOS sign-in: a password always belongs to an email, every account can sign in somehow, and the LOS
+-- link is a pair whose kind matches the role.
+ALTER TABLE users ADD CONSTRAINT users_password_needs_email CHECK ((email IS NULL) = (password_hash IS NULL));
+ALTER TABLE users ADD CONSTRAINT users_has_sign_in CHECK (email IS NOT NULL OR los_user_id IS NOT NULL);
+ALTER TABLE users ADD CONSTRAINT users_los_link_pair CHECK ((los_user_id IS NULL) = (los_user_type IS NULL));
+ALTER TABLE users ADD CONSTRAINT users_los_user_type_check CHECK (los_user_type IN ('CUSTOMER', 'STAFF'));
+ALTER TABLE users ADD CONSTRAINT users_los_user_type_matches_role CHECK (los_user_type IS NULL OR (los_user_type = 'CUSTOMER') = (role = 'CUSTOMER'));
+ALTER TABLE users ADD CONSTRAINT users_los_user_id_positive CHECK (los_user_id > 0);
+-- A rotated session points at its successor: never itself, and only once revoked.
+ALTER TABLE auth_sessions ADD CONSTRAINT auth_sessions_replaced_by_not_self CHECK (replaced_by_id <> id);
+ALTER TABLE auth_sessions ADD CONSTRAINT auth_sessions_replaced_needs_revoked CHECK (replaced_by_id IS NULL OR revoked_at IS NOT NULL);
 
 -- roles / permissions (what each role may do is data; names are fixed because tokens carry them)
 ALTER TABLE roles ADD CONSTRAINT roles_kind_check CHECK (kind IN ('CUSTOMER', 'STAFF'));

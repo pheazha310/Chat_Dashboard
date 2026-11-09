@@ -1,0 +1,45 @@
+// 05. Notes and escalations
+// Staff-only internal notes with @mentions, and escalations.
+// Same tables as docs/database/05-notes-and-escalations.dbml.
+
+model InternalNote {
+  id             String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conversationId String        @map("conversation_id") @db.Uuid
+  authorAgentId  String        @map("author_agent_id") @db.Uuid /// External agents.id
+  content        String        @db.Text
+  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt      DateTime?     @map("deleted_at") @db.Timestamptz(6)
+  conversation   Conversation  @relation(fields: [conversationId], references: [id], onDelete: Restrict)
+  noteMentions   NoteMention[]
+
+  @@index([conversationId, createdAt])
+  @@map("internal_notes")
+}
+
+model NoteMention {
+  id               String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  noteId           String       @map("note_id") @db.Uuid
+  mentionedAgentId String       @map("mentioned_agent_id") @db.Uuid /// External agents.id
+  createdAt        DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  note             InternalNote @relation(fields: [noteId], references: [id], onDelete: Cascade)
+
+  @@unique([noteId, mentionedAgentId])
+  @@index([mentionedAgentId])
+  @@map("note_mentions")
+}
+
+model ConversationEscalation {
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conversationId String       @map("conversation_id") @db.Uuid
+  requestedBy    String       @map("requested_by") @db.Uuid /// External agents.id
+  reason         String?      @db.Text
+  status         String       @default("PENDING") @db.VarChar(30)
+  resolvedBy     String?      @map("resolved_by") @db.Uuid /// External agents.id
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  resolvedAt     DateTime?    @map("resolved_at") @db.Timestamptz(6)
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Restrict)
+
+  @@index([conversationId, status])
+  @@map("conversation_escalations")
+}

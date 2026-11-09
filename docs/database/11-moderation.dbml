@@ -1,0 +1,85 @@
+// ==============================================================================================================
+// 11. MODERATION
+// Spam reports, customer blocks, blocked keywords and the moderation audit log.
+// ==============================================================================================================
+
+TableGroup "11 Moderation" [color: #BE123C] {
+  spam_reports
+  customer_blocks
+  blocked_keywords
+  moderation_activities
+}
+
+Table spam_reports [headercolor: #BE123C] {
+  id uuid [pk, default: `gen_random_uuid()`]
+  conversation_id uuid [not null]
+
+  reported_by_type varchar(30) [not null]
+  reported_by_id uuid [not null]
+
+  message_id uuid [note: 'The reported message, if any']
+
+  reason text [not null]
+  status varchar(30) [not null, default: 'PENDING']
+
+  reviewed_by uuid [note: 'Staff users.id']
+  reviewed_at timestamptz
+  resolution_note varchar(500)
+
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (status, created_at)
+    conversation_id
+    message_id
+  }
+}
+
+Table customer_blocks [headercolor: #BE123C] {
+  id uuid [pk, default: `gen_random_uuid()`]
+  customer_id uuid [not null, note: 'Customer users.id']
+  blocked_by uuid [not null, note: 'Staff users.id']
+
+  reason text
+
+  blocked_at timestamptz [not null, default: `now()`]
+  unblocked_at timestamptz
+  unblocked_by uuid [note: 'Staff users.id']
+
+  indexes {
+    (customer_id, unblocked_at)
+  }
+
+  Note: 'One active block (unblocked_at IS NULL) per customer via a partial unique index.'
+}
+
+Table blocked_keywords [headercolor: #BE123C] {
+  id uuid [pk, default: `gen_random_uuid()`]
+  keyword varchar(255) [not null, unique]
+
+  is_active boolean [not null, default: true]
+  created_by uuid [note: 'Staff users.id']
+
+  created_at timestamptz [not null, default: `now()`]
+}
+
+Table moderation_activities [headercolor: #BE123C] {
+  id uuid [pk, default: `gen_random_uuid()`]
+  actor_id uuid [not null, note: 'Staff users.id']
+
+  action varchar(100) [not null]
+  target_type varchar(50) [not null]
+  target_id uuid [not null]
+
+  metadata jsonb
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (actor_id, created_at)
+    (target_type, target_id)
+  }
+}
+
+// Relations of moderation
+Ref: conversations.id < spam_reports.conversation_id [delete: restrict]
+Ref: messages.id < spam_reports.message_id [delete: set null]

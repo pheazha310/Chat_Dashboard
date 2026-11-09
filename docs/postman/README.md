@@ -125,14 +125,29 @@ first: the requests below reuse `convId` and `msgId`, and the create requests sa
 | ------------------------------ | ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Workspace                      | [api-workspace.md](../api-workspace.md)                 | -                                                                                                                                                                       |
 | Message actions                | [api-message-actions.md](../api-message-actions.md)     | a sent message                                                                                                                                                          |
-| Attachments                    | [api-attachments.md](../api-attachments.md)             | pick a file in the two upload requests (form-data)                                                                                                                      |
+| Attachments                    | [api-attachments.md](../api-attachments.md)             | the upload requests point at `fixtures/sample.pdf` and `fixtures/sample.wav` (Postman: pick them, or any file, in form-data)                                            |
 | Internal notes, Escalations    | [api-notes-escalations.md](../api-notes-escalations.md) | resolving an escalation needs the supervisor token                                                                                                                      |
 | Tags, Conversations (priority) | [api-tags-priority.md](../api-tags-priority.md)         | -                                                                                                                                                                       |
 | Canned responses               | [api-canned-responses.md](../api-canned-responses.md)   | creating a SHARED one needs the supervisor token                                                                                                                        |
 | Chat settings                  | [api-chat-settings.md](../api-chat-settings.md)         | -                                                                                                                                                                       |
-| Callbacks                      | [api-callbacks.md](../api-callbacks.md)                 | `scheduledAt` must be in the future: edit the sample date                                                                                                               |
+| Callbacks                      | [api-callbacks.md](../api-callbacks.md)                 | `scheduledAt` (at most 365 days ahead) is set by a pre-request script to two and three days from now                                                                    |
 | Calls                          | [api-calls.md](../api-calls.md)                         | Accept/Decline of a customer's call need a call the customer started; there is no customer channel yet, so only an agent-started call can be driven here (it rings out) |
 | Moderation                     | [api-moderation.md](../api-moderation.md)               | keywords, reviews and the log need the supervisor token                                                                                                                 |
+
+### Running the whole collection
+
+Against a fresh database with `AUTH_MODE=dev` and the admin `admin@example.com` / `change-me-please`
+(`user:create-admin`), the collection runs top to bottom, each request saving the ids the later ones need:
+
+```sh
+npx newman run docs/postman/chat-dashboard.postman_collection.json --working-dir docs/postman \
+  --env-var baseUrl=http://localhost:4000
+```
+
+All requests succeed except four that cannot from the staff side alone, and answer with the expected refusal: **Mark
+delivered** (receipts exist only for customer messages), **Answer** and **Decline a customer's call** (the call was
+started by the agent), and **Hang up** (that call was cancelled). It changes data (the admin's password becomes
+`a-new-password`), so use a throwaway database.
 
 New WebSocket frames (besides the list above): `call.offer`, `call.answer`, `call.ice_candidate`; see
 [../api-calls.md](../api-calls.md).

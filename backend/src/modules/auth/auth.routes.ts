@@ -10,6 +10,8 @@ import {
   createUserBody,
   listUsersQuery,
   loginBody,
+  losCustomerBody,
+  losStaffBody,
   refreshBody,
   registerBody,
   resetPasswordBody,
@@ -27,6 +29,12 @@ function authRouter(audience: Audience) {
   const signedIn = authenticate(authClient, audience === "customer" ? ["CUSTOMER"] : undefined);
   const router = Router();
   router.post("/login", limited(`${audience}-login`), validate({ body: loginBody }), controller.login);
+  router.post(
+    "/los",
+    limited(`${audience}-los`),
+    validate({ body: audience === "customer" ? losCustomerBody : losStaffBody }),
+    controller.losSignIn,
+  );
   router.post("/refresh", limited(`${audience}-refresh`), validate({ body: refreshBody }), controller.refresh);
   router.post("/logout", validate({ body: refreshBody }), controller.logout);
   router.post("/logout-all", signedIn, controller.logoutAll);

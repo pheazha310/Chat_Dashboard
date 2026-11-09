@@ -1,0 +1,34 @@
+// ==============================================================================================================
+// 06. TAGS
+// Labels for conversations (many-to-many).
+// ==============================================================================================================
+
+TableGroup "06 Tags" [color: #CA8A04] {
+  tags
+  conversation_tags
+}
+
+Table tags [headercolor: #CA8A04] {
+  id uuid [pk, default: `gen_random_uuid()`]
+  name varchar(100) [not null, unique]
+  color varchar(30)
+
+  created_by uuid [note: 'Staff users.id']
+  created_at timestamptz [not null, default: `now()`]
+}
+
+Table conversation_tags [headercolor: #CA8A04] {
+  conversation_id uuid [not null]
+  tag_id uuid [not null]
+
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (conversation_id, tag_id) [pk]
+    tag_id
+  }
+}
+
+// Relations of tags
+Ref: conversations.id < conversation_tags.conversation_id [delete: cascade]
+Ref: tags.id < conversation_tags.tag_id [delete: cascade]

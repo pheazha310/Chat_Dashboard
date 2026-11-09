@@ -20,18 +20,18 @@ beforeEach(() => {
 });
 
 describe("resolve", () => {
-  it("maps a customer token to a CUSTOMER chat user keyed by the user id", async () => {
+  it("maps a customer token to a chat user keyed by the user id, with the CUSTOMER role", async () => {
     await expect(service.resolve({ userId: uid(100), role: "CUSTOMER" })).resolves.toMatchObject({
       chatUserId: uid(900),
     });
-    expect(repo.upsert).toHaveBeenCalledWith("CUSTOMER", uid(100), "CUSTOMER");
+    expect(repo.upsert).toHaveBeenCalledWith(uid(100), "CUSTOMER");
   });
 
   it.each(["AGENT", "SUPERVISOR", "ADMIN"] as const)(
-    "maps %s to a STAFF chat user and records the role",
+    "records the %s role (the database derives the STAFF kind from it)",
     async (role) => {
       await service.resolve({ userId: uid(1), role });
-      expect(repo.upsert).toHaveBeenCalledWith("STAFF", uid(1), role);
+      expect(repo.upsert).toHaveBeenCalledWith(uid(1), role);
     },
   );
 
@@ -53,12 +53,14 @@ describe("resolve", () => {
 });
 
 describe("account changes", () => {
-  it("creates a customer identity on demand, and syncs name and role by kind", async () => {
+  it("creates a customer identity on demand, and syncs name and role", async () => {
     await service.ensureCustomer(uid(5));
-    expect(repo.ensure).toHaveBeenCalledWith("CUSTOMER", uid(5), "CUSTOMER");
+    expect(repo.ensure).toHaveBeenCalledWith(uid(5), "CUSTOMER");
     await service.sync({ id: uid(6), role: "SUPERVISOR", displayName: "Sophea" });
-    expect(repo.sync).toHaveBeenCalledWith("STAFF", uid(6), "SUPERVISOR", "Sophea");
+    expect(repo.sync).toHaveBeenCalledWith(uid(6), "SUPERVISOR", "Sophea", undefined);
+    await service.sync({ id: uid(8), role: "CUSTOMER", displayName: "Dara", losUserId: 42 });
+    expect(repo.sync).toHaveBeenLastCalledWith(uid(8), "CUSTOMER", "Dara", 42);
     await service.setStatus({ id: uid(7), role: "CUSTOMER" }, "DISABLED");
-    expect(repo.setStatus).toHaveBeenCalledWith("CUSTOMER", uid(7), "CUSTOMER", "DISABLED");
+    expect(repo.setStatus).toHaveBeenCalledWith(uid(7), "CUSTOMER", "DISABLED");
   });
 });

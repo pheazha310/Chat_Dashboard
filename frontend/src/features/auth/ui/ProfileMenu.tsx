@@ -43,7 +43,7 @@ export default function ProfileMenu() {
         <div className="more-menu profile-menu-popover" role="menu">
           <div className="profile-menu-account">
             <strong>{user.displayName}</strong>
-            <small>{user.email}</small>
+            {user.email && <small>{user.email}</small>}
             <small>{user.role.toLowerCase()}</small>
           </div>
           <button role="menuitem" onClick={() => void submitSignOut()}>

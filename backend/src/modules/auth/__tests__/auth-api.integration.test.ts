@@ -1,5 +1,6 @@
 import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
+import { exportSPKI, generateKeyPair, SignJWT } from "jose";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { assertTestDatabase } from "../../../__tests__/support/container.js";
 
@@ -13,7 +14,14 @@ describe.skipIf(!url)("authentication over HTTP", () => {
   let db: typeof import("@config/database.js").prisma;
   let users: typeof import("../../../app-container.js").userService;
 
+  let losKey: CryptoKey;
+  const LOS_ISSUER = "https://los.integration.test";
+
   beforeAll(async () => {
+    const keys = await generateKeyPair("RS256");
+    losKey = keys.privateKey;
+    process.env.LOS_ISSUER = LOS_ISSUER;
+    process.env.LOS_PUBLIC_KEY = await exportSPKI(keys.publicKey);
     process.env.DATABASE_URL = url as string;
     process.env.AUTH_MODE = "jwt";
     process.env.EVENT_BUS = "memory";
@@ -126,6 +134,77 @@ describe.skipIf(!url)("authentication over HTTP", () => {
       (await call("/api/v1/admin/auth/refresh", { body: { refreshToken: second.body.data.refreshToken } })).status,
     ).toBe(401);
     expect(await db.authSession.count({ where: { revokedAt: null } })).toBe(0);
+    const chain = await db.authSession.findMany({
+      orderBy: { createdAt: "asc" },
+      select: { id: true, replacedById: true },
+    });
+    expect(chain).toHaveLength(2);
+    expect(chain[0]?.replacedById).toBe(chain[1]?.id);
+    expect(chain[1]?.replacedById).toBeNull();
+  });
+
+  it("keeps a chat user's kind equal to its role's kind", async () => {
+    const admin = await db.chatUser.findFirstOrThrow({ select: { id: true, userType: true } });
+    expect(admin.userType).toBe("STAFF");
+    const customerRole = await db.role.findUniqueOrThrow({ where: { name: "CUSTOMER" }, select: { id: true } });
+    await expect(
+      db.$executeRaw`UPDATE chat_users SET role_id = ${customerRole.id} WHERE id = ${admin.id}::uuid`,
+    ).rejects.toThrow(/chat_users_role_id_user_type_fkey/);
+  });
+
+  it("signs customers and staff in with LOS tokens into LOS-only accounts", async () => {
+    const losToken = (claims: Record<string, unknown>, audience: string) =>
+      new SignJWT(claims)
+        .setProtectedHeader({ alg: "RS256" })
+        .setIssuer(LOS_ISSUER)
+        .setAudience(audience)
+        .setExpirationTime("2m")
+        .sign(losKey);
+    const customerToken = await losToken(
+      { userId: 2, username: "dara", type: "customer", tokenType: "access" },
+      "luyleun",
+    );
+    const first = await call("/api/v1/customer/auth/los", { body: { losToken: customerToken } });
+    expect(first.status).toBe(200);
+    expect(first.body.data.user).toMatchObject({ email: null, losUserId: 2, role: "CUSTOMER", displayName: "dara" });
+    const again = await call("/api/v1/customer/auth/los", { body: { losToken: customerToken } });
+    expect(again.body.data.user.id).toBe(first.body.data.user.id);
+    expect((await call("/api/v1/customer/me", { token: first.body.data.accessToken })).status).toBe(200);
+    const identity = await db.chatUser.findUniqueOrThrow({ where: { externalId: first.body.data.user.id } });
+    expect(identity).toMatchObject({ losUserId: 2, userType: "CUSTOMER" });
+
+    // A customer token is refused on the staff endpoint, and a hand-off token on the customer one.
+    expect((await call("/api/v1/admin/auth/los", { body: { handoffToken: customerToken } })).status).toBe(401);
+    const handoff = await losToken(
+      { userId: 2, username: "sophea", type: "staff", tokenType: "chat-handoff", role: "agent" },
+      "chat",
+    );
+    expect((await call("/api/v1/customer/auth/los", { body: { losToken: handoff } })).status).toBe(401);
+    const staff = await call("/api/v1/admin/auth/los", { body: { handoffToken: handoff } });
+    expect(staff.status).toBe(200);
+    expect(staff.body.data.user).toMatchObject({ role: "AGENT", losUserId: 2 });
+    expect(staff.body.data.user.id).not.toBe(first.body.data.user.id);
+
+    // The database keeps the account shapes honest.
+    await expect(
+      db.$executeRaw`UPDATE users SET los_user_id = NULL, los_user_type = NULL WHERE email IS NULL`,
+    ).rejects.toThrow(/users_has_sign_in/);
+    await expect(
+      db.$executeRaw`UPDATE users SET email = 'x@example.com' WHERE id = ${staff.body.data.user.id}::uuid`,
+    ).rejects.toThrow(/users_password_needs_email/);
+    await expect(
+      db.$executeRaw`UPDATE users SET los_user_type = 'CUSTOMER' WHERE id = ${staff.body.data.user.id}::uuid`,
+    ).rejects.toThrow(/users_los_user_type_matches_role/);
+  });
+
+  it("keeps a refreshed sign-in's end and prunes expired sessions at the next sign-in", async () => {
+    const first = (await staffLogin("admin@example.com", "admin-password")).body.data;
+    const refreshed = (await call("/api/v1/admin/auth/refresh", { body: { refreshToken: first.refreshToken } })).body
+      .data;
+    expect(refreshed.refreshTokenExpiresAt).toBe(first.refreshTokenExpiresAt);
+    await db.authSession.updateMany({ data: { expiresAt: new Date(Date.now() - 1000) } });
+    await staffLogin("admin@example.com", "admin-password");
+    expect(await db.authSession.count()).toBe(1);
   });
 
   it("locks an account after 5 wrong passwords", async () => {

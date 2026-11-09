@@ -1,0 +1,43 @@
+// 04. Attachments
+// Uploaded files and their links to messages of the same conversation.
+// Same tables as docs/database/04-attachments.dbml.
+
+model Attachment {
+  id                 String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conversationId     String              @map("conversation_id") @db.Uuid /// Needed for the Media & Files panel and access control; an upload exists before its message
+  uploadedByType     String              @map("uploaded_by_type") @db.VarChar(30)
+  uploadedById       String              @map("uploaded_by_id") @db.Uuid /// chat_users.external_id (= users.id)
+  storageKey         String              @unique @map("storage_key") @db.VarChar(500)
+  fileName           String              @map("file_name") @db.VarChar(255)
+  mimeType           String              @map("mime_type") @db.VarChar(150)
+  fileSize           BigInt              @map("file_size")
+  durationMs         Int?                @map("duration_ms") /// Audio, video and voice messages (FR-18)
+  waveform           Json? /// Voice message amplitude samples
+  checksumSha256     String?             @map("checksum_sha256") @db.VarChar(64)
+  uploadStatus       String              @default("PENDING") @map("upload_status") @db.VarChar(30)
+  createdAt          DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  deletedAt          DateTime?           @map("deleted_at") @db.Timestamptz(6)
+  conversation       Conversation        @relation(fields: [conversationId], references: [id], onDelete: Restrict)
+  uploader           ChatUser            @relation(fields: [uploadedById], references: [externalId], onDelete: Restrict)
+  messageAttachments MessageAttachment[]
+
+  @@unique([id, conversationId], map: "attachments_id_conversation_key")
+  @@index([conversationId, createdAt])
+  @@index([uploadedByType, uploadedById])
+  @@index([uploadStatus, createdAt])
+  @@map("attachments")
+}
+
+model MessageAttachment {
+  messageId      String     @map("message_id") @db.Uuid
+  attachmentId   String     @map("attachment_id") @db.Uuid
+  conversationId String     @map("conversation_id") @db.Uuid
+  createdAt      DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  message        Message    @relation(fields: [messageId, conversationId], references: [id, conversationId], onDelete: Cascade)
+  attachment     Attachment @relation(fields: [attachmentId, conversationId], references: [id, conversationId], onDelete: Cascade)
+
+  @@id([messageId, attachmentId])
+  @@index([conversationId])
+  @@index([attachmentId])
+  @@map("message_attachments")
+}

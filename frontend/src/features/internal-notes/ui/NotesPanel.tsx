@@ -95,7 +95,10 @@ export default function NotesPanel({ conversationId, onBack }: { conversationId:
     setSaving(true);
     const saved = await addNote(conversationId, text, mentioned);
     setSaving(false);
-    if (saved) (setText(""), setMentioned([]));
+    if (saved) {
+      setText("");
+      setMentioned([]);
+    }
   };
 
   return (

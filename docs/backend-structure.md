@@ -5,7 +5,10 @@
 
 ```
 backend/
-├── prisma/                  schema.prisma, migrations/, sql/constraints.sql (generated/ is git-ignored)
+├── prisma/
+│   ├── schema/              schema.prisma (generator, datasource) + one file per domain: 01-identity-and-access … 11-moderation
+│   ├── migrations/          append-only SQL migrations (path set in prisma.config.ts)
+│   └── sql/constraints.sql  CHECKs and partial indexes Prisma cannot express (generated/ is git-ignored)
 ├── vitest.config.ts         aliases + coverage thresholds
 └── src/
     ├── server.ts            http server, websocket attach, graceful shutdown

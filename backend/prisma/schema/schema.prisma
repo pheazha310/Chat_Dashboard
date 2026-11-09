@@ -1,0 +1,22 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+// Prisma 7: the connection URL lives in prisma.config.ts, not here.
+datasource db {
+  provider = "postgresql"
+}
+
+// The schema is split by domain: one file per docs/database/NN-*.dbml file (01-11), kept in step with them
+// by hand. A new model goes into the file of its domain; Prisma reads every .prisma file in this folder.
+//
+// This service (Backend 2, the chat backend) owns chat data. Backend 1 tables are documentation
+// references only and are not created in this database. Columns that hold a person's or Backend 1 id
+// (application_id, agent_id, user_id, *_by, actor/participant ids) are plain UUID columns with NO foreign key,
+// except conversations.customer_id, messages.sender_id and attachments.uploaded_by_id, which reference
+// chat_users.external_id (= users.id).
+//
+// No database enums: fixed-value columns are VARCHAR strings whose allowed values are enforced by
+// CHECK constraints in prisma/sql/constraints.sql and listed in docs/database-schema.md.
+// Ids are UUIDs (gen_random_uuid()), including references to Backend 1 ids; they serialize to JSON as-is.

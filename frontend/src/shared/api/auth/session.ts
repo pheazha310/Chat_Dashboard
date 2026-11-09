@@ -4,7 +4,8 @@ import { API_URL, AUTH_SESSION_KEY, DEV_AUTH_TOKEN } from "@/shared/config";
 /** The signed-in staff member, as `POST /auth/login` returns it (`docs/api-auth.md`). */
 export type AuthUser = {
   id: string;
-  email: string;
+  /** Null for an account that signs in only with LOS. */
+  email: string | null;
   displayName: string;
   role: string;
   status: string;

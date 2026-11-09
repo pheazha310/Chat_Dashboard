@@ -101,7 +101,35 @@
     },
     {
       "key": "roleId",
-      "value": "3"
+      "value": "2"
+    },
+    {
+      "key": "voiceMsgId",
+      "value": ""
+    },
+    {
+      "key": "callbackAt",
+      "value": ""
+    },
+    {
+      "key": "callbackAt2",
+      "value": ""
+    },
+    {
+      "key": "customerAttachmentId",
+      "value": ""
+    },
+    {
+      "key": "customerVoiceMsgId",
+      "value": ""
+    },
+    {
+      "key": "losHandoffToken",
+      "value": ""
+    },
+    {
+      "key": "losCustomerToken",
+      "value": ""
     }
   ],
   "item": [
@@ -161,10 +189,51 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "const data = pm.response.json().data;",
-                  "if (data && data.accessToken) {",
-                  "  pm.collectionVariables.set('token', data.accessToken);",
-                  "  pm.collectionVariables.set('refreshToken', data.refreshToken);",
+                  "const session = pm.response.json().data;",
+                  "if (session && session.accessToken) {",
+                  "  pm.collectionVariables.set('token', session.accessToken);",
+                  "  pm.collectionVariables.set('refreshToken', session.refreshToken);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Sign in with LOS (staff) - saves token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/auth/los",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "auth", "los"],
+              "query": []
+            },
+            "description": "Public. Exchanges the short-lived LOS staff hand-off token (RS256; aud=LOS_HANDOFF_AUDIENCE, type=staff, tokenType=LOS_HANDOFF_TOKEN_TYPE, role) for this backend's tokens. 503 LOS_SIGN_IN_DISABLED when LOS_ISSUER is not set. Saves {{token}} and {{refreshToken}}.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"handoffToken\": \"{{losHandoffToken}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const session = pm.response.json().data;",
+                  "if (session && session.accessToken) {",
+                  "  pm.collectionVariables.set('token', session.accessToken);",
+                  "  pm.collectionVariables.set('refreshToken', session.refreshToken);",
                   "}"
                 ]
               }
@@ -202,10 +271,10 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "const data = pm.response.json().data;",
-                  "if (data && data.accessToken) {",
-                  "  pm.collectionVariables.set('token', data.accessToken);",
-                  "  pm.collectionVariables.set('refreshToken', data.refreshToken);",
+                  "const session = pm.response.json().data;",
+                  "if (session && session.accessToken) {",
+                  "  pm.collectionVariables.set('token', session.accessToken);",
+                  "  pm.collectionVariables.set('refreshToken', session.refreshToken);",
                   "}"
                 ]
               }
@@ -294,10 +363,10 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "const data = pm.response.json().data;",
-                  "if (data && data.accessToken) {",
-                  "  pm.collectionVariables.set('token', data.accessToken);",
-                  "  pm.collectionVariables.set('refreshToken', data.refreshToken);",
+                  "const session = pm.response.json().data;",
+                  "if (session && session.accessToken) {",
+                  "  pm.collectionVariables.set('token', session.accessToken);",
+                  "  pm.collectionVariables.set('refreshToken', session.refreshToken);",
                   "}"
                 ]
               }
@@ -352,7 +421,19 @@
               "mode": "raw",
               "raw": "{\n  \"email\": \"agent@example.com\",\n  \"displayName\": \"First Agent\",\n  \"role\": \"AGENT\",\n  \"password\": \"agent-password\"\n}"
             }
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "if (j.data && j.data.id) pm.collectionVariables.set('userId', j.data.id);"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "One account",
@@ -458,10 +539,10 @@
               "path": ["api", "v1", "admin", "roles", "{{roleId}}", "permissions"],
               "query": []
             },
-            "description": "Needs roles.manage (admins by default). Replaces the whole set; ADMIN must keep users.manage and roles.manage; customer roles get none. Applies within 60 s.",
+            "description": "Needs roles.manage (admins by default). Replaces the whole set; ADMIN must keep users.manage and roles.manage; customer roles get none. Applies within 60 s. The example targets AGENT (roleId 2), which starts with none, so running it changes nothing; list permission keys (e.g. \"conversations.view_all\") to widen it.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"permissions\": [\"conversations.view_all\", \"tags.delete\"]\n}"
+              "raw": "{\n  \"permissions\": []\n}"
             }
           }
         },
@@ -496,10 +577,10 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "const data = pm.response.json().data;",
-                  "if (data && data.accessToken) {",
-                  "  pm.collectionVariables.set('customerToken', data.accessToken);",
-                  "  pm.collectionVariables.set('customerRefreshToken', data.refreshToken);",
+                  "const session = pm.response.json().data;",
+                  "if (session && session.accessToken) {",
+                  "  pm.collectionVariables.set('customerToken', session.accessToken);",
+                  "  pm.collectionVariables.set('customerRefreshToken', session.refreshToken);",
                   "}"
                 ]
               }
@@ -537,10 +618,51 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "const data = pm.response.json().data;",
-                  "if (data && data.accessToken) {",
-                  "  pm.collectionVariables.set('customerToken', data.accessToken);",
-                  "  pm.collectionVariables.set('customerRefreshToken', data.refreshToken);",
+                  "const session = pm.response.json().data;",
+                  "if (session && session.accessToken) {",
+                  "  pm.collectionVariables.set('customerToken', session.accessToken);",
+                  "  pm.collectionVariables.set('customerRefreshToken', session.refreshToken);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Sign in with LOS (customer) - saves customerToken",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/customer/auth/los",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "customer", "auth", "los"],
+              "query": []
+            },
+            "description": "Public. Exchanges the LOS customer access token the app holds (RS256; aud=LOS_CUSTOMER_AUDIENCE, type=customer, tokenType=access). Creates an account without email or password on the first sign-in. Saves {{customerToken}} and {{customerRefreshToken}}.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"losToken\": \"{{losCustomerToken}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const session = pm.response.json().data;",
+                  "if (session && session.accessToken) {",
+                  "  pm.collectionVariables.set('customerToken', session.accessToken);",
+                  "  pm.collectionVariables.set('customerRefreshToken', session.refreshToken);",
                   "}"
                 ]
               }
@@ -578,10 +700,10 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "const data = pm.response.json().data;",
-                  "if (data && data.accessToken) {",
-                  "  pm.collectionVariables.set('customerToken', data.accessToken);",
-                  "  pm.collectionVariables.set('customerRefreshToken', data.refreshToken);",
+                  "const session = pm.response.json().data;",
+                  "if (session && session.accessToken) {",
+                  "  pm.collectionVariables.set('customerToken', session.accessToken);",
+                  "  pm.collectionVariables.set('customerRefreshToken', session.refreshToken);",
                   "}"
                 ]
               }
@@ -637,6 +759,78 @@
               ]
             }
           }
+        },
+        {
+          "name": "Sign out everywhere (customer)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/customer/auth/logout-all",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "customer", "auth", "logout-all"],
+              "query": []
+            },
+            "description": "Revokes every refresh token of the customer. `204`.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Change my password (customer) - saves customerToken",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/customer/auth/me/password",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "customer", "auth", "me", "password"],
+              "query": []
+            },
+            "description": "Signs out other devices; returns a new sign-in.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"currentPassword\": \"customer-password\",\n  \"newPassword\": \"a-new-customer-password\"\n}"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const session = pm.response.json().data;",
+                  "if (session && session.accessToken) {",
+                  "  pm.collectionVariables.set('customerToken', session.accessToken);",
+                  "  pm.collectionVariables.set('customerRefreshToken', session.refreshToken);",
+                  "}"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
@@ -651,7 +845,7 @@
             "url": {
               "raw": "{{baseUrl}}/api/v1/admin/conversations?filter=all&page=1&size=20",
               "host": ["{{baseUrl}}"],
-              "path": ["admin", "api", "v1", "conversations"],
+              "path": ["api", "v1", "admin", "conversations"],
               "query": [
                 {
                   "key": "filter",
@@ -682,7 +876,7 @@
             "url": {
               "raw": "{{baseUrl}}/api/v1/admin/conversations",
               "host": ["{{baseUrl}}"],
-              "path": ["admin", "api", "v1", "conversations"],
+              "path": ["api", "v1", "admin", "conversations"],
               "query": []
             },
             "body": {
@@ -716,7 +910,7 @@
             "url": {
               "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}",
               "host": ["{{baseUrl}}"],
-              "path": ["admin", "api", "v1", "conversations", "{{convId}}"],
+              "path": ["api", "v1", "admin", "conversations", "{{convId}}"],
               "query": []
             }
           }
@@ -729,7 +923,7 @@
             "url": {
               "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/activities",
               "host": ["{{baseUrl}}"],
-              "path": ["admin", "api", "v1", "conversations", "{{convId}}", "activities"],
+              "path": ["api", "v1", "admin", "conversations", "{{convId}}", "activities"],
               "query": []
             }
           }
@@ -747,7 +941,7 @@
             "url": {
               "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/status",
               "host": ["{{baseUrl}}"],
-              "path": ["admin", "api", "v1", "conversations", "{{convId}}", "status"],
+              "path": ["api", "v1", "admin", "conversations", "{{convId}}", "status"],
               "query": []
             },
             "body": {
@@ -774,7 +968,7 @@
             "url": {
               "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/archive",
               "host": ["{{baseUrl}}"],
-              "path": ["admin", "api", "v1", "conversations", "{{convId}}", "archive"],
+              "path": ["api", "v1", "admin", "conversations", "{{convId}}", "archive"],
               "query": []
             },
             "body": {
@@ -801,7 +995,7 @@
             "url": {
               "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/restore",
               "host": ["{{baseUrl}}"],
-              "path": ["admin", "api", "v1", "conversations", "{{convId}}", "restore"],
+              "path": ["api", "v1", "admin", "conversations", "{{convId}}", "restore"],
               "query": []
             },
             "body": {
@@ -823,11 +1017,11 @@
             "url": {
               "raw": "{{baseUrl}}/api/v1/admin/conversations?customerId=00000000-0000-4000-8000-000000000100",
               "host": ["{{baseUrl}}"],
-              "path": ["admin", "api", "v1", "conversations"],
+              "path": ["api", "v1", "admin", "conversations"],
               "query": [
                 {
                   "key": "customerId",
-                  "value": "100"
+                  "value": "00000000-0000-4000-8000-000000000100"
                 }
               ]
             }
@@ -851,7 +1045,7 @@
             "url": {
               "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/assign",
               "host": ["{{baseUrl}}"],
-              "path": ["admin", "api", "v1", "conversations", "{{convId}}", "assign"],
+              "path": ["api", "v1", "admin", "conversations", "{{convId}}", "assign"],
               "query": []
             },
             "body": {
@@ -878,7 +1072,7 @@
             "url": {
               "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/assign",
               "host": ["{{baseUrl}}"],
-              "path": ["admin", "api", "v1", "conversations", "{{convId}}", "assign"],
+              "path": ["api", "v1", "admin", "conversations", "{{convId}}", "assign"],
               "query": []
             },
             "body": {
@@ -903,7 +1097,7 @@
           }
         },
         {
-          "name": "Transfer to agent 4",
+          "name": "Transfer to agent 5",
           "request": {
             "method": "POST",
             "header": [
@@ -915,12 +1109,12 @@
             "url": {
               "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/transfer",
               "host": ["{{baseUrl}}"],
-              "path": ["admin", "api", "v1", "conversations", "{{convId}}", "transfer"],
+              "path": ["api", "v1", "admin", "conversations", "{{convId}}", "transfer"],
               "query": []
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"agentId\": \"00000000-0000-4000-8000-000000000004\",\n  \"note\": \"handover\"\n}",
+              "raw": "{\n  \"agentId\": \"00000000-0000-4000-8000-000000000005\",\n  \"note\": \"handover\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -942,7 +1136,7 @@
             "url": {
               "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/unassign",
               "host": ["{{baseUrl}}"],
-              "path": ["admin", "api", "v1", "conversations", "{{convId}}", "unassign"],
+              "path": ["api", "v1", "admin", "conversations", "{{convId}}", "unassign"],
               "query": []
             },
             "body": {
@@ -964,8 +1158,35 @@
             "url": {
               "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/assignments",
               "host": ["{{baseUrl}}"],
-              "path": ["admin", "api", "v1", "conversations", "{{convId}}", "assignments"],
+              "path": ["api", "v1", "admin", "conversations", "{{convId}}", "assignments"],
               "query": []
+            }
+          }
+        },
+        {
+          "name": "Take over again (the next folders need an owner)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/assign",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "conversations", "{{convId}}", "assign"],
+              "query": []
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         }
@@ -987,7 +1208,7 @@
             "url": {
               "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/messages",
               "host": ["{{baseUrl}}"],
-              "path": ["admin", "api", "v1", "conversations", "{{convId}}", "messages"],
+              "path": ["api", "v1", "admin", "conversations", "{{convId}}", "messages"],
               "query": []
             },
             "body": {
@@ -1022,7 +1243,7 @@
             "url": {
               "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/messages?limit=50",
               "host": ["{{baseUrl}}"],
-              "path": ["admin", "api", "v1", "conversations", "{{convId}}", "messages"],
+              "path": ["api", "v1", "admin", "conversations", "{{convId}}", "messages"],
               "query": [
                 {
                   "key": "limit",
@@ -1040,7 +1261,7 @@
             "url": {
               "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/messages?after=0&limit=50",
               "host": ["{{baseUrl}}"],
-              "path": ["admin", "api", "v1", "conversations", "{{convId}}", "messages"],
+              "path": ["api", "v1", "admin", "conversations", "{{convId}}", "messages"],
               "query": [
                 {
                   "key": "after",
@@ -1067,7 +1288,7 @@
             "url": {
               "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/messages/{{msgId}}/delivered",
               "host": ["{{baseUrl}}"],
-              "path": ["admin", "api", "v1", "conversations", "{{convId}}", "messages", "{{msgId}}", "delivered"],
+              "path": ["api", "v1", "admin", "conversations", "{{convId}}", "messages", "{{msgId}}", "delivered"],
               "query": []
             },
             "body": {
@@ -1078,7 +1299,8 @@
                   "language": "json"
                 }
               }
-            }
+            },
+            "description": "Receipts exist only for customer messages: use a customer message id (`400` for an agent message such as {{msgId}})."
           }
         },
         {
@@ -1094,7 +1316,7 @@
             "url": {
               "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/read",
               "host": ["{{baseUrl}}"],
-              "path": ["admin", "api", "v1", "conversations", "{{convId}}", "read"],
+              "path": ["api", "v1", "admin", "conversations", "{{convId}}", "read"],
               "query": []
             },
             "body": {
@@ -1121,7 +1343,7 @@
             "url": {
               "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/unread",
               "host": ["{{baseUrl}}"],
-              "path": ["admin", "api", "v1", "conversations", "{{convId}}", "unread"],
+              "path": ["api", "v1", "admin", "conversations", "{{convId}}", "unread"],
               "query": []
             },
             "body": {
@@ -1148,14 +1370,25 @@
             "url": {
               "raw": "{{baseUrl}}/api/v1/admin/notifications?unread=true",
               "host": ["{{baseUrl}}"],
-              "path": ["admin", "api", "v1", "notifications"],
+              "path": ["api", "v1", "admin", "notifications"],
               "query": [
                 {
                   "key": "unread",
                   "value": "true"
                 }
               ]
-            }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "dev:00000000-0000-4000-8000-000000000004:AGENT",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Runs as agent 4 (AUTH_MODE=dev), who was notified of the assignment above; use your own token otherwise."
           },
           "event": [
             {
@@ -1178,7 +1411,7 @@
             "url": {
               "raw": "{{baseUrl}}/api/v1/admin/notifications/unread-count",
               "host": ["{{baseUrl}}"],
-              "path": ["admin", "api", "v1", "notifications", "unread-count"],
+              "path": ["api", "v1", "admin", "notifications", "unread-count"],
               "query": []
             }
           }
@@ -1196,7 +1429,7 @@
             "url": {
               "raw": "{{baseUrl}}/api/v1/admin/notifications/{{notifId}}/read",
               "host": ["{{baseUrl}}"],
-              "path": ["admin", "api", "v1", "notifications", "{{notifId}}", "read"],
+              "path": ["api", "v1", "admin", "notifications", "{{notifId}}", "read"],
               "query": []
             },
             "body": {
@@ -1207,7 +1440,18 @@
                   "language": "json"
                 }
               }
-            }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "dev:00000000-0000-4000-8000-000000000004:AGENT",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Runs as agent 4 (AUTH_MODE=dev), who was notified of the assignment above; use your own token otherwise."
           }
         },
         {
@@ -1223,7 +1467,7 @@
             "url": {
               "raw": "{{baseUrl}}/api/v1/admin/notifications/read-all",
               "host": ["{{baseUrl}}"],
-              "path": ["admin", "api", "v1", "notifications", "read-all"],
+              "path": ["api", "v1", "admin", "notifications", "read-all"],
               "query": []
             },
             "body": {
@@ -1245,7 +1489,7 @@
             "url": {
               "raw": "{{baseUrl}}/api/v1/admin/notifications/preferences",
               "host": ["{{baseUrl}}"],
-              "path": ["admin", "api", "v1", "notifications", "preferences"],
+              "path": ["api", "v1", "admin", "notifications", "preferences"],
               "query": []
             }
           }
@@ -1263,7 +1507,7 @@
             "url": {
               "raw": "{{baseUrl}}/api/v1/admin/notifications/preferences",
               "host": ["{{baseUrl}}"],
-              "path": ["admin", "api", "v1", "notifications", "preferences"],
+              "path": ["api", "v1", "admin", "notifications", "preferences"],
               "query": []
             },
             "body": {
@@ -1290,7 +1534,7 @@
             "url": {
               "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/mute",
               "host": ["{{baseUrl}}"],
-              "path": ["admin", "api", "v1", "conversations", "{{convId}}", "mute"],
+              "path": ["api", "v1", "admin", "conversations", "{{convId}}", "mute"],
               "query": []
             },
             "body": {
@@ -1317,7 +1561,7 @@
             "url": {
               "raw": "{{baseUrl}}/api/v1/admin/presence",
               "host": ["{{baseUrl}}"],
-              "path": ["admin", "api", "v1", "presence"],
+              "path": ["api", "v1", "admin", "presence"],
               "query": []
             }
           }
@@ -1335,7 +1579,7 @@
             "url": {
               "raw": "{{baseUrl}}/api/v1/admin/presence/me",
               "host": ["{{baseUrl}}"],
-              "path": ["admin", "api", "v1", "presence", "me"],
+              "path": ["api", "v1", "admin", "presence", "me"],
               "query": []
             },
             "body": {
@@ -1362,7 +1606,7 @@
             "url": {
               "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/customer",
               "host": ["{{baseUrl}}"],
-              "path": ["admin", "api", "v1", "conversations", "{{convId}}", "customer"],
+              "path": ["api", "v1", "admin", "conversations", "{{convId}}", "customer"],
               "query": []
             }
           }
@@ -1375,7 +1619,7 @@
             "url": {
               "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/customer/conversations",
               "host": ["{{baseUrl}}"],
-              "path": ["admin", "api", "v1", "conversations", "{{convId}}", "customer", "conversations"],
+              "path": ["api", "v1", "admin", "conversations", "{{convId}}", "customer", "conversations"],
               "query": []
             }
           }
@@ -1388,7 +1632,7 @@
             "url": {
               "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/participants",
               "host": ["{{baseUrl}}"],
-              "path": ["admin", "api", "v1", "conversations", "{{convId}}", "participants"],
+              "path": ["api", "v1", "admin", "conversations", "{{convId}}", "participants"],
               "query": []
             }
           }
@@ -1488,20 +1732,6 @@
           }
         },
         {
-          "name": "Delete a message",
-          "request": {
-            "method": "DELETE",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/admin/messages/{{msgId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "admin", "messages", "{{msgId}}"],
-              "query": []
-            },
-            "description": "Soft delete (the row and its history are kept). Authors delete their own messages; supervisors and admins any agent, AI or customer message. SYSTEM messages cannot be deleted. Broadcast as `message.deleted`."
-          }
-        },
-        {
           "name": "Edit history",
           "request": {
             "method": "GET",
@@ -1590,13 +1820,27 @@
             "description": "Copies a text message into another conversation the caller owns and that is open, keeping `forwardedFromMessageId`. Allowed only within the same customer's conversations or into an internal conversation. Idempotent by `clientId`. Broadcast as `message.new` plus `message.forwarded`.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"conversationId\": \"{{convId}}\"\n}",
+              "raw": "{\n  \"targetConversationId\": \"{{convId}}\",\n  \"clientId\": \"{{$guid}}\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
             }
+          }
+        },
+        {
+          "name": "Delete a message",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/messages/{{msgId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "messages", "{{msgId}}"],
+              "query": []
+            },
+            "description": "Soft delete (the row and its history are kept). Authors delete their own messages; supervisors and admins any agent, AI or customer message. SYSTEM messages cannot be deleted. Broadcast as `message.deleted`."
           }
         }
       ]
@@ -1625,13 +1869,36 @@
                   "type": "text"
                 },
                 {
+                  "key": "clientId",
+                  "value": "{{$guid}}",
+                  "type": "text"
+                },
+                {
+                  "key": "text",
+                  "value": "Signed contract",
+                  "type": "text"
+                },
+                {
                   "key": "file",
                   "type": "file",
-                  "src": []
+                  "src": "fixtures/sample.pdf"
                 }
               ]
             }
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "const a = j.data && j.data.attachments && j.data.attachments[0];",
+                  "if (a) pm.collectionVariables.set('attachmentId', a.id);"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "Send a voice message",
@@ -1656,11 +1923,23 @@
                 {
                   "key": "file",
                   "type": "file",
-                  "src": []
+                  "src": "fixtures/sample.wav"
                 }
               ]
             }
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "if (j.data && j.data.id) pm.collectionVariables.set('voiceMsgId', j.data.id);"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "Shared media and files",
@@ -1696,20 +1975,6 @@
           }
         },
         {
-          "name": "Delete a file",
-          "request": {
-            "method": "DELETE",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/admin/attachments/{{attachmentId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "admin", "attachments", "{{attachmentId}}"],
-              "query": []
-            },
-            "description": "The uploader or a supervisor/admin. The record is kept (soft delete) and the stored bytes are removed. Broadcast as `attachment.deleted`. Deleting the message removes its files the same way."
-          }
-        },
-        {
           "name": "Preview or download a file",
           "request": {
             "method": "GET",
@@ -1734,12 +1999,26 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/api/v1/admin/messages/{{msgId}}/audio",
+              "raw": "{{baseUrl}}/api/v1/admin/messages/{{voiceMsgId}}/audio",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "admin", "messages", "{{msgId}}", "audio"],
+              "path": ["api", "v1", "admin", "messages", "{{voiceMsgId}}", "audio"],
               "query": []
             },
             "description": "The audio of a voice or audio message, streamed inline with `Range` support."
+          }
+        },
+        {
+          "name": "Delete a file",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/attachments/{{attachmentId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "attachments", "{{attachmentId}}"],
+              "query": []
+            },
+            "description": "The uploader or a supervisor/admin. The record is kept (soft delete) and the stored bytes are removed. Broadcast as `attachment.deleted`. Deleting the message removes its files the same way."
           }
         }
       ]
@@ -1945,20 +2224,6 @@
           }
         },
         {
-          "name": "Delete a tag",
-          "request": {
-            "method": "DELETE",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/admin/tags/{{tagId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "admin", "tags", "{{tagId}}"],
-              "query": []
-            },
-            "description": "Supervisors only. A tag used by conversations is refused with 409 (`error.details.usageCount`) unless `force=true`, which takes it off every conversation first (a `TAG_REMOVED` timeline entry on each) and then deletes it."
-          }
-        },
-        {
           "name": "Set a conversation's tags",
           "request": {
             "method": "PUT",
@@ -1984,6 +2249,25 @@
                 }
               }
             }
+          }
+        },
+        {
+          "name": "Delete a tag",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/tags/{{tagId}}?force=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "tags", "{{tagId}}"],
+              "query": [
+                {
+                  "key": "force",
+                  "value": "true"
+                }
+              ]
+            },
+            "description": "Supervisors only. A tag used by conversations is refused with 409 (`error.details.usageCount`) unless `force=true`, which takes it off every conversation first (a `TAG_REMOVED` timeline entry on each) and then deletes it. `409` while conversations use the tag unless `force=true` (shown here)."
           }
         }
       ]
@@ -2423,7 +2707,7 @@
             "description": "Anyone who can see the conversation. `scheduledAt` must be in the future (at most 365 days) and carry a UTC offset. The assignee defaults to the conversation's owner, else the caller; another agent must exist and be able to see the conversation. At most 20 pending per conversation (409). Notifies the assignee when it is someone else, adds a `CALLBACK` timeline entry and broadcasts `callback.created`.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"scheduledAt\": \"2030-05-01T09:30:00+07:00\",\n  \"notes\": \"Ask about the repayment date\"\n}",
+              "raw": "{\n  \"scheduledAt\": \"{{callbackAt}}\",\n  \"notes\": \"Ask about the repayment date\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -2441,6 +2725,17 @@
                   "const d = j.data || {};",
                   "const id = d.id || (d.reactions && d.reactions.length ? d.reactions[0].id : null);",
                   "if (id) pm.collectionVariables.set('callbackId', String(id));"
+                ]
+              }
+            },
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const day = 24 * 60 * 60 * 1000;",
+                  "pm.collectionVariables.set('callbackAt', new Date(Date.now() + 2 * day).toISOString());",
+                  "pm.collectionVariables.set('callbackAt2', new Date(Date.now() + 3 * day).toISOString());"
                 ]
               }
             }
@@ -2479,7 +2774,7 @@
             "description": "Assignee, creator or supervisor, on a PENDING or MISSED callback (409 once completed or cancelled). A new `scheduledAt` makes it PENDING again and allows a new reminder. Changing `assignedAgentId` notifies the new assignee. Broadcast as `callback.updated`.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"scheduledAt\": \"2030-05-02T10:00:00+07:00\"\n}",
+              "raw": "{\n  \"scheduledAt\": \"{{callbackAt2}}\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -2515,6 +2810,59 @@
               }
             }
           }
+        },
+        {
+          "name": "Schedule another callback (to cancel)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/callbacks",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "conversations", "{{convId}}", "callbacks"],
+              "query": []
+            },
+            "description": "Anyone who can see the conversation. `scheduledAt` must be in the future (at most 365 days) and carry a UTC offset. The assignee defaults to the conversation's owner, else the caller; another agent must exist and be able to see the conversation. At most 20 pending per conversation (409). Notifies the assignee when it is someone else, adds a `CALLBACK` timeline entry and broadcasts `callback.created`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"scheduledAt\": \"{{callbackAt}}\",\n  \"notes\": \"Ask about the repayment date\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "const d = j.data || {};",
+                  "const id = d.id || (d.reactions && d.reactions.length ? d.reactions[0].id : null);",
+                  "if (id) pm.collectionVariables.set('callbackId', String(id));"
+                ]
+              }
+            },
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const day = 24 * 60 * 60 * 1000;",
+                  "pm.collectionVariables.set('callbackAt', new Date(Date.now() + 2 * day).toISOString());",
+                  "pm.collectionVariables.set('callbackAt2', new Date(Date.now() + 3 * day).toISOString());"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "Cancel a callback",
@@ -2630,7 +2978,7 @@
               "path": ["api", "v1", "admin", "calls", "{{callId}}", "accept"],
               "query": []
             },
-            "description": "A ringing call a customer started: a supervisor, the owner, or any agent while nobody owns the conversation. The first to answer wins; the others get 409. The answering agent becomes a participant. Broadcast as `call.accepted`."
+            "description": "A ringing call a customer started: a supervisor, the owner, or any agent while nobody owns the conversation. The first to answer wins; the others get 409. The answering agent becomes a participant. Broadcast as `call.accepted`. Only for a call the customer started (customer calls have no REST channel yet), so `403` for the call started above."
           }
         },
         {
@@ -2644,7 +2992,7 @@
               "path": ["api", "v1", "admin", "calls", "{{callId}}", "decline"],
               "query": []
             },
-            "description": "Same people as accept. The call becomes `DECLINED`. Broadcast as `call.declined`."
+            "description": "Same people as accept. The call becomes `DECLINED`. Broadcast as `call.declined`. Only for a call the customer started (customer calls have no REST channel yet), so `403` for the call started above."
           }
         },
         {
@@ -2672,7 +3020,7 @@
               "path": ["api", "v1", "admin", "calls", "{{callId}}", "end"],
               "query": []
             },
-            "description": "A participant, or a supervisor, on an answered call. Records the duration. Broadcast as `call.ended` with reason `ended`."
+            "description": "A participant, or a supervisor, on an answered call. Records the duration. Broadcast as `call.ended` with reason `ended`. For an accepted call; `409` after the call above was cancelled."
           }
         }
       ]
@@ -2721,15 +3069,7 @@
             "url": {
               "raw": "{{baseUrl}}/api/v1/admin/moderation/customers/{{customerId}}/block",
               "host": ["{{baseUrl}}"],
-              "path": [
-                "api",
-                "v1",
-                "admin",
-                "moderation",
-                "customers",
-                "00000000-0000-4000-8000-000000000101",
-                "block"
-              ],
+              "path": ["api", "v1", "admin", "moderation", "customers", "{{customerId}}", "block"],
               "query": []
             },
             "description": "Supervisors only. 409 if already blocked.",
@@ -2752,15 +3092,7 @@
             "url": {
               "raw": "{{baseUrl}}/api/v1/admin/moderation/customers/{{customerId}}/block",
               "host": ["{{baseUrl}}"],
-              "path": [
-                "api",
-                "v1",
-                "admin",
-                "moderation",
-                "customers",
-                "00000000-0000-4000-8000-000000000101",
-                "block"
-              ],
+              "path": ["api", "v1", "admin", "moderation", "customers", "{{customerId}}", "block"],
               "query": []
             },
             "description": "A supervisor, or the agent who blocked the customer. Anyone else gets 404 (they cannot tell whether the customer is blocked)."
@@ -2909,10 +3241,10 @@
               "path": ["api", "v1", "admin", "conversations", "{{convId}}", "spam-reports"],
               "query": []
             },
-            "description": "Anyone who can see the conversation, about the conversation or one of its messages (`messageId`, which must belong to it). One pending report per reporter and target (409). Broadcast as `spam.reported` to whoever can see the conversation, which includes supervisors.",
+            "description": "Anyone who can see the conversation, about the conversation or one of its messages (`messageId`, which must belong to it). One pending report per reporter and target (409). Broadcast as `spam.reported` to whoever can see the conversation, which includes supervisors. Optional `messageId` (a message of this conversation) points at the offending message.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"reason\": \"Phishing links\",\n  \"messageId\": \"{{msgId}}\"\n}",
+              "raw": "{\n  \"reason\": \"Phishing links\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -3023,7 +3355,7 @@
             "url": {
               "raw": "{{baseUrl}}/api/v1/admin/openapi.json",
               "host": ["{{baseUrl}}"],
-              "path": ["admin", "api", "v1", "openapi.json"],
+              "path": ["api", "v1", "admin", "openapi.json"],
               "query": []
             },
             "auth": {
@@ -3067,7 +3399,19 @@
               "mode": "raw",
               "raw": "{\n  \"applicationId\": \"00000000-0000-4000-8000-000000000201\",\n  \"subject\": \"Question about my loan\"\n}"
             }
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "if (j.data && j.data.id) pm.collectionVariables.set('customerConvId', j.data.id);"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "Get conversation",
@@ -3184,11 +3528,24 @@
                 {
                   "key": "file",
                   "type": "file",
-                  "src": []
+                  "src": "fixtures/sample.pdf"
                 }
               ]
             }
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "const a = j.data && j.data.attachments && j.data.attachments[0];",
+                  "if (a) pm.collectionVariables.set('customerAttachmentId', a.id);"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "Send voice message",
@@ -3227,11 +3584,23 @@
                 {
                   "key": "file",
                   "type": "file",
-                  "src": []
+                  "src": "fixtures/sample.wav"
                 }
               ]
             }
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "if (j.data && j.data.id) pm.collectionVariables.set('customerVoiceMsgId', j.data.id);"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "Download a file",
@@ -3239,9 +3608,9 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/api/v1/customer/attachments/{{attachmentId}}/download",
+              "raw": "{{baseUrl}}/api/v1/customer/attachments/{{customerAttachmentId}}/download",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "customer", "attachments", "{{attachmentId}}", "download"],
+              "path": ["api", "v1", "customer", "attachments", "{{customerAttachmentId}}", "download"],
               "query": []
             },
             "auth": {
@@ -3262,9 +3631,9 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/api/v1/customer/messages/{{msgId}}/audio",
+              "raw": "{{baseUrl}}/api/v1/customer/messages/{{customerVoiceMsgId}}/audio",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "customer", "messages", "{{msgId}}", "audio"],
+              "path": ["api", "v1", "customer", "messages", "{{customerVoiceMsgId}}", "audio"],
               "query": []
             },
             "auth": {

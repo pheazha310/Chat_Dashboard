@@ -23,6 +23,7 @@ describe("OpenAPI document", () => {
       [
         "GET /health",
         "POST /auth/login",
+        "POST /auth/los",
         "POST /auth/refresh",
         "POST /auth/logout",
         "POST /auth/logout-all",
@@ -139,7 +140,13 @@ describe("OpenAPI document", () => {
   });
 
   /** Reachable without an access token: the health probe, and sign-in itself (it is how a token is obtained). */
-  const PUBLIC = new Set(["GET /health", "POST /auth/login", "POST /auth/refresh", "POST /auth/logout"]);
+  const PUBLIC = new Set([
+    "GET /health",
+    "POST /auth/login",
+    "POST /auth/los",
+    "POST /auth/refresh",
+    "POST /auth/logout",
+  ]);
 
   it("requires the bearer token everywhere except /health and sign-in", () => {
     for (const { key, operation } of operations) {

@@ -8,6 +8,8 @@ const userSelect = {
   id: true,
   email: true,
   passwordHash: true,
+  losUserId: true,
+  losUserType: true,
   role: true,
   displayName: true,
   status: true,
@@ -33,6 +35,18 @@ export class AuthRepository {
 
   findUserByEmail(email: string): Promise<UserRow | null> {
     return this.db.authUser.findUnique({ where: { email }, select: userSelect });
+  }
+
+  findUserByLos(losUserType: string, losUserId: number): Promise<UserRow | null> {
+    return this.db.authUser.findUnique({
+      where: { losUserType_losUserId: { losUserType, losUserId } },
+      select: userSelect,
+    });
+  }
+
+  /** An account that signs in only through LOS: no email, no password. */
+  createLosUser(data: { losUserType: string; losUserId: number; role: string; displayName: string }): Promise<UserRow> {
+    return this.db.authUser.create({ data: { ...data, createdBy: null }, select: userSelect });
   }
 
   findUserById(id: string): Promise<UserRow | null> {
@@ -123,8 +137,13 @@ export class AuthRepository {
     expiresAt: Date;
     userAgent: string | null;
     ipAddress: string | null;
-  }): Promise<void> {
-    await this.db.authSession.create({ data });
+  }): Promise<{ id: string }> {
+    return this.db.authSession.create({ data, select: { id: true } });
+  }
+
+  /** Links a rotated (already revoked) session to the session that replaced it. */
+  async markReplaced(id: string, replacedById: string): Promise<void> {
+    await this.db.authSession.update({ where: { id }, data: { replacedById } });
   }
 
   findSessionByHash(tokenHash: string) {
@@ -152,6 +171,12 @@ export class AuthRepository {
 
   async revokeFamily(familyId: string): Promise<void> {
     await this.db.authSession.updateMany({ where: { familyId, revokedAt: null }, data: { revokedAt: new Date() } });
+  }
+
+  /** Deletes the user's sessions that expired (they can no longer be used, so nothing is lost). Returns how many. */
+  async deleteExpiredSessions(userId: string, now: Date): Promise<number> {
+    const { count } = await this.db.authSession.deleteMany({ where: { userId, expiresAt: { lt: now } } });
+    return count;
   }
 
   async revokeAllForUser(userId: string): Promise<void> {

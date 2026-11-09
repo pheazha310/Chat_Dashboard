@@ -1,0 +1,55 @@
+// 09. Replies and automation
+// Saved reply templates and automatic reply rules with their log.
+// Same tables as docs/database/09-replies-and-automation.dbml.
+
+model CannedResponse {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title     String   @db.VarChar(255)
+  content   String   @db.Text
+  shortcut  String?  @db.VarChar(50) /// e.g. /greeting
+  scope     String   @default("PERSONAL") @db.VarChar(30) /// PERSONAL (only its creator), SHARED (every dashboard user) or TEAM (not used until Backend 1 defines teams)
+  teamId    String?  @map("team_id") @db.Uuid /// External team id; set exactly when scope = TEAM (CHECK)
+  createdBy String   @map("created_by") @db.Uuid /// External agents.id
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([createdBy, isActive])
+  @@index([teamId, isActive])
+  @@map("canned_responses")
+}
+
+model AutomationRule {
+  id              String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name            String          @db.VarChar(255)
+  triggerType     String          @map("trigger_type") @db.VarChar(50)
+  conditions      Json?
+  responseContent String          @map("response_content") @db.Text
+  priority        Int             @default(0)
+  isActive        Boolean         @default(true) @map("is_active")
+  createdBy       String?         @map("created_by") @db.Uuid /// External agents.id
+  createdAt       DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  automationLogs  AutomationLog[]
+
+  @@index([isActive, triggerType, priority])
+  @@map("automation_rules")
+}
+
+model AutomationLog {
+  id              String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ruleId          String         @map("rule_id") @db.Uuid
+  conversationId  String         @map("conversation_id") @db.Uuid
+  messageId       String?        @map("message_id") @db.Uuid
+  executionStatus String         @map("execution_status") @db.VarChar(30)
+  errorMessage    String?        @map("error_message") @db.Text
+  createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  rule            AutomationRule @relation(fields: [ruleId], references: [id], onDelete: Restrict)
+  conversation    Conversation   @relation(fields: [conversationId], references: [id], onDelete: Restrict)
+  message         Message?       @relation(fields: [messageId], references: [id], onDelete: SetNull)
+
+  @@index([ruleId, createdAt])
+  @@index([conversationId])
+  @@index([messageId])
+  @@map("automation_logs")
+}

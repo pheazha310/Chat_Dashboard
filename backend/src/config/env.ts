@@ -13,13 +13,27 @@ const schema = z.object({
   // Customer and agent profiles. "local" reads the `users` table; "dev" returns labelled synthetic data;
   // "external" is reserved for a Backend 1 loan-data client (contract pending).
   BACKEND1_MODE: z.enum(["dev", "local", "external"]).default("dev"),
-  // "jwt" accepts only access tokens issued by this backend; "dev" also accepts `dev:<userId>:<ROLE>` tokens.
-  AUTH_MODE: z.enum(["dev", "jwt"]).default("dev"),
+  // "jwt" accepts only access tokens issued by this backend; "dev" also accepts `dev:<userId>:<ROLE>` tokens. Defaults
+  // to "jwt" so a deployment that forgets NODE_ENV=production still refuses forged `dev:` tokens; opt in locally.
+  AUTH_MODE: z.enum(["dev", "jwt"]).default("jwt"),
   // HMAC key for access tokens (HS256), at least 32 characters. Required in production; elsewhere a random key is
   // generated at start-up (tokens then stop working on restart and are not shared between instances).
   JWT_SECRET: z.string().min(32).optional(),
-  ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().int().min(60).max(86400).default(900),
+  // Access-token lifetime per audience: the dashboard re-checks often, the mobile app refreshes less.
+  STAFF_ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().int().min(60).max(86400).default(900),
+  CUSTOMER_ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().int().min(60).max(86400).default(3600),
+  // How long one sign-in lasts. Fixed at sign-in: refreshing does not extend it.
   REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().min(1).max(365).default(30),
+  // Sign in with LOS (POST /auth/los). Off unless LOS_ISSUER is set; then LOS_JWKS_URL or LOS_PUBLIC_KEY (PEM, "\n"
+  // allowed for newlines) gives the key LOS signs its RS256 tokens with.
+  LOS_ISSUER: z.string().min(1).optional(),
+  LOS_JWKS_URL: z.url().optional(),
+  LOS_PUBLIC_KEY: z.string().min(1).optional(),
+  // `aud` of the LOS customer access token the mobile app holds, and of the staff hand-off token LOS issues for chat.
+  LOS_CUSTOMER_AUDIENCE: z.string().min(1).default("luyleun"),
+  LOS_HANDOFF_AUDIENCE: z.string().min(1).default("chat"),
+  // `tokenType` claim of the staff hand-off token.
+  LOS_HANDOFF_TOKEN_TYPE: z.string().min(1).default("chat-handoff"),
   // Sign-in, registration and refresh requests per client IP per minute; 0 turns the limit off.
   AUTH_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(0).default(20),
   // Express `trust proxy` hop count, so the client IP is read from X-Forwarded-For behind a load balancer. 0 = direct.
@@ -62,6 +76,10 @@ export const env = schema
   .refine((value) => !(value.NODE_ENV === "production" && !value.JWT_SECRET), {
     message: "JWT_SECRET is required in production",
     path: ["JWT_SECRET"],
+  })
+  .refine((value) => !value.LOS_ISSUER || Boolean(value.LOS_JWKS_URL ?? value.LOS_PUBLIC_KEY), {
+    message: "LOS_ISSUER needs LOS_JWKS_URL or LOS_PUBLIC_KEY",
+    path: ["LOS_ISSUER"],
   })
   .refine((value) => !(value.NODE_ENV === "production" && value.BACKEND1_MODE === "dev"), {
     message: "BACKEND1_MODE=dev is not allowed in production",

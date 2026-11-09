@@ -1,0 +1,121 @@
+// 01. Identity and access
+// Who people are and what they may do: sign-in accounts, refresh-token sessions, roles and permissions, chat identities.
+// Same tables as docs/database/01-identity-and-access.dbml.
+
+/// Chat identity: one row per person who takes part in chats (customer or staff), keyed by `external_id` = `users.id`
+/// (the token's `sub`; with AUTH_MODE=dev, the id in a `dev:` token). Created on first sign-in or when the account is
+/// created. `messages.sender_id`, `attachments.uploaded_by_id` and `conversations.customer_id` reference `external_id`.
+model ChatUser {
+  id            String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userType      String         @map("user_type") @db.VarChar(20) /// CUSTOMER or STAFF; always the role's `kind` (composite FK to roles)
+  externalId    String         @unique @map("external_id") @db.Uuid /// users.id. Unique on its own: one identity per person
+  losUserId     Int?           @map("los_user_id") /// The person's id in the loan system (LOS), when known. Not set yet: the LOS contract is pending
+  username      String?        @db.VarChar(100) /// Display name, copied from users.display_name on sign-in and account changes
+  roleId        Int            @map("role_id")
+  status        String         @default("ACTIVE") @db.VarChar(20) /// ACTIVE or DISABLED; a disabled user is refused everywhere
+  createdAt     DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  lastSeenAt    DateTime       @default(now()) @map("last_seen_at") @db.Timestamptz(6)
+  role          Role           @relation(fields: [roleId, userType], references: [id, kind], onDelete: Restrict)
+  conversations Conversation[]
+  messages      Message[]
+  attachments   Attachment[]
+
+  @@unique([userType, externalId])
+  @@unique([userType, losUserId])
+  @@index([roleId])
+  @@map("chat_users")
+}
+
+/// A role (CUSTOMER, AGENT, SUPERVISOR, ADMIN). The names are fixed: they are carried in access tokens and stored in
+/// users.role. What each role may do is data (role_permissions), edited by admins.
+model Role {
+  id              Int              @id @default(autoincrement())
+  name            String           @unique @db.VarChar(20) /// CUSTOMER, AGENT, SUPERVISOR or ADMIN
+  kind            String           @db.VarChar(20) /// CUSTOMER or STAFF
+  description     String?          @db.VarChar(255)
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  rolePermissions RolePermission[]
+  chatUsers       ChatUser[]
+  users           AuthUser[]
+
+  @@unique([id, kind]) /// Target of chat_users (role_id, user_type): a chat user's kind always matches its role
+  @@map("roles")
+}
+
+/// One thing a role may be allowed to do, as `module` + `action` (e.g. tags + delete = "tags.delete"). The catalogue is
+/// defined in code (shared/auth/permissions.ts) and seeded by migrations; it is not edited at runtime.
+model Permission {
+  id              Int              @id @default(autoincrement())
+  module          String           @db.VarChar(50)
+  action          String           @db.VarChar(50)
+  description     String?          @db.VarChar(255)
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  rolePermissions RolePermission[]
+
+  @@unique([module, action])
+  @@map("permissions")
+}
+
+/// Grants a permission to a role.
+model RolePermission {
+  id           Int        @id @default(autoincrement())
+  roleId       Int        @map("role_id")
+  permissionId Int        @map("permission_id")
+  createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+  @@index([permissionId])
+  @@map("role_permissions")
+}
+
+/// Sign-in accounts (staff and customers). This backend owns authentication: `users.id` is the id carried in access
+/// tokens (`sub`) and stored in every other table's user/agent/customer id columns. An account signs in with email and
+/// password, with an LOS token (`los_user_id`), or both; an LOS-only account has no email or password.
+model AuthUser {
+  id                String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email             String?       @unique @db.VarChar(254) /// Lower-case; unique. Null for an account that only signs in through LOS
+  passwordHash      String?       @map("password_hash") @db.VarChar(255) /// scrypt$N$r$p$salt$hash, never returned by the API. Set exactly when email is (CHECK)
+  losUserId         Int?          @map("los_user_id") /// The LOS userId, for accounts that sign in with an LOS token
+  losUserType       String?       @map("los_user_type") @db.VarChar(20) /// CUSTOMER or STAFF (LOS numbers each kind separately); set exactly when los_user_id is (CHECK)
+  role              String        @db.VarChar(20) /// roles.name: CUSTOMER, AGENT, SUPERVISOR, ADMIN
+  displayName       String        @map("display_name") @db.VarChar(100)
+  status            String        @default("ACTIVE") @db.VarChar(20) /// ACTIVE or DISABLED
+  failedLoginCount  Int           @default(0) @map("failed_login_count")
+  lockedUntil       DateTime?     @map("locked_until") @db.Timestamptz(6) /// Set after too many failed sign-ins
+  passwordChangedAt DateTime      @default(now()) @map("password_changed_at") @db.Timestamptz(6)
+  lastLoginAt       DateTime?     @map("last_login_at") @db.Timestamptz(6)
+  createdBy         String?       @map("created_by") @db.Uuid /// The admin who created a staff account; null for self-registration
+  createdAt         DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  sessions          AuthSession[]
+  roleRef           Role          @relation(fields: [role], references: [name], onDelete: Restrict, onUpdate: Cascade)
+
+  @@unique([losUserType, losUserId])
+  @@index([role, status])
+  @@map("users")
+}
+
+/// One signed-in device. Only the SHA-256 of the refresh token is stored. Each refresh rotates the token: the old row is
+/// revoked and a new one created in the same `family_id`; presenting a revoked token revokes the whole family.
+model AuthSession {
+  id           String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId       String       @map("user_id") @db.Uuid
+  familyId     String       @map("family_id") @db.Uuid /// All rotations of one sign-in
+  tokenHash    String       @unique @map("token_hash") @db.Char(64) /// hex SHA-256 of the refresh token
+  expiresAt    DateTime     @map("expires_at") @db.Timestamptz(6)
+  revokedAt    DateTime?    @map("revoked_at") @db.Timestamptz(6)
+  replacedById String?      @unique @map("replaced_by_id") @db.Uuid /// The session this one was rotated into; null while live, after logout or for the last of a family
+  userAgent    String?      @map("user_agent") @db.VarChar(255)
+  ipAddress    String?      @map("ip_address") @db.VarChar(45)
+  createdAt    DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  user         AuthUser     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  replacedBy   AuthSession? @relation("AuthSessionRotation", fields: [replacedById], references: [id], onDelete: SetNull)
+  replaces     AuthSession? @relation("AuthSessionRotation")
+
+  @@index([userId])
+  @@index([familyId])
+  @@map("auth_sessions")
+}

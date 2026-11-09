@@ -9,6 +9,7 @@ import { MemoryRateLimitStore, RedisRateLimitStore } from "@shared/middleware/ra
 import { AccountCheckedAuthClient } from "@modules/auth/auth.account-check.js";
 import { AuthRepository } from "@modules/auth/auth.repository.js";
 import { AuthService } from "@modules/auth/auth.service.js";
+import { losVerifierFrom } from "@modules/auth/auth.los.js";
 import { AccessTokens, DevOrJwtAuthClient } from "@modules/auth/auth.tokens.js";
 import { DEFAULT_AUTH_OPTIONS } from "@modules/auth/auth.types.js";
 import { UserDirectory, UserService } from "@modules/auth/user.service.js";
@@ -36,7 +37,13 @@ function accessTokenSecret(): string {
 }
 
 /** Issues and verifies access tokens (JWT). */
-const accessTokens = new AccessTokens(accessTokenSecret(), env.ACCESS_TOKEN_TTL_SECONDS);
+const accessTokens = new AccessTokens(accessTokenSecret(), {
+  staff: env.STAFF_ACCESS_TOKEN_TTL_SECONDS,
+  customer: env.CUSTOMER_ACCESS_TOKEN_TTL_SECONDS,
+});
+
+/** Checks LOS tokens for "sign in with LOS"; null (the endpoints answer 503) when LOS_ISSUER is not set. */
+const losVerifier = await losVerifierFrom(env);
 
 /** Sign-in, registration, refresh and password changes. */
 export const authService = new AuthService(
@@ -45,6 +52,7 @@ export const authService = new AuthService(
   { ...DEFAULT_AUTH_OPTIONS, refreshTtlMs: env.REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000 },
   undefined,
   identities,
+  losVerifier,
 );
 
 /** Account management (admins), and the `local` directory of names. */

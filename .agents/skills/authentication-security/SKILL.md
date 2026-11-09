@@ -19,7 +19,8 @@ accounts, hashes passwords and issues tokens. Roles: `CUSTOMER`, `AGENT`, `SUPER
 
 - `backend/src/modules/auth/`: `auth.password.ts` (scrypt), `auth.tokens.ts` (`AccessTokens`: HS256 JWT issue/verify,
   refresh-token generation and hashing), `auth.service.ts` (register, login, refresh with rotation and reuse detection,
-  logout, password change), `user.service.ts` (admin account management, `UserDirectory`), `auth.repository.ts` (the
+  logout, password change, LOS sign-in), `auth.los.ts` (`LosTokenVerifier`: RS256 LOS tokens, one 401 for every
+  failure), `user.service.ts` (admin account management, `UserDirectory`), `auth.repository.ts` (the
   only code touching `users`/`auth_sessions`).
 - `app-container.ts` builds `AccessTokens` and wraps it in `MappedAuthClient` (maps to `chat_users`, refuses disabled
   users). REST (`authenticate()` middleware) and the WebSocket gateway (`auth` frame) both use that one `authClient`.
@@ -46,6 +47,8 @@ accounts, hashes passwords and issues tokens. Roles: `CUSTOMER`, `AGENT`, `SUPER
 - Sign-in errors stay generic (`Invalid email or password`) for unknown email, wrong password and wrong audience;
   spend a dummy hash for unknown emails (`burnPasswordCheck`).
 - Disabling a user or changing a role revokes their sessions; disabling also updates `chat_users.status`.
+- LOS tokens are accepted only at `POST /auth/los` (never as a bearer token), RS256 only, with issuer and audience
+  checked. LOS-only accounts have no email or password; the DB CHECKs in `constraints.sql` keep that consistent.
 - Secrets (`JWT_SECRET`, TURN secrets) come from env only; add new variables to `config/env.ts` and `.env.example`
   (names/placeholders only). The logger redacts `authorization` and `cookie` headers; keep it that way.
 

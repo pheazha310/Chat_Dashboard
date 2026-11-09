@@ -1,0 +1,57 @@
+// ==============================================================================================================
+// 04. ATTACHMENTS
+// Uploaded files. A file is uploaded first, then linked to one or more messages of the same conversation.
+// ==============================================================================================================
+
+TableGroup "04 Attachments" [color: #9333EA] {
+  attachments
+  message_attachments
+}
+
+Table attachments [headercolor: #9333EA] {
+  id uuid [pk, default: `gen_random_uuid()`]
+  conversation_id uuid [not null, note: 'Needed for the Media & Files panel and access control; an upload exists before its message']
+
+  uploaded_by_type varchar(30) [not null]
+  uploaded_by_id uuid [not null, note: 'chat_users.external_id (= users.id)']
+
+  storage_key varchar(500) [not null, unique]
+  file_name varchar(255) [not null]
+  mime_type varchar(150) [not null]
+  file_size bigint [not null]
+  duration_ms int [note: 'Audio, video and voice messages (FR-18)']
+  waveform jsonb [note: 'Voice message amplitude samples']
+  checksum_sha256 varchar(64)
+
+  upload_status varchar(30) [not null, default: 'PENDING']
+
+  created_at timestamptz [not null, default: `now()`]
+  deleted_at timestamptz
+
+  indexes {
+    (conversation_id, created_at)
+    (uploaded_by_type, uploaded_by_id)
+    (upload_status, created_at)
+    (id, conversation_id) [unique]
+  }
+}
+
+Table message_attachments [headercolor: #9333EA] {
+  message_id uuid [not null]
+  attachment_id uuid [not null]
+  conversation_id uuid [not null, note: 'Must match both the message and attachment conversation (composite foreign keys)']
+
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (message_id, attachment_id) [pk]
+    conversation_id
+    attachment_id
+  }
+}
+
+// Relations of attachments
+Ref: conversations.id < attachments.conversation_id [delete: restrict]
+Ref: chat_users.external_id < attachments.uploaded_by_id [delete: restrict]
+Ref: messages.(id, conversation_id) < message_attachments.(message_id, conversation_id) [delete: cascade]
+Ref: attachments.(id, conversation_id) < message_attachments.(attachment_id, conversation_id) [delete: cascade]

@@ -7,17 +7,22 @@ How the customer's mobile app connects to the chat backend. Reference docs: [api
 
 | Concern              | How                                                                                          |
 | -------------------- | -------------------------------------------------------------------------------------------- |
-| Identity             | The chat backend registers and signs in customers and issues their tokens.                   |
+| Identity             | The chat backend signs customers in (its own account, or the LOS token) and issues tokens.   |
 | Sending              | REST (`POST /api/v1/customer/...`), or `message.send` over the socket for text.              |
 | Receiving            | `/ws` for live events, REST `?after=<seq>` to catch up. The app polls if the socket is down. |
 | Same chat as the web | The dashboard and the app use the same conversations, messages and events.                   |
 
 ## Authentication and identity
 
-1. The customer registers (`POST /api/v1/customer/auth/register`) or signs in (`POST /api/v1/customer/auth/login`) and
-   gets an access token (15 minutes) and a refresh token. Before the access token expires, call
+1. The customer signs in once, either with the LOS access token the app already holds
+   (`POST /api/v1/customer/auth/los` with `{ "losToken": "…" }`, no second password) or with a chat account
+   (`POST /api/v1/customer/auth/register`, `POST /api/v1/customer/auth/login`). Both answer with an access token
+   (`CUSTOMER_ACCESS_TOKEN_TTL_SECONDS`, 1 hour by default) and a refresh token. A sign-in lasts
+   `REFRESH_TOKEN_TTL_DAYS` (30) from that moment; refreshing does not extend it, so after `refreshTokenExpiresAt` the
+   app signs in again (with LOS this can happen silently). Before the access token expires, call
    `POST /api/v1/customer/auth/refresh` (one call at a time; store only the newest refresh token, in the platform's
-   secure storage). See [api-auth.md](api-auth.md). For local testing `AUTH_MODE=dev` also accepts
+   secure storage). Two parallel refreshes with the same token count as token reuse and sign the customer out, so
+   when several requests get `401` together, let one refresh and make the others wait for its result. See [api-auth.md](api-auth.md). For local testing `AUTH_MODE=dev` also accepts
    `dev:<customerUuid>:CUSTOMER`.
 2. Send `Authorization: Bearer <token>` on every REST call. Only `CUSTOMER` tokens are accepted under `/api/v1/customer`.
 3. The customer is always the token's user. No request carries a customer id, and someone else's conversation, file or

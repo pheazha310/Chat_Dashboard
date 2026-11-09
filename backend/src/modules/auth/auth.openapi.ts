@@ -8,6 +8,7 @@ import {
   createUserBody,
   listUsersQuery,
   loginBody,
+  losStaffBody,
   refreshBody,
   resetPasswordBody,
   updateUserBody,
@@ -19,7 +20,8 @@ import { USER_STATUSES, type AuthTokensDto, type UserDto } from "./auth.types.js
 const user = z
   .object({
     id: z.string(),
-    email: z.string(),
+    email: z.string().nullable().openapi({ description: "Null for an account that only signs in with LOS" }),
+    losUserId: z.number().int().nullable().openapi({ description: "The LOS userId when the account is linked to LOS" }),
     displayName: z.string(),
     role: z.enum(ROLES),
     status: z.enum(USER_STATUSES),
@@ -66,11 +68,28 @@ export function registerAuthOpenApi(registry: OpenAPIRegistry) {
   });
   registry.registerPath({
     method: "post",
+    path: "/auth/los",
+    tags,
+    summary: "Sign in with LOS (staff)",
+    description:
+      "Exchanges the short-lived LOS staff hand-off token (RS256, `aud` = LOS_HANDOFF_AUDIENCE, `type` = staff, `tokenType` = LOS_HANDOFF_TOKEN_TYPE, a staff `role`) for this backend's tokens. The account is found by its LOS userId or created without email or password; the role follows LOS on every sign-in. Any problem with the token is the same 401. 503 `LOS_SIGN_IN_DISABLED` when LOS is not configured. The mobile app uses `POST /api/v1/customer/auth/los` with `{ losToken }`.",
+    request: { body: jsonBody(losStaffBody) },
+    responses: {
+      200: ok("Tokens", successOf(tokens)),
+      400: errors[400],
+      401: errors[401],
+      403: errors[403],
+      429: tooMany,
+      503: json("Sign in with LOS is not configured (`LOS_SIGN_IN_DISABLED`)"),
+    },
+  });
+  registry.registerPath({
+    method: "post",
     path: "/auth/refresh",
     tags,
     summary: "New token pair",
     description:
-      "Exchanges a refresh token for a new access token and a new refresh token; the old one stops working. Presenting a refresh token that was already used revokes the whole sign-in (send refreshes one at a time).",
+      "Exchanges a refresh token for a new access token and a new refresh token; the old one stops working. The new refresh token keeps the sign-in's original expiry: refreshing never extends a sign-in. Presenting a refresh token that was already used revokes the whole sign-in (send refreshes one at a time).",
     request: { body: jsonBody(refreshBody) },
     responses: { 200: ok("Tokens", successOf(tokens)), 400: errors[400], 401: errors[401], 429: tooMany },
   });
@@ -90,7 +109,7 @@ export function registerAuthOpenApi(registry: OpenAPIRegistry) {
     security,
     summary: "Sign out everywhere",
     description:
-      "Revokes every refresh token of the caller. Access tokens already issued expire on their own (15 minutes).",
+      "Revokes every refresh token of the caller. Access tokens already issued expire on their own (STAFF_ACCESS_TOKEN_TTL_SECONDS, 15 minutes by default).",
     responses: { 204: noContent, 401: errors[401] },
   });
   registry.registerPath({
@@ -108,13 +127,14 @@ export function registerAuthOpenApi(registry: OpenAPIRegistry) {
     security,
     summary: "Change my password",
     description:
-      "Needs the current password (403 if wrong; wrong guesses count toward the sign-in lock, 429). Rate-limited per user. Signs out every device and returns a new sign-in for this one.",
+      "Needs the current password (403 if wrong; wrong guesses count toward the sign-in lock, 429). Rate-limited per user. Signs out every device and returns a new sign-in for this one. 409 for an account that signs in with LOS and has no password.",
     request: { body: jsonBody(changePasswordBody) },
     responses: {
       200: ok("Tokens", successOf(tokens)),
       400: errors[400],
       401: errors[401],
       403: errors[403],
+      409: errors[409],
       429: tooMany,
     },
   });
@@ -180,7 +200,8 @@ export function registerAuthOpenApi(registry: OpenAPIRegistry) {
     tags: userTags,
     security,
     summary: "Set a new password",
-    description: "Admins only. Clears a sign-in lock and signs the user out everywhere.",
+    description:
+      "Admins only. Clears a sign-in lock and signs the user out everywhere. 409 for an LOS-only account (it has no email to sign in with).",
     request: { params: userParams, body: jsonBody(resetPasswordBody) },
     responses: {
       200: ok("Account", successOf(user)),
@@ -188,6 +209,7 @@ export function registerAuthOpenApi(registry: OpenAPIRegistry) {
       401: errors[401],
       403: errors[403],
       404: errors[404],
+      409: errors[409],
     },
   });
 }

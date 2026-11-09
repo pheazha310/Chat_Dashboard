@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { buildOpenApiDocument } from "../openapi.js";
 import { clientEvents } from "../websocket/websocket.events.js";
+import { buildDbml, DBML_OUTPUT } from "../scripts/build-dbml.js";
 
 /**
  * The documentation is part of the product here (the project rules say docs and code change together), so this test
@@ -25,6 +26,10 @@ function sourceFiles(dir: string): string[] {
 const normalize = (path: string) => path.replace(/\{\{?\w+\}?\}/g, "{}");
 
 describe("documentation matches the code", () => {
+  it("keeps docs/database-schema.dbml equal to the joined docs/database/*.dbml files (run pnpm db:dbml)", () => {
+    expect(read(DBML_OUTPUT)).toBe(buildDbml(root));
+  });
+
   it("lists every REST route in the Postman collection", () => {
     const collection = JSON.parse(read("docs/postman/chat-dashboard.postman_collection.json")) as {
       item: unknown[];

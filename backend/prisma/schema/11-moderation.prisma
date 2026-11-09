@@ -1,0 +1,62 @@
+// 11. Moderation
+// Spam reports, customer blocks, blocked keywords and the moderation log.
+// Same tables as docs/database/11-moderation.dbml.
+
+model SpamReport {
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conversationId String       @map("conversation_id") @db.Uuid
+  reportedByType String       @map("reported_by_type") @db.VarChar(30)
+  reportedById   String       @map("reported_by_id") @db.Uuid
+  messageId      String?      @map("message_id") @db.Uuid /// The reported message, if any
+  reason         String       @db.Text
+  status         String       @default("PENDING") @db.VarChar(30)
+  reviewedBy     String?      @map("reviewed_by") @db.Uuid /// External agents.id
+  reviewedAt     DateTime?    @map("reviewed_at") @db.Timestamptz(6)
+  resolutionNote String?      @map("resolution_note") @db.VarChar(500)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Restrict)
+  message        Message?     @relation(fields: [messageId], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+  @@index([conversationId])
+  @@index([messageId])
+  @@map("spam_reports")
+}
+
+/// One active block (unblocked_at IS NULL) per customer via a partial unique index.
+model CustomerBlock {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  customerId  String    @map("customer_id") @db.Uuid /// External customers.id
+  blockedBy   String    @map("blocked_by") @db.Uuid /// External agents.id
+  reason      String?   @db.Text
+  blockedAt   DateTime  @default(now()) @map("blocked_at") @db.Timestamptz(6)
+  unblockedAt DateTime? @map("unblocked_at") @db.Timestamptz(6)
+  unblockedBy String?   @map("unblocked_by") @db.Uuid /// External agents.id
+
+  @@index([customerId, unblockedAt])
+  @@map("customer_blocks")
+}
+
+model BlockedKeyword {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  keyword   String   @unique @db.VarChar(255)
+  isActive  Boolean  @default(true) @map("is_active")
+  createdBy String?  @map("created_by") @db.Uuid /// External agents.id
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("blocked_keywords")
+}
+
+model ModerationActivity {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  actorId    String   @map("actor_id") @db.Uuid /// External agents.id
+  action     String   @db.VarChar(100)
+  targetType String   @map("target_type") @db.VarChar(50)
+  targetId   String   @map("target_id") @db.Uuid
+  metadata   Json?
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([actorId, createdAt])
+  @@index([targetType, targetId])
+  @@map("moderation_activities")
+}

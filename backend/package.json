@@ -13,7 +13,9 @@
     "db:migrate": "prisma migrate dev",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "user:create-admin": "tsx src/scripts/create-admin.ts"
+    "user:create-admin": "tsx src/scripts/create-admin.ts",
+    "user:seed-test": "tsx src/scripts/seed-test-accounts.ts",
+    "db:dbml": "tsx src/scripts/build-dbml.ts"
   },
   "dependencies": {
     "@asteasolutions/zod-to-openapi": "^9.1.0",

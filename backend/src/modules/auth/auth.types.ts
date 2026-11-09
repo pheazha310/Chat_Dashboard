@@ -21,7 +21,10 @@ export interface ClientInfo {
 /** A user as the API returns it. Never carries the password hash or lockout counters. */
 export interface UserDto {
   id: string;
-  email: string;
+  /** Null for an account that only signs in through LOS. */
+  email: string | null;
+  /** The LOS userId when the account is linked to LOS. */
+  losUserId: number | null;
   displayName: string;
   role: Role;
   status: UserStatus;
@@ -42,8 +45,10 @@ export interface AuthTokensDto {
 /** The `users` columns the services read. */
 export interface UserRow {
   id: string;
-  email: string;
-  passwordHash: string;
+  email: string | null;
+  passwordHash: string | null;
+  losUserId: number | null;
+  losUserType: string | null;
   role: string;
   displayName: string;
   status: string;
@@ -69,6 +74,7 @@ export const DEFAULT_AUTH_OPTIONS: AuthOptions = {
 export const toUser = (row: UserRow): UserDto => ({
   id: row.id,
   email: row.email,
+  losUserId: row.losUserId,
   displayName: row.displayName,
   role: row.role as Role,
   status: row.status as UserStatus,

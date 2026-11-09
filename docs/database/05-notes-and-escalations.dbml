@@ -1,0 +1,62 @@
+// ==============================================================================================================
+// 05. NOTES AND ESCALATIONS
+// Staff-only: internal notes with @mentions, and escalations to a supervisor.
+// ==============================================================================================================
+
+TableGroup "05 Notes and escalations" [color: #D97706] {
+  internal_notes
+  note_mentions
+  conversation_escalations
+}
+
+Table internal_notes [headercolor: #D97706] {
+  id uuid [pk, default: `gen_random_uuid()`]
+  conversation_id uuid [not null]
+
+  author_agent_id uuid [not null, note: 'Staff users.id']
+  content text [not null]
+
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+  deleted_at timestamptz
+
+  indexes {
+    (conversation_id, created_at)
+  }
+}
+
+Table note_mentions [headercolor: #D97706] {
+  id uuid [pk, default: `gen_random_uuid()`]
+  note_id uuid [not null]
+  mentioned_agent_id uuid [not null, note: 'Staff users.id']
+
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (note_id, mentioned_agent_id) [unique]
+    mentioned_agent_id
+  }
+}
+
+Table conversation_escalations [headercolor: #D97706] {
+  id uuid [pk, default: `gen_random_uuid()`]
+  conversation_id uuid [not null]
+
+  requested_by uuid [not null, note: 'Staff users.id']
+  reason text
+
+  status varchar(30) [not null, default: 'PENDING']
+  resolved_by uuid [note: 'Staff users.id']
+
+  created_at timestamptz [not null, default: `now()`]
+  resolved_at timestamptz
+
+  indexes {
+    (conversation_id, status)
+  }
+}
+
+// Relations of notes and escalations
+Ref: conversations.id < internal_notes.conversation_id [delete: restrict]
+Ref: internal_notes.id < note_mentions.note_id [delete: cascade]
+Ref: conversations.id < conversation_escalations.conversation_id [delete: restrict]
