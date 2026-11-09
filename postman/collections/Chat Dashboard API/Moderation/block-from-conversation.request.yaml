@@ -1,0 +1,17 @@
+$kind: http-request
+name: 'Block Customer from Conversation'
+method: POST
+url: '{{base_url}}/api/v1/admin/conversations/:id/customer-block'
+order: 4000
+pathVariables:
+  - key: id
+    value: '{{conversation_id}}'
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "reason": "Spam"
+    }

@@ -144,3 +144,56 @@ describe("local conversation actions", () => {
     expect(state().byId).toBe(before);
   });
 });
+
+describe("real-backend updates", () => {
+  const state = () => useConversationStore.getState();
+  beforeEach(() => {
+    useConversationStore.setState({ byId: {}, order: [], selectedId: null, query: "", filter: "all" });
+  });
+
+  it("removes a conversation the agent lost access to and moves the selection on", () => {
+    state().setAll([make("a"), make("b"), make("c")]);
+    state().select("b");
+    state().remove("b");
+    expect(state().order).toEqual(["a", "c"]);
+    expect(state().byId.b).toBeUndefined();
+    expect(state().selectedId).toBe("a");
+    state().remove("missing");
+    expect(state().order).toEqual(["a", "c"]);
+  });
+
+  it("selects nothing when the last conversation is removed", () => {
+    state().setAll([make("a")]);
+    state().remove("a");
+    expect(state().selectedId).toBeNull();
+  });
+
+  it("sets an authoritative unread count and patches fields, ignoring unknown ids", () => {
+    state().setAll([make("a", { unread: 4 })]);
+    state().setUnread("a", 0);
+    state().patch("a", { summary: "Wants a new date" });
+    state().setUnread("nope", 1);
+    state().patch("nope", { summary: "x" });
+    expect(state().byId.a).toMatchObject({ unread: 0, summary: "Wants a new date" });
+    expect(Object.keys(state().byId)).toEqual(["a"]);
+  });
+
+  it("keeps loaded details across a realtime update that carries none, but takes new ones when sent", () => {
+    state().setAll([make("a")]);
+    state().patch("a", {
+      summary: "Loaded summary",
+      activity: [{ id: "1", tone: "blue", title: "t", time: "09:00", copy: "c" }],
+    });
+    state().upsert(make("a", { preview: "new", lastMessageAt: "2026-01-02T09:00:00Z" }));
+    expect(state().byId.a).toMatchObject({ preview: "new", summary: "Loaded summary" });
+    expect(state().byId.a?.activity).toHaveLength(1);
+    state().upsert(make("a", { summary: "Fresher" }));
+    expect(state().byId.a?.summary).toBe("Fresher");
+  });
+
+  it("unarchives locally", () => {
+    state().setAll([make("a", { archived: true })]);
+    state().unarchiveLocally("a");
+    expect(state().byId.a?.archived).toBe(false);
+  });
+});

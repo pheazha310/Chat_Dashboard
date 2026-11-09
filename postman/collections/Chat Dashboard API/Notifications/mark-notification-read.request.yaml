@@ -1,0 +1,8 @@
+$kind: http-request
+name: 'Mark Notification Read'
+method: PATCH
+url: '{{base_url}}/api/v1/admin/notifications/:id/read'
+order: 6000
+pathVariables:
+  - key: id
+    value: 'notification-uuid-here'

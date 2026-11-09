@@ -1,0 +1,217 @@
+import { createHash, randomUUID } from "node:crypto";
+import type { Readable } from "node:stream";
+import { logger } from "@config/logger.js";
+import { AppError, BadRequestError, ForbiddenError, NotFoundError } from "@shared/errors/AppError.js";
+import { isSupervisor, type AuthContext } from "@shared/auth/auth.types.js";
+import { permissionsFor } from "@shared/policy/conversation-access.js";
+import type { ConversationAccess } from "@shared/ports/conversation-access.js";
+import type { RealtimeNotifier } from "@shared/ports/realtime.js";
+import type { Storage } from "@shared/storage/storage.js";
+import { bestEffort } from "@shared/utils/best-effort.js";
+import { idToString } from "@shared/utils/ids.js";
+import { pageMeta } from "@shared/utils/pagination.js";
+import type { MessageService } from "@modules/messages/message.service.js";
+import { toAttachment } from "@modules/messages/message.mapper.js";
+import type { AttachmentDto } from "@modules/messages/message.types.js";
+import { parseRange, type ByteRange } from "./attachment.range.js";
+import type { AttachmentRepository } from "./attachment.repository.js";
+import type { ListQuery, UploadFields, VoiceFields } from "./attachment.schema.js";
+import { INLINE_SAFE, messageTypeFor, validateFile, type AttachmentKind } from "./attachment.validation.js";
+
+export interface UploadedFile {
+  originalname: string;
+  mimetype: string;
+  size: number;
+  buffer: Buffer;
+}
+
+/** What a download needs to answer: headers and the bytes (the whole file, or one range of it). */
+export interface FileResponse {
+  status: 200 | 206;
+  mimeType: string;
+  fileName: string;
+  kind: AttachmentKind;
+  size: number;
+  range: { start: number; end: number } | null;
+  inline: boolean;
+  stream: Readable;
+}
+
+const LABEL: Record<string, string> = { IMAGE: "Photo", DOCUMENT: "File", AUDIO: "Audio", VIDEO: "Video" };
+
+/**
+ * Files and voice messages in conversations. The bytes live in `Storage`, the metadata in PostgreSQL. Every read
+ * and write first resolves the conversation and applies the same visibility rule as the rest of the API, so a file
+ * of a conversation the caller cannot open is reported as not found.
+ */
+export class AttachmentService {
+  constructor(
+    private readonly repository: AttachmentRepository,
+    private readonly storage: Storage,
+    private readonly messages: MessageService,
+    private readonly conversations: () => ConversationAccess,
+    private readonly realtime: RealtimeNotifier,
+  ) {}
+
+  /** Sends a message that carries one file (and an optional caption). */
+  upload(auth: AuthContext, fields: UploadFields, file: UploadedFile | undefined) {
+    return this.store(auth, fields.conversationId, { clientId: fields.clientId, text: fields.text }, file, false);
+  }
+
+  /** Sends a recorded voice message. */
+  uploadVoice(auth: AuthContext, conversationId: string, fields: VoiceFields, file: UploadedFile | undefined) {
+    return this.store(auth, conversationId, { clientId: fields.clientId }, file, true, fields);
+  }
+
+  async list(auth: AuthContext, conversationId: string, query: ListQuery) {
+    await this.conversations().requireVisible(auth, conversationId);
+    const { items, total } = await this.repository.list(conversationId, query);
+    return {
+      items: items.map((row) => toAttachment(row, row.messageAttachments[0]?.messageId ?? null)),
+      meta: pageMeta(total, query),
+    };
+  }
+
+  async get(auth: AuthContext, attachmentId: string): Promise<AttachmentDto> {
+    const row = await this.visible(auth, await this.repository.findLive(attachmentId));
+    return toAttachment(row, row.messageAttachments[0]?.messageId ?? null);
+  }
+
+  /** The file's bytes, for preview or download. Honours a single `Range` so audio and video can seek. */
+  async download(auth: AuthContext, attachmentId: string, options: { range?: string | undefined; inline: boolean }) {
+    return this.open(auth, await this.repository.findLive(attachmentId), options);
+  }
+
+  /** The audio of a voice or audio message. */
+  async messageAudio(auth: AuthContext, messageId: string, options: { range?: string | undefined }) {
+    return this.open(auth, await this.repository.findAudioOfMessage(messageId), { ...options, inline: true });
+  }
+
+  /** The uploader, or a supervisor/admin. The record is kept (soft delete); the bytes are removed from storage. */
+  async remove(auth: AuthContext, attachmentId: string) {
+    const row = await this.visible(auth, await this.repository.findLive(attachmentId));
+    const own = row.uploadedByType === "AGENT" && row.uploadedById === auth.userId;
+    if (!own && !isSupervisor(auth)) throw new ForbiddenError("You can only delete files you uploaded");
+    if (!(await this.repository.softDelete(row.id))) throw new NotFoundError("File not found");
+    await bestEffort("delete stored file", () => this.storage.delete(row.storageKey));
+
+    const messageId = row.messageAttachments[0]?.messageId ?? null;
+    const result = {
+      id: idToString(row.id),
+      conversationId: idToString(row.conversationId),
+      messageId: messageId === null ? null : idToString(messageId),
+    };
+    await bestEffort("realtime attachment.deleted", () =>
+      this.realtime.messageEvent(result.conversationId, "attachment.deleted", result),
+    );
+    return result;
+  }
+
+  // ─── internals ─────────────────────────────────────────────────────────────
+
+  private async store(
+    auth: AuthContext,
+    conversationId: string,
+    fields: { clientId: string; text?: string | undefined },
+    file: UploadedFile | undefined,
+    voice: boolean,
+    voiceFields?: VoiceFields,
+  ) {
+    if (!file) throw new BadRequestError('Send the file in a multipart field named "file"');
+    const state = await this.conversations().requireVisible(auth, conversationId);
+    if (!permissionsFor(auth, state).canSendMessage) {
+      throw new ForbiddenError("Only the agent who owns an open conversation can send files");
+    }
+    const checked = validateFile(file, { voice });
+
+    // The name is generated here; the client's file name is only a label and never reaches the file system.
+    const storageKey = `conversations/${conversationId}/${randomUUID()}.${checked.extension}`;
+    await this.storage.put(storageKey, file.buffer);
+
+    let result;
+    try {
+      result = await this.messages.sendWithAttachment(auth, conversationId, {
+        clientId: fields.clientId,
+        text: fields.text,
+        messageType: messageTypeFor(checked.kind, voice),
+        preview: voice ? "Voice message" : `${LABEL[checked.kind]}: ${checked.fileName}`,
+        attachment: {
+          storageKey,
+          fileName: checked.fileName,
+          mimeType: checked.mimeType,
+          fileSize: file.size,
+          durationMs: voiceFields?.durationMs,
+          waveform: voiceFields?.waveform,
+          checksumSha256: createHash("sha256").update(file.buffer).digest("hex"),
+        },
+      });
+    } catch (error) {
+      await this.discard(storageKey);
+      throw error;
+    }
+    // A retry of a message that already exists: the file just stored is a duplicate.
+    if (!result.created) {
+      await this.discard(storageKey);
+      return result;
+    }
+
+    const attachment = result.message.attachments[0];
+    if (attachment) {
+      await bestEffort("realtime attachment.uploaded", () =>
+        this.realtime.messageEvent(conversationId, "attachment.uploaded", { attachment }),
+      );
+    }
+    return result;
+  }
+
+  /** Removes a stored file that no message references. A failure leaves an orphan and is only logged. */
+  private async discard(storageKey: string) {
+    try {
+      await this.storage.delete(storageKey);
+    } catch (error) {
+      logger.warn({ err: error, storageKey }, "could not remove an unreferenced upload");
+    }
+  }
+
+  private async visible<T extends { conversationId: string }>(auth: AuthContext, row: T | null): Promise<T> {
+    if (!row) throw new NotFoundError("File not found");
+    await this.conversations().requireVisible(auth, row.conversationId);
+    return row;
+  }
+
+  private async open(
+    auth: AuthContext,
+    found: Awaited<ReturnType<AttachmentRepository["findLive"]>>,
+    options: { range?: string | undefined; inline: boolean },
+  ): Promise<FileResponse> {
+    const row = await this.visible(auth, found);
+    const stat = await this.storage.stat(row.storageKey);
+    if (!stat) {
+      logger.error({ attachmentId: row.id }, "stored file is missing");
+      throw new NotFoundError("File not found");
+    }
+    const requested: ByteRange = parseRange(options.range, stat.size);
+    if (requested === "unsatisfiable") {
+      throw new RangeNotSatisfiable(stat.size);
+    }
+    const dto = toAttachment(row);
+    return {
+      status: requested ? 206 : 200,
+      mimeType: row.mimeType,
+      fileName: row.fileName,
+      kind: dto.kind,
+      size: stat.size,
+      range: requested,
+      // Only types a browser cannot run as a page are ever shown inline.
+      inline: options.inline && INLINE_SAFE.has(dto.kind),
+      stream: this.storage.open(row.storageKey, requested ?? undefined),
+    };
+  }
+}
+
+/** A `Range` that starts beyond the end of the file (416). */
+export class RangeNotSatisfiable extends AppError {
+  constructor(readonly size: number) {
+    super(416, "RANGE_NOT_SATISFIABLE", "Range not satisfiable");
+  }
+}

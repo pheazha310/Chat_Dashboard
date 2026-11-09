@@ -1,0 +1,51 @@
+.organize-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 12px 16px;
+  border: 0;
+}
+.organize-group legend {
+  padding: 0;
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+.organize-group label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+.organize-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #9aa6c0;
+}
+.organize-new {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+.organize-new input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid #d7deeb;
+  border-radius: 8px;
+  font: inherit;
+}
+.organize-new button {
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 8px;
+  color: #fff;
+  background: #3b6df0;
+  font: inherit;
+  cursor: pointer;
+}
+.organize-new button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

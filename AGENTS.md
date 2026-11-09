@@ -29,33 +29,37 @@ Node 22, pnpm 10 (pinned in `.mise.toml` and root `package.json`).
 - Frontend layers and import rules: [FSD.md](FSD.md); UI conventions: [docs/DESIGN_PATTERNS.md](docs/DESIGN_PATTERNS.md)
 - Data model and DB rules: [docs/database-schema.md](docs/database-schema.md), `backend/prisma/schema.prisma`
 - Backend behaviour (flows, permissions, protocol gaps): [docs/chat-logic-design.md](docs/chat-logic-design.md)
-- WebSocket contract: `frontend/src/shared/api/ws/protocol.ts` (`ServerEventMap`, `ClientEventMap`, `isServerEvent`)
+- WebSocket contract: backend [docs/websocket-events.md](docs/websocket-events.md); the frontend's `shared/api/ws/protocol.ts` is its own vocabulary, translated in `shared/api/ws/backend/`
 
 ## Architecture
 
 - **Frontend:** Feature-Sliced Design, `app → pages → widgets → features → entities → shared`, `@/` = `src/`.
   Slices expose only `index.ts`; features never import features. Enforced by `pnpm check:fsd`.
 - **Backend:** modular, one folder per domain under `backend/src/modules/<name>/`, each holding
-  `<name>.routes.ts → .controller.ts → .service.ts → .repository.ts` (+ `.schema.ts` for zod, `.types.ts`, optional `.openapi.ts`) and then
+  `<name>.routes.ts → .controller.ts → .service.ts → .repository.ts` (+ `.schema.ts` for zod, `.types.ts`, `.openapi.ts` for every module that exposes routes) and then
   Prisma → PostgreSQL. Cross-cutting code lives in `config/`, `database/`, `websocket/`, `shared/`
   (`errors/`, `middleware/`, `validators/`, `utils/`, `constants/`, `types/`; create a folder when first needed).
-  `src/routes.ts` mounts module routers under `/api`. See [docs/backend-structure.md](docs/backend-structure.md).
+  `src/routes.ts` mounts module routers, served under `/api/v1/admin` (staff namespace; `/api/v1/guest` and `/api/v1/customer` are reserved for other consumers). See [docs/backend-structure.md](docs/backend-structure.md).
   Only repositories query Prisma (the one exception is `server.ts` calling `prisma.$disconnect()` on shutdown). Services own business rules and transactions. Controllers only
   validate input (via the `validate()` middleware) and shape the response. WebSocket handlers play the controller role:
   `ws handler → service → repository`. Modules call each other only through services, never repositories.
-- **Realtime:** `backend/src/websocket/websocket.server.ts` serves `/ws` and fans events out through Redis channel `chat:events`.
-  Frontend uses a built-in mock server unless `VITE_WS_URL` is set.
+- **Realtime:** `backend/src/websocket/` serves `/ws` (clients authenticate with a first `auth` frame). Services report changes
+  to `RealtimeService`, which publishes to an `EventBus` (Redis channel `chat:events`, or in-memory with `EVENT_BUS=memory`);
+  each socket only receives events it may see. Services are built once in `backend/src/container.ts`.
+  Frontend uses a built-in mock server unless `VITE_WS_URL` is set; with it, `BackendSocket` translates to the gateway's
+  contract and REST supplies history and details (see `docs/frontend-integration.md`).
 
 ## Current state (keep docs honest)
 
-- Backend implements only `GET /api/health`, the WS gateway relay (no auth, no event handlers) and the Prisma schema.
-  Chat services and the AI worker are **designed in docs but not built**. Do not describe them as existing.
+- Backend implements `GET /api/health`, the conversations, assignments, messages, notifications, presence and customer-info REST APIs (`docs/api-conversations.md`), the per-agent workspace API for tabs and drafts (`docs/api-workspace.md`), message actions: reply, edit, delete, reactions, forward (`docs/api-message-actions.md`), files, media and voice messages with local-disk storage (`docs/api-attachments.md`), internal notes with mentions and escalation (`docs/api-notes-escalations.md`), tags and conversation priority with inbox filtering and sorting (`docs/api-tags-priority.md`), personal and shared saved reply templates (`docs/api-canned-responses.md`), per-agent chat settings (`docs/api-chat-settings.md`), callbacks with a reminder job (`docs/api-callbacks.md`), call signalling for WebRTC calls (`docs/api-calls.md`; the customer side is service methods only, no customer channel), spam reports, blocked customers and keywords (`docs/api-moderation.md`; enforced in the customer entry points, which the unbuilt customer channel will call), a
+  notification service, the WebSocket gateway (first-frame auth, per-socket audience filtering, Redis/in-memory event bus; contract in `docs/websocket-events.md`), presence and the Prisma schema. The customer channel and the AI worker are **designed in docs but not built**. Do not describe
+  them as existing.
 - **Authentication is an external service** (separate repo). This backend only consumes it: it must not issue tokens,
   store passwords, or implement login. The service's API contract (token format, verify/introspect endpoint, user/role
   claims) is **not yet known**; do not invent it. See `authentication-security`.
 - The backend has Vitest (`pnpm test` runs it, with 70/70/70/65 coverage thresholds via `test:coverage`) but no lint or
   format scripts, so also run `pnpm --filter @chat-dashboard/backend build` and `npx prettier --check backend/src`.
-  Only the health module and shared middleware have tests so far. `packages/` is empty, so the backend cannot import frontend types;
+  Integration tests (`*.integration.test.ts`) run against PostgreSQL only when `TEST_DATABASE_URL` points at a database whose name contains "test" (the migration applied), and the WebSocket ones also need `TEST_REDIS_URL` (a throwaway Redis, it is flushed); otherwise they are skipped. `packages/` is empty, so the backend cannot import frontend types;
   the protocol is currently defined only in the frontend.
 
 ## Rules
@@ -71,6 +75,8 @@ Node 22, pnpm 10 (pinned in `.mise.toml` and root `package.json`).
 - Match surrounding style: Prettier (120 cols, trailing commas), TypeScript `strict`, no `any`.
 - Add or update tests with behaviour changes, and run `pnpm check` before declaring work done.
 - Keep docs consistent with the implementation in the same change.
+  `backend/src/__tests__/docs-consistency.test.ts` fails when a REST route is missing from the Postman collection, a WebSocket
+  event from `docs/websocket-events.md`, an env variable from `.env.example` or the docs, or an `api-*.md` guide from this file.
 
 ## Skills
 
@@ -80,7 +86,7 @@ Load the skills that match the task (a feature usually needs several):
 | ------------------------- | --------------------------------------------------------------------- |
 | `frontend-development`    | anything in `frontend/`                                               |
 | `backend-development`     | services, repositories, config in `backend/src/`                      |
-| `api-development`         | REST endpoints under `/api`                                           |
+| `api-development`         | REST endpoints under `/api/v1/admin`                                  |
 | `websocket-development`   | new/changed realtime events (spans protocol, gateway, frontend, mock) |
 | `database-design`         | schema, migrations, constraints                                       |
 | `authentication-security` | auth, sessions, permissions, secrets                                  |

@@ -1,0 +1,16 @@
+$kind: http-request
+name: 'Get Message History'
+method: GET
+url: '{{base_url}}/api/v1/admin/conversations/:id/messages'
+order: 2000
+pathVariables:
+  - key: id
+    value: '{{conversation_id}}'
+queryParams:
+  - key: cursor
+    value: ''
+    description: Cursor for pagination
+    disabled: true
+  - key: limit
+    value: '50'
+    disabled: true

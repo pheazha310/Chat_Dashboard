@@ -1,10 +1,16 @@
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
+import { API_URL } from "@/shared/config";
+import { saveAttachment } from "@/shared/lib/use-attachment-url";
 import { notify } from "@/shared/ui";
 import { useSharedFilesStore, type MediaFilter, type SharedFile } from "../model/store";
 
 const FILTERS: MediaFilter[] = ["All", "Documents", "Images"];
 
 function downloadFile(file: SharedFile, customer: string, appId: string) {
+  if (file.downloadPath) {
+    saveAttachment(file.downloadPath, file.name).catch(() => notify(`Could not download ${file.name}`));
+    return;
+  }
   const blob = new Blob([`Prototype file: ${file.name}\nCustomer: ${customer}\nApplication: ${appId}`], {
     type: "text/plain",
   });
@@ -20,15 +26,22 @@ function downloadFile(file: SharedFile, customer: string, appId: string) {
 export default function MediaFilesPanel({
   customer,
   appId,
+  conversationId,
   onBack,
   backLabel = "Back to customer details",
 }: {
   customer: string;
   appId: string;
+  /** With the real backend, the files of this conversation are loaded from the server. */
+  conversationId?: string;
   onBack: () => void;
   backLabel?: string;
 }) {
-  const { files, filter, setFilter, add } = useSharedFilesStore();
+  const { files, filter, setFilter, add, load, loading, error } = useSharedFilesStore();
+  const server = !!API_URL && conversationId !== undefined;
+  useEffect(() => {
+    if (server) void load(conversationId);
+  }, [server, conversationId, load]);
   const inputRef = useRef<HTMLInputElement>(null);
   const visible = useMemo(
     () =>
@@ -70,13 +83,15 @@ export default function MediaFilesPanel({
           </button>
         ))}
       </div>
-      <button type="button" className="upload-file" onClick={() => inputRef.current?.click()}>
-        <span>＋</span>
-        <div>
-          <strong>Upload a file</strong>
-          <small>PDF, JPG, PNG up to 10 MB</small>
-        </div>
-      </button>
+      {!server && (
+        <button type="button" className="upload-file" onClick={() => inputRef.current?.click()}>
+          <span>＋</span>
+          <div>
+            <strong>Upload a file</strong>
+            <small>PDF, JPG, PNG up to 10 MB</small>
+          </div>
+        </button>
+      )}
       <input
         ref={inputRef}
         className="file-input"
@@ -109,7 +124,9 @@ export default function MediaFilesPanel({
             </button>
           </article>
         ))}
-        {visible.length === 0 && <p className="empty-files">No files in this category.</p>}
+        {loading && <p className="empty-files">Loading files…</p>}
+        {error && <p className="empty-files">Could not load the files.</p>}
+        {!loading && !error && visible.length === 0 && <p className="empty-files">No files in this category.</p>}
       </div>
     </section>
   );

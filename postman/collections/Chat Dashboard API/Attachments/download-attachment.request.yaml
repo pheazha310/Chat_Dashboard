@@ -1,0 +1,13 @@
+$kind: http-request
+name: 'Download Attachment'
+method: GET
+url: '{{base_url}}/api/v1/admin/attachments/:attachmentId/download'
+order: 3000
+pathVariables:
+  - key: attachmentId
+    value: '{{attachment_id}}'
+queryParams:
+  - key: inline
+    value: 'false'
+    description: 'Set to true to render inline instead of downloading'
+    disabled: true

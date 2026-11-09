@@ -1,0 +1,15 @@
+$kind: http-request
+name: 'List Conversation Notes'
+method: GET
+url: '{{base_url}}/api/v1/admin/conversations/:id/notes'
+order: 1000
+pathVariables:
+  - key: id
+    value: '{{conversation_id}}'
+queryParams:
+  - key: page
+    value: '1'
+    disabled: true
+  - key: limit
+    value: '20'
+    disabled: true

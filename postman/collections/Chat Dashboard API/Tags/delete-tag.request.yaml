@@ -1,0 +1,13 @@
+$kind: http-request
+name: 'Delete Tag'
+method: DELETE
+url: '{{base_url}}/api/v1/admin/tags/:tagId'
+order: 4000
+pathVariables:
+  - key: tagId
+    value: '{{tag_id}}'
+queryParams:
+  - key: reassignTo
+    value: ''
+    description: Optional tag ID to reassign conversations to before deletion
+    disabled: true

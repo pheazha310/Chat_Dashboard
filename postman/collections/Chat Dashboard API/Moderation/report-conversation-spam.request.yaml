@@ -1,0 +1,17 @@
+$kind: http-request
+name: 'Report Conversation as Spam'
+method: POST
+url: '{{base_url}}/api/v1/admin/conversations/:id/spam-reports'
+order: 12000
+pathVariables:
+  - key: id
+    value: '{{conversation_id}}'
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "reason": "Unsolicited promotional content"
+    }

@@ -1,0 +1,8 @@
+$kind: http-request
+name: 'Get Canned Response'
+method: GET
+url: '{{base_url}}/api/v1/admin/canned-responses/:templateId'
+order: 3000
+pathVariables:
+  - key: templateId
+    value: '{{canned_response_id}}'

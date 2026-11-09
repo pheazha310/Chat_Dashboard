@@ -1,0 +1,17 @@
+$kind: http-request
+name: 'Update Keyword'
+method: PATCH
+url: '{{base_url}}/api/v1/admin/moderation/keywords/:keywordId'
+order: 7000
+pathVariables:
+  - key: keywordId
+    value: '{{keyword_id}}'
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "action": "block"
+    }

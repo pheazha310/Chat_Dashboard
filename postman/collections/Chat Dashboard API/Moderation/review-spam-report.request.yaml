@@ -1,0 +1,18 @@
+$kind: http-request
+name: 'Review Spam Report'
+method: PATCH
+url: '{{base_url}}/api/v1/admin/moderation/spam-reports/:reportId'
+order: 10000
+pathVariables:
+  - key: reportId
+    value: '{{report_id}}'
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "decision": "confirmed",
+      "notes": "Verified spam."
+    }

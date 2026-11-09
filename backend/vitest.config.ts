@@ -9,6 +9,8 @@ export default defineConfig({
   },
   test: {
     environment: "node",
+    // Integration tests share one database and truncate it, so test files must not run in parallel.
+    fileParallelism: false,
     include: ["src/**/*.test.ts"],
     coverage: {
       provider: "v8",

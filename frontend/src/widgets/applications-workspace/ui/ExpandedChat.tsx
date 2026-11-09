@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState, type PointerEvent } from "react";
-import { useConversationStore, useSelectedConversation } from "@/entities/conversation";
+import { useSelectedConversation } from "@/entities/conversation";
 import { useConversationMessages } from "@/entities/message";
 import { sendMessage, useComposerStore, useDraft } from "@/features/send-message";
 import { useCustomerCallStore } from "@/features/customer-call";
 import { useMessageSettingsStore } from "@/features/message-settings";
 import { MediaFilesPanel } from "@/features/share-files";
-import { TakeOverButton } from "@/features/take-over-conversation";
+import { archiveConversation, restoreConversation } from "@/features/archive-conversation";
+import { markConversationUnread } from "@/features/mark-unread";
+import { TakeOverButton, takeOverConversation } from "@/features/take-over-conversation";
+import { useSessionStore } from "@/shared/api/session";
 import { assets } from "@/shared/config";
 import { formatClock } from "@/shared/lib/format-time";
 import { AssetIcon, notify, Icon, IconPill } from "@/shared/ui";
@@ -14,6 +17,7 @@ export default function ExpandedChat({ onBack }: { onBack: () => void }) {
   const aiReplies = useMessageSettingsStore((state) => state.values.aiReplies);
   const [showMedia, setShowMedia] = useState(false);
   const [showActions, setShowActions] = useState(false);
+  const me = useSessionStore((state) => state.userId);
   const actionsRef = useRef<HTMLDivElement>(null);
   const moreRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
@@ -33,6 +37,10 @@ export default function ExpandedChat({ onBack }: { onBack: () => void }) {
       document.removeEventListener("keydown", close);
     };
   }, [showActions]);
+  const closeActions = () => {
+    setShowActions(false);
+    moreRef.current?.focus();
+  };
   const fileInputRef = useRef<HTMLInputElement>(null);
   const chatRef = useRef<HTMLElement>(null);
   const [position, setPosition] = useState<{ left: number; top: number } | null>(null);
@@ -198,33 +206,41 @@ export default function ExpandedChat({ onBack }: { onBack: () => void }) {
           />
           {showActions && (
             <div className="expanded-actions-menu" role="menu" aria-label="Conversation actions">
-              {(
-                [
-                  ["Mark as unread", "markUnreadLocally"],
-                  ["Assign to me", "assignToMeLocally"],
-                  ["Archive conversation", "archiveLocally"],
-                ] as const
-              ).map(([label, action]) => (
+              <button
+                role="menuitem"
+                disabled={!conversation}
+                onClick={() => {
+                  markConversationUnread(conversationId);
+                  closeActions();
+                  notify("Conversation marked unread");
+                }}
+              >
+                Mark as unread
+              </button>
+              {conversation && (conversation.handoff !== "assigned" || conversation.assignedAgent?.id !== me) && (
                 <button
-                  key={action}
                   role="menuitem"
-                  disabled={!conversation}
                   onClick={() => {
-                    useConversationStore.getState()[action](conversationId);
-                    setShowActions(false);
-                    moreRef.current?.focus();
-                    notify(
-                      label === "Assign to me"
-                        ? "Conversation assigned to you"
-                        : label === "Mark as unread"
-                          ? "Conversation marked unread"
-                          : "Conversation archived",
-                    );
+                    // The server decides; the list updates from its answer, or a notice explains the refusal.
+                    takeOverConversation(conversationId);
+                    closeActions();
                   }}
                 >
-                  {label}
+                  Assign to me
                 </button>
-              ))}
+              )}
+              <button
+                role="menuitem"
+                disabled={!conversation}
+                onClick={() => {
+                  const action = conversation?.archived ? restoreConversation : archiveConversation;
+                  const done = conversation?.archived ? "Conversation restored" : "Conversation archived";
+                  void action(conversationId).then((ok) => ok && notify(done));
+                  closeActions();
+                }}
+              >
+                {conversation?.archived ? "Restore conversation" : "Archive conversation"}
+              </button>
               <button
                 role="menuitem"
                 disabled={!conversation}
@@ -244,6 +260,7 @@ export default function ExpandedChat({ onBack }: { onBack: () => void }) {
           <MediaFilesPanel
             customer={conversation.name}
             appId={conversation.application.appId}
+            conversationId={conversation.id}
             backLabel="Back to conversation"
             onBack={() => {
               setShowMedia(false);
@@ -256,8 +273,13 @@ export default function ExpandedChat({ onBack }: { onBack: () => void }) {
           <div className="expanded-chat-stream">
             <span className="expanded-today">Today</span>
             {messages.map((message) => (
-              <div className={`expanded-message ${message.side === "customer" ? "customer" : "ai"}`} key={message.id}>
-                {message.side === "customer" ? (
+              <div
+                className={`expanded-message ${message.side === "customer" ? "customer" : message.side === "system" ? "system" : "ai"}`}
+                key={message.id}
+              >
+                {message.side === "system" ? (
+                  <p>{message.text}</p>
+                ) : message.side === "customer" ? (
                   <p>{message.text}</p>
                 ) : (
                   <div>

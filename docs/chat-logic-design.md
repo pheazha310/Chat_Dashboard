@@ -102,7 +102,7 @@ application with Backend 1, then finds the existing active conversation for that
 2. Generate the reply and insert `ASSISTANT` messages.
 3. If the AI decides to escalate, or the customer asked for a person:
    - set `handoff_status = NEEDS_HUMAN` and raise `priority` if needed;
-   - insert an `ai_handoffs` row (`PENDING`), a `SYSTEM` message and a `conversation_activities` row;
+   - insert a `SYSTEM` message and a `conversation_activities` row;
    - create `notifications` for available agents.
 
 ### 5.3 Agent sends a message (`message.send`)
@@ -138,7 +138,7 @@ await prisma.$transaction(async (tx) => {
   await tx.conversationAssignment.create({
     data: { conversationId: id, agentId, assignedBy: agentId, assignmentType: "OWNER", assignmentAction: "TAKEOVER" },
   });
-  // also: SYSTEM message, conversation_activities row, ai_handoffs -> ACCEPTED
+  // also: SYSTEM message, conversation_activities row
 });
 ```
 
@@ -169,10 +169,49 @@ Each reader has their own position, so unread is per agent.
 
 - **Typing:** a short-lived Redis key with a TTL plus a pub/sub event, so every server instance relays it;
   no database writes.
-- **`callback.request`:** insert a `callback_requests` row, notify the owner (or the queue if
+- **`callback.request`** (as built: REST instead of a socket event, see `api-callbacks.md`): insert a `callback_requests` row, notify the owner (or the queue if
   unassigned) and write a `conversation_activities` row.
 - **Internal notes:** stored in `internal_notes`, never in `messages`, so they cannot be delivered to a
   customer; mentions go to `note_mentions` and create notifications.
+
+## 5.8 As built (conversations and assignments)
+
+Implemented in `shared/policy/conversation-access.ts`; the API returns the caller's `permissions` flags per conversation.
+
+- **Visibility.** Supervisors see everything. An agent sees AI-handled (`NONE`) and waiting (`NEEDS_HUMAN`) conversations,
+  ones they own, and ones where they are an open `VIEWER`. Another agent's `ASSIGNED` conversation is hidden: it
+  returns 404 on every endpoint (never 403) and is excluded from search. This is stricter than the "read-only" wording
+  in the matrix below; relax `canView` and `visibilityWhere` together if read-only access is wanted.
+- **Unassigned filter** = waiting in the shared queue (`handoff_status = NEEDS_HUMAN`).
+- **Unread** per agent = `CUSTOMER` messages after the agent's `last_read_sequence_number`, or at least 1 when
+  `marked_unread`. The `unread` filter loads all such ids for the agent (fine at inbox scale; revisit if it grows).
+- **Resolve/close** release the owner (`handoff NONE`, `AI` mode, OWNER row ended). **Reopen** (any viewer) sets
+  `NEEDS_HUMAN`/`HUMAN` so an agent can take it over.
+- **Archive/restore** is global (`is_archived`), allowed for the owner, a supervisor, or anyone when unassigned.
+- **Create** finds or creates the open conversation per application. The customer/application are **not yet verified
+  with Backend 1** (contract unknown); the target agent of an assign/transfer is likewise unverified.
+- **Messages.** The conversation row is locked (`SELECT ... FOR UPDATE`) while a message is appended, so sequence
+  numbers are contiguous and a retried `clientId` finds the original instead of failing on the unique key. Message
+  `created_at` is the database clock (the same instant as `last_message_at`). `receiveFromCustomer` (reopen, notify the
+  owner) is implemented and tested but has no entry point yet: the customer channel and its authentication are not built.
+- **Side effects after commit** (notifications, SYSTEM messages) are best effort: a failure is logged, never undoes the
+  committed change.
+- **Retention (FR-10):** only soft delete exists (deleted messages are excluded from history). No policy or job is
+  defined anywhere, so none is built.
+- **Realtime (built):** services report committed changes through `RealtimeNotifier`; the gateway authenticates sockets
+  with a first-frame token and delivers each event only to sockets that pass `canView`. See
+  [websocket-events.md](websocket-events.md). Event names are dotted (the decision recorded in §7 is closed).
+- **Notifications.** Stored per agent, honouring their preference switches; new-message notifications also honour
+  per-conversation mute. Triggers built: new customer message to the owner, a new waiting conversation to online
+  AVAILABLE agents (not the creator), assigned and transferred. A customer message in a conversation nobody owns
+  notifies no one (it waits in the queue, as designed in §5.1).
+- **Customer data (Backend 1).** Reached only through the `Directory` port (`BACKEND1_MODE=dev` returns labelled
+  synthetic data; `external` is not implemented because the contract is unknown). Sensitive fields are redacted by role
+  with a provisional policy (see api-conversations.md); replace it when Backend 1 defines its permissions.
+- **Not yet built:** the customer channel, customer-level communication activity (per-conversation activity exists),
+  and the frontend integration (the frontend still talks to its mock protocol).
+- **Timezone.** Database sessions are pinned to UTC (`config/database.ts`): the Prisma pg adapter reads `timestamptz`
+  as UTC, so a non-UTC server timezone shifted database-generated timestamps by the offset.
 
 ## 6. Permission matrix
 
@@ -197,10 +236,9 @@ The current protocol cannot express several cases. Add:
 - The PDF names events `message:send`, `message:new`, `message:sent`, `message:delivered`, `message:read`,
   `typing:start`, `typing:stop`, `conversation:assigned`; the protocol uses dotted names (`message.ack`, ...).
   Pick one naming scheme and change protocol, gateway, frontend and mock together.
-- REST paths in the PDF are under `/api/v1`; the backend mounts under `/api`. Decide before building endpoints.
+- REST paths in the PDF are under `/api/v1`; the chat backend mounts the staff API under `/api/v1/admin` (guest: `/api/v1/guest`, customer: `/api/v1/customer`, not built). `/api/health` is the only path outside it.
 - The DTO `id` is currently the conversation slug (e.g. `maya`), but `conversations` has no `slug` column (ids are
-  integers). Either add a `slug` column or change the protocol to use the numeric id (as a string, since Prisma
-  returns `bigint`).
+  UUIDs). Either add a `slug` column or change the protocol to use the conversation UUID.
 
 ## 8. Differences from the current mock server
 

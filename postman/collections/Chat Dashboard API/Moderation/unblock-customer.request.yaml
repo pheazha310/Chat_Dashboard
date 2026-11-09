@@ -1,0 +1,8 @@
+$kind: http-request
+name: 'Unblock Customer'
+method: DELETE
+url: '{{base_url}}/api/v1/admin/moderation/customers/:customerId/block'
+order: 3000
+pathVariables:
+  - key: customerId
+    value: '{{customer_id}}'

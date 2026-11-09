@@ -1,0 +1,5 @@
+$kind: http-request
+name: 'Get Notification Preferences'
+method: GET
+url: '{{base_url}}/api/v1/admin/notifications/preferences'
+order: 4000

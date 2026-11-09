@@ -4,19 +4,30 @@ import { prisma } from "@config/database.js";
 import { env } from "@config/env.js";
 import { logger } from "@config/logger.js";
 import { redis } from "@config/redis.js";
+import { authClient } from "@shared/auth/auth.js";
+import { container } from "./app-container.js";
+import { CallbackScheduler } from "@modules/callbacks/callback.scheduler.js";
+import { IntervalJob } from "@shared/utils/interval-job.js";
 import { attachWebSocketServer } from "./websocket/websocket.server.js";
 
 const server = createServer(app);
-const wss = attachWebSocketServer(server);
+const wss = attachWebSocketServer(server, container, authClient);
+
+const callbackJob = new CallbackScheduler(container.callbacks, env.CALLBACK_JOB_INTERVAL_SECONDS * 1000);
+callbackJob.start();
+const callJob = new IntervalJob("call", () => container.calls.processDue(), env.CALL_JOB_INTERVAL_SECONDS * 1000);
+callJob.start();
 
 server.listen(env.PORT, () => {
   logger.info({ port: env.PORT }, "API listening (ws at /ws)");
 });
 
 async function shutdown() {
+  callbackJob.stop();
+  callJob.stop();
   wss.close();
   server.close();
-  await Promise.allSettled([prisma.$disconnect(), redis.quit()]);
+  await Promise.allSettled([container.bus.close(), prisma.$disconnect(), redis.quit()]);
   process.exit(0);
 }
 process.on("SIGINT", shutdown);

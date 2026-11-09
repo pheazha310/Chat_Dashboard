@@ -44,8 +44,11 @@ and `customer_identifier` are snapshots kept so the inbox can be searched and so
 
 ## Conventions
 
-- **Ids:** every primary key is an auto-increment `BIGINT` (no UUIDs). Prisma returns `bigint`, which `JSON.stringify`
-  cannot serialize; convert ids to strings at the controller boundary.
+- **Ids:** every primary key is a `UUID` (`@db.Uuid`, default `gen_random_uuid()`, built in since PostgreSQL 13), and
+  so is every column that holds a Backend 1 id (`customer_id`, `agent_id`, `user_id`, `*_by`, ...; still no foreign
+  key). Ids are plain strings in Prisma and JSON. Random UUIDs carry no order: sort by a timestamp or
+  `sequence_number`, never by `id`. The only `BIGINT` columns are counters: `messages.sequence_number`,
+  `conversations.last_sequence_number`, `conversation_reads.last_read_sequence_number` and `attachments.file_size`.
 - **No database enums.** Fixed-value columns are `VARCHAR` strings. Allowed values are enforced by CHECK constraints
   in `constraints.sql` (the **proposed** sets are listed below; adding a value means changing that CHECK).
 - **Polymorphic actors.** Where either a customer or an agent can act, a `*_type` column is paired with a `*_id` column.
@@ -92,26 +95,24 @@ and `customer_identifier` are snapshots kept so the inbox can be searched and so
 
 ### Notifications, presence, templates, automation, AI
 
-| Table                                 | Purpose                                                                                                               |
-| ------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `notifications`                       | Per-recipient notification: `notification_type`, `title`, `body`, optional `conversation_id`/`message_id`, `read_at`. |
-| `notification_preferences`            | One row per agent: new-message, assignment, transfer, mention, sound and browser switches.                            |
-| `conversation_notification_settings`  | Per-agent mute: `is_muted` per `(conversation, agent)`.                                                               |
-| `agent_presence_history`              | Agent status periods. Live presence is in Redis; this is history.                                                     |
-| `canned_responses`                    | Templates: `shortcut`, `scope` (`PERSONAL`/`TEAM`), `team_id` (set exactly when `TEAM`), `created_by`, `is_active`.   |
-| `automation_rules`, `automation_logs` | Auto-reply rules (`trigger_type`, `conditions`, `response_content`) and their execution log.                          |
-| `ai_handoffs`                         | AI-to-human handoff requests; at most one `PENDING` per conversation.                                                 |
-| `ai_summaries`, `ai_suggestions`      | Generated summaries and per-agent reply suggestions.                                                                  |
+| Table                                 | Purpose                                                                                                                      |
+| ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `notifications`                       | Per-recipient notification: `notification_type`, `title`, `body`, optional `conversation_id`/`message_id`, `read_at`.        |
+| `notification_preferences`            | One row per agent: new-message, assignment, transfer, mention, sound and browser switches.                                   |
+| `conversation_notification_settings`  | Per-agent mute: `is_muted` per `(conversation, agent)`.                                                                      |
+| `agent_presence_history`              | Agent status periods. Live presence is in Redis; this is history.                                                            |
+| `canned_responses`                    | Templates: `shortcut`, `scope` (`PERSONAL`/`SHARED`/`TEAM`), `team_id` (set exactly when `TEAM`), `created_by`, `is_active`. |
+| `automation_rules`, `automation_logs` | Auto-reply rules (`trigger_type`, `conditions`, `response_content`) and their execution log.                                 |
 
 ### Callbacks, calls, moderation, mobile and workspace
 
-| Table                                                                          | Purpose                                                                                                                                                    |
-| ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `callback_requests`                                                            | `scheduled_at`, `assigned_agent_id`, `created_by`, `status`, `notes`, `completion_note`, `reminder_sent_at`, `completed_at`.                               |
-| `calls`, `call_participants`                                                   | Call history: `call_type`, `status`, `started_at`, `ended_at`; participants with join/leave times. Media is not stored.                                    |
-| `spam_reports`, `customer_blocks`, `blocked_keywords`, `moderation_activities` | Spam reports (optionally of a message), customer blocks (one active per customer), keyword rules (unique ignoring case) and a moderation audit log.        |
-| `push_devices`                                                                 | FCM/APNs tokens for a `user_id` (external `users.id`, customer or agent): `platform`, `device_token`, `is_active`; unique `(platform, device_token)`.      |
-| `workspace_preferences`, `workspace_open_conversations`, `user_chat_settings`  | Per-agent layout JSON and restorable open tabs; per-user chat switches (typing and notification sounds, AI suggestions and summaries, auto-assign opt-in). |
+| Table                                                                                                | Purpose                                                                                                                                                                                                                          |
+| ---------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `callback_requests`                                                                                  | `scheduled_at`, `assigned_agent_id`, `created_by`, `status`, `notes`, `completion_note`, `reminder_sent_at`, `completed_at`.                                                                                                     |
+| `calls`, `call_participants`                                                                         | Call history: `call_type`, `status`, `started_at`, `ended_at`; participants with join/leave times. Media is not stored.                                                                                                          |
+| `spam_reports`, `customer_blocks`, `blocked_keywords`, `moderation_activities`                       | Spam reports (optionally of a message), customer blocks (one active per customer), keyword rules (unique ignoring case) and a moderation audit log.                                                                              |
+| `push_devices`                                                                                       | FCM/APNs tokens for a `user_id` (external `users.id`, customer or agent): `platform`, `device_token`, `is_active`; unique `(platform, device_token)`.                                                                            |
+| `workspace_preferences`, `workspace_open_conversations`, `conversation_drafts`, `user_chat_settings` | Per-agent layout JSON (and tab preferences), restorable open tabs, unsent composer drafts per agent and conversation; per-user chat switches (typing and notification sounds, AI suggestions and summaries, auto-assign opt-in). |
 
 ## Value sets (proposed)
 
@@ -140,10 +141,7 @@ Confirm them before the first migration.
 | `moderation_activities.target_type`                                                                                                    | `CUSTOMER`, `CONVERSATION`, `MESSAGE`, `KEYWORD`, `SPAM_REPORT`                                                                                                                                                                         |
 | `attachments.upload_status`                                                                                                            | `PENDING`, `UPLOADED`, `FAILED`                                                                                                                                                                                                         |
 | `conversation_escalations.status`                                                                                                      | `PENDING`, `RESOLVED`, `CANCELLED`                                                                                                                                                                                                      |
-| `canned_responses.scope`                                                                                                               | `PERSONAL`, `TEAM`                                                                                                                                                                                                                      |
-| `ai_handoffs.requested_by_type`                                                                                                        | `AI`, `CUSTOMER`, `AGENT`, `SYSTEM`                                                                                                                                                                                                     |
-| `ai_handoffs.status`                                                                                                                   | `PENDING`, `ACCEPTED`, `COMPLETED`, `CANCELLED`                                                                                                                                                                                         |
-| `ai_suggestions.status`                                                                                                                | `PENDING`, `ACCEPTED`, `EDITED`, `DISMISSED`                                                                                                                                                                                            |
+| `canned_responses.scope`                                                                                                               | `PERSONAL`, `SHARED`, `TEAM`                                                                                                                                                                                                            |
 | `callback_requests.status`                                                                                                             | `PENDING`, `COMPLETED`, `CANCELLED`, `MISSED`                                                                                                                                                                                           |
 | `calls.call_type`                                                                                                                      | `AUDIO`, `VIDEO`                                                                                                                                                                                                                        |
 | `calls.status`                                                                                                                         | `INITIATING`, `RINGING`, `ACTIVE`, `ENDED`, `DECLINED`, `MISSED`, `CANCELLED`, `FAILED`                                                                                                                                                 |
@@ -167,15 +165,16 @@ These were run against a scratch PostgreSQL (48 insert/update/delete cases) and 
 | One open OWNER per conversation; one open membership per participant                                          | partial UNIQUE indexes                                                         |
 | `conversations.assigned_agent_id` always equals the open OWNER row's agent (checked at COMMIT)                | deferred constraint trigger                                                    |
 | One pending escalation per conversation                                                                       | partial UNIQUE index                                                           |
+| At most one open call (ringing or in progress) per conversation                                               | partial UNIQUE index                                                           |
 | `is_edited` agrees with `edited_at`; `deleted_by` needs `deleted_at`; a receipt is read after it is delivered | CHECK                                                                          |
 | A participant joins a call once                                                                               | UNIQUE `(call_id, participant_type, participant_id)`                           |
-| One pending AI handoff per conversation                                                                       | partial UNIQUE index                                                           |
 | One open presence period per agent                                                                            | partial UNIQUE index                                                           |
 | A reply points at a message in the same conversation; message numbers start at 1                              | composite FK + unique index, CHECK                                             |
 | A message can only link an attachment from its own conversation                                               | composite foreign keys                                                         |
 | The assistant participant has no id; others do; no backwards time ranges                                      | CHECK                                                                          |
 | Creator type and id set together                                                                              | CHECK                                                                          |
 | One active block per customer                                                                                 | partial UNIQUE index                                                           |
+| One pending spam report per reporter, conversation and message                                                | partial UNIQUE index                                                           |
 | No duplicate message order or optimistic send                                                                 | UNIQUE `(conversation_id, sequence_number)` and `(conversation_id, client_id)` |
 | `SYSTEM` messages have no sender id; `TEXT` messages have content                                             | CHECK                                                                          |
 | `TEAM` template <=> `team_id` set                                                                             | CHECK                                                                          |
@@ -190,13 +189,13 @@ role Backend 1 reports for the id, permissions, attachment type and size limits,
 **Customer message:** in one transaction, `UPDATE conversations SET last_sequence_number = last_sequence_number + 1,
 last_message_at = now(), last_message_preview = ... WHERE id = ? RETURNING last_sequence_number`, insert the message
 with that number, and (if `conversation_mode = AI`) queue the AI reply. The row lock serializes concurrent senders, so
-there are no gaps from races. If the AI escalates, set `handoff_status = NEEDS_HUMAN`, insert an `ai_handoffs` and a
+there are no gaps from races. If the AI escalates, set `handoff_status = NEEDS_HUMAN`, insert a
 `conversation_activities` row, and notify agents.
 
 **Takeover / assign (race-safe):** in one transaction (a deferred trigger checks at COMMIT that the conversation pointer and the open OWNER row agree, so write both before committing), update the conversation only if `handoff_status =
 'NEEDS_HUMAN'` (0 rows = someone else won) setting `conversation_mode = 'HUMAN'`, `handoff_status = 'ASSIGNED'` and
 `assigned_agent_id`; end any open `OWNER` assignment (`ended_at`, `ended_by`); insert the new `conversation_assignments`
-row (the partial unique index is the backstop); accept the pending `ai_handoffs`; write an activity.
+row (the partial unique index is the backstop); write an activity.
 
 **Agent message:** validate the caller holds the open `OWNER` assignment, insert (idempotent on `client_id`), return
 the ack mapping `client_id` to the new id, then record receipts as recipients acknowledge and update
@@ -210,7 +209,7 @@ the ack mapping `client_id` to the new id, then record receipts as recipients ac
 ## Open decisions
 
 - **Protocol id.** The WebSocket protocol identifies a conversation by `slug` (for example `maya`); there is no `slug`
-  column. Either add one or change the protocol to use the numeric id as a string.
+  column. Either add one or change the protocol to use the conversation UUID.
 - **Value sets** above are proposals; confirm them.
 - **Archive** is global (one flag per conversation), not per agent.
 - **Retention** (FR-10) needs a scheduled job; no schema support beyond soft delete.

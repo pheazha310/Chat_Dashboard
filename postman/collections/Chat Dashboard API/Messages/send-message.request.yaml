@@ -1,0 +1,18 @@
+$kind: http-request
+name: 'Send Message'
+method: POST
+url: '{{base_url}}/api/v1/admin/conversations/:id/messages'
+order: 1000
+pathVariables:
+  - key: id
+    value: '{{conversation_id}}'
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "content": "Hello, how can I help you?",
+      "type": "text"
+    }

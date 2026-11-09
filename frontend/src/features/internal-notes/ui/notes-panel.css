@@ -1,0 +1,82 @@
+.internal-note-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 16px;
+}
+.internal-note-form textarea,
+.internal-note textarea {
+  width: 100%;
+  min-height: 72px;
+  padding: 8px 10px;
+  border: 1px solid #d7deeb;
+  border-radius: 10px;
+  font: inherit;
+  resize: vertical;
+}
+.internal-note-form fieldset {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  font-size: 13px;
+}
+.internal-note-form legend {
+  margin-bottom: 4px;
+  font-size: 12px;
+  opacity: 0.7;
+}
+.internal-note-form > button,
+.internal-note-actions button {
+  align-self: flex-start;
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 8px;
+  color: #fff;
+  background: #3b6df0;
+  font: inherit;
+  cursor: pointer;
+}
+.internal-note-form > button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.internal-note-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 16px 16px;
+  overflow-y: auto;
+}
+.internal-note {
+  padding: 10px 12px;
+  border: 1px solid #f0d98a;
+  border-radius: 10px;
+  background: #fff9e0;
+}
+.internal-note header {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+}
+.internal-note p {
+  margin: 6px 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.internal-note small {
+  display: block;
+  opacity: 0.7;
+}
+.internal-note-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+.internal-note-actions button {
+  color: inherit;
+  background: #00000012;
+}

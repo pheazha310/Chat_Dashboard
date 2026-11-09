@@ -1,0 +1,8 @@
+$kind: http-request
+name: 'Delete Keyword'
+method: DELETE
+url: '{{base_url}}/api/v1/admin/moderation/keywords/:keywordId'
+order: 8000
+pathVariables:
+  - key: keywordId
+    value: '{{keyword_id}}'

@@ -1,0 +1,15 @@
+$kind: http-request
+name: 'List Conversation Attachments'
+method: GET
+url: '{{base_url}}/api/v1/admin/conversations/:conversationId/attachments'
+order: 5000
+pathVariables:
+  - key: conversationId
+    value: '{{conversation_id}}'
+queryParams:
+  - key: page
+    value: '1'
+    disabled: true
+  - key: limit
+    value: '20'
+    disabled: true

@@ -1,0 +1,8 @@
+$kind: http-request
+name: 'Restore Conversation'
+method: POST
+url: '{{base_url}}/api/v1/admin/conversations/:id/restore'
+order: 8000
+pathVariables:
+  - key: id
+    value: '{{conversation_id}}'

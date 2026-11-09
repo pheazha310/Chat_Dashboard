@@ -1,0 +1,12 @@
+$kind: http-request
+name: 'List Blocks'
+method: GET
+url: '{{base_url}}/api/v1/admin/moderation/blocks'
+order: 1000
+queryParams:
+  - key: page
+    value: '1'
+    disabled: true
+  - key: limit
+    value: '20'
+    disabled: true

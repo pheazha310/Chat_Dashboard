@@ -20,7 +20,7 @@ TableGroup Backend_1_External {
 }
 
 Table users {
-  id bigint [pk, increment, note: 'External ID from Backend 1']
+  id uuid [pk, default: `gen_random_uuid()`, note: 'External ID from Backend 1']
   name varchar(150)
   email varchar(255)
   password_hash varchar(255) [note: 'Managed by Backend 1']
@@ -32,7 +32,7 @@ Table users {
 }
 
 Table roles {
-  id bigint [pk, increment]
+  id uuid [pk, default: `gen_random_uuid()`]
   name varchar(100)
   description text
 
@@ -40,7 +40,7 @@ Table roles {
 }
 
 Table permissions {
-  id bigint [pk, increment]
+  id uuid [pk, default: `gen_random_uuid()`]
   name varchar(150)
   description text
 
@@ -48,9 +48,9 @@ Table permissions {
 }
 
 Table user_roles {
-  id bigint [pk, increment]
-  user_id bigint [not null]
-  role_id bigint [not null]
+  id uuid [pk, default: `gen_random_uuid()`]
+  user_id uuid [not null]
+  role_id uuid [not null]
 
   indexes {
     (user_id, role_id) [unique]
@@ -60,9 +60,9 @@ Table user_roles {
 }
 
 Table role_permissions {
-  id bigint [pk, increment]
-  role_id bigint [not null]
-  permission_id bigint [not null]
+  id uuid [pk, default: `gen_random_uuid()`]
+  role_id uuid [not null]
+  permission_id uuid [not null]
 
   indexes {
     (role_id, permission_id) [unique]
@@ -72,8 +72,8 @@ Table role_permissions {
 }
 
 Table customers {
-  id bigint [pk, increment]
-  user_id bigint [not null]
+  id uuid [pk, default: `gen_random_uuid()`]
+  user_id uuid [not null]
   customer_code varchar(100)
   phone varchar(30)
   address text
@@ -84,8 +84,8 @@ Table customers {
 }
 
 Table agents {
-  id bigint [pk, increment]
-  user_id bigint [not null]
+  id uuid [pk, default: `gen_random_uuid()`]
+  user_id uuid [not null]
   employee_code varchar(100)
   department varchar(100)
   is_available boolean
@@ -96,8 +96,8 @@ Table agents {
 }
 
 Table loan_applications {
-  id bigint [pk, increment]
-  customer_id bigint [not null]
+  id uuid [pk, default: `gen_random_uuid()`]
+  customer_id uuid [not null]
   application_number varchar(100)
   loan_type varchar(100)
   amount decimal(15,2)
@@ -121,11 +121,11 @@ TableGroup Backend_2_Chat_Core {
 }
 
 Table conversations {
-  id bigint [pk, increment]
+  id uuid [pk, default: `gen_random_uuid()`]
 
   // External references from Backend 1
-  customer_id bigint [note: 'External customers.id. Required for CUSTOMER_SUPPORT, NULL for INTERNAL (CHECK)']
-  application_id bigint [note: 'External loan_applications.id']
+  customer_id uuid [note: 'External customers.id. Required for CUSTOMER_SUPPORT, NULL for INTERNAL (CHECK)']
+  application_id uuid [note: 'External loan_applications.id']
 
   customer_name varchar(150) [note: 'Snapshot of the Backend 1 customer name so the inbox can be searched and sorted in SQL (FR-07); refresh when Backend 1 reports a change']
   customer_identifier varchar(100) [note: 'Snapshot of a searchable identifier (customer_code, phone, application_number)']
@@ -133,14 +133,14 @@ Table conversations {
   conversation_type varchar(30) [not null, default: 'CUSTOMER_SUPPORT']
   channel varchar(32) [not null, default: 'web', note: 'web or mobile']
   created_by_type varchar(30) [note: 'CUSTOMER or AGENT; NULL when created by the system']
-  created_by_id bigint [note: 'External customers.id or agents.id; set exactly when created_by_type is set']
+  created_by_id uuid [note: 'External customers.id or agents.id; set exactly when created_by_type is set']
   status varchar(30) [not null, default: 'OPEN']
   priority varchar(20) [not null, default: 'MEDIUM']
 
   conversation_mode varchar(20) [not null, default: 'AI']
   handoff_status varchar(30) [not null, default: 'NONE']
 
-  assigned_agent_id bigint [note: 'External agents.id. Denormalized current OWNER from conversation_assignments for fast Mine/Unassigned filters; set exactly when handoff_status = ASSIGNED (CHECK)']
+  assigned_agent_id uuid [note: 'External agents.id. Denormalized current OWNER from conversation_assignments for fast Mine/Unassigned filters; set exactly when handoff_status = ASSIGNED (CHECK)']
 
   subject varchar(255)
   summary text
@@ -170,11 +170,11 @@ Table conversations {
 }
 
 Table conversation_participants {
-  id bigint [pk, increment]
-  conversation_id bigint [not null]
+  id uuid [pk, default: `gen_random_uuid()`]
+  conversation_id uuid [not null]
 
   participant_type varchar(30) [not null, note: 'CUSTOMER, AGENT, ASSISTANT']
-  participant_id bigint [note: 'External customers.id or agents.id; NULL exactly when ASSISTANT (CHECK)']
+  participant_id uuid [note: 'External customers.id or agents.id; NULL exactly when ASSISTANT (CHECK)']
   participant_role varchar(30) [not null, default: 'MEMBER', note: 'OWNER, VIEWER, MEMBER']
 
   joined_at timestamptz [not null, default: `now()`]
@@ -187,11 +187,11 @@ Table conversation_participants {
 }
 
 Table conversation_assignments {
-  id bigint [pk, increment]
-  conversation_id bigint [not null]
+  id uuid [pk, default: `gen_random_uuid()`]
+  conversation_id uuid [not null]
 
-  agent_id bigint [not null, note: 'External agents.id']
-  assigned_by bigint [note: 'External agents.id']
+  agent_id uuid [not null, note: 'External agents.id']
+  assigned_by uuid [note: 'External agents.id']
 
   assignment_type varchar(30) [not null, default: 'OWNER', note: 'OWNER or VIEWER']
   assignment_action varchar(30) [not null, default: 'ASSIGNED', note: 'TAKEOVER, ASSIGNED, TRANSFERRED, AUTO_ASSIGNED']
@@ -199,7 +199,7 @@ Table conversation_assignments {
 
   assigned_at timestamptz [not null, default: `now()`]
   ended_at timestamptz
-  ended_by bigint [note: 'External agents.id; NULL when ended by the system']
+  ended_by uuid [note: 'External agents.id; NULL when ended by the system']
 
   indexes {
     (conversation_id, ended_at)
@@ -208,11 +208,11 @@ Table conversation_assignments {
 }
 
 Table conversation_activities {
-  id bigint [pk, increment]
-  conversation_id bigint [not null]
+  id uuid [pk, default: `gen_random_uuid()`]
+  conversation_id uuid [not null]
 
   actor_type varchar(30) [not null]
-  actor_id bigint [note: 'External actor ID; null for system']
+  actor_id uuid [note: 'External actor ID; null for system']
 
   activity_type varchar(50) [not null]
   description text
@@ -239,28 +239,28 @@ TableGroup Backend_2_Messaging {
 }
 
 Table messages {
-  id bigint [pk, increment]
-  conversation_id bigint [not null]
+  id uuid [pk, default: `gen_random_uuid()`]
+  conversation_id uuid [not null]
 
   client_id varchar(100) [note: 'Client-generated ID for duplicate prevention']
   sequence_number bigint [not null]
 
   sender_type varchar(30) [not null, note: 'CUSTOMER, AGENT, ASSISTANT, SYSTEM']
-  sender_id bigint [note: 'External sender ID, null for system']
+  sender_id uuid [note: 'External sender ID, null for system']
 
   message_type varchar(30) [not null, default: 'TEXT']
   content text
   metadata jsonb [note: 'Payload for SYSTEM messages, e.g. who took over; call or callback references']
 
-  reply_to_message_id bigint
-  forwarded_from_message_id bigint
+  reply_to_message_id uuid
+  forwarded_from_message_id uuid
 
   status varchar(20) [not null, default: 'SENT', note: 'Sender-facing summary: SENDING, SENT, DELIVERED, READ, FAILED. Per-recipient detail is in message_receipts']
 
   is_edited boolean [not null, default: false]
   edited_at timestamptz
   deleted_at timestamptz
-  deleted_by bigint [note: 'External agents.id']
+  deleted_by uuid [note: 'External agents.id']
 
   created_at timestamptz [not null, default: `now()`]
   updated_at timestamptz [not null, default: `now()`]
@@ -277,11 +277,11 @@ Table messages {
 }
 
 Table message_receipts {
-  id bigint [pk, increment]
-  message_id bigint [not null]
+  id uuid [pk, default: `gen_random_uuid()`]
+  message_id uuid [not null]
 
   recipient_type varchar(30) [not null]
-  recipient_id bigint [not null]
+  recipient_id uuid [not null]
 
   delivered_at timestamptz
   read_at timestamptz
@@ -294,13 +294,13 @@ Table message_receipts {
 }
 
 Table conversation_reads {
-  id bigint [pk, increment]
-  conversation_id bigint [not null]
+  id uuid [pk, default: `gen_random_uuid()`]
+  conversation_id uuid [not null]
 
   reader_type varchar(30) [not null]
-  reader_id bigint [not null]
+  reader_id uuid [not null]
 
-  last_read_message_id bigint
+  last_read_message_id uuid
   last_read_sequence_number bigint [not null, default: 0, note: 'Unread count = conversations.last_sequence_number - this (approximate: includes own and system messages)']
   last_read_at timestamptz
   marked_unread boolean [not null, default: false, note: 'Agent manually marked the conversation unread (FR-05)']
@@ -315,11 +315,11 @@ Table conversation_reads {
 }
 
 Table message_edit_history {
-  id bigint [pk, increment]
-  message_id bigint [not null]
+  id uuid [pk, default: `gen_random_uuid()`]
+  message_id uuid [not null]
 
   editor_type varchar(30) [not null]
-  editor_id bigint [not null]
+  editor_id uuid [not null]
 
   previous_content text [not null]
   edited_at timestamptz [not null, default: `now()`]
@@ -330,11 +330,11 @@ Table message_edit_history {
 }
 
 Table message_reactions {
-  id bigint [pk, increment]
-  message_id bigint [not null]
+  id uuid [pk, default: `gen_random_uuid()`]
+  message_id uuid [not null]
 
   user_type varchar(30) [not null]
-  user_id bigint [not null]
+  user_id uuid [not null]
 
   emoji varchar(50) [not null]
   created_at timestamptz [not null, default: `now()`]
@@ -354,11 +354,11 @@ TableGroup Backend_2_Attachments {
 }
 
 Table attachments {
-  id bigint [pk, increment]
-  conversation_id bigint [not null, note: 'Needed for the Media & Files panel and access control; an upload exists before its message']
+  id uuid [pk, default: `gen_random_uuid()`]
+  conversation_id uuid [not null, note: 'Needed for the Media & Files panel and access control; an upload exists before its message']
 
   uploaded_by_type varchar(30) [not null]
-  uploaded_by_id bigint [not null]
+  uploaded_by_id uuid [not null]
 
   storage_key varchar(500) [not null, unique]
   file_name varchar(255) [not null]
@@ -382,9 +382,9 @@ Table attachments {
 }
 
 Table message_attachments {
-  message_id bigint [not null]
-  attachment_id bigint [not null]
-  conversation_id bigint [not null, note: 'Must match both the message and attachment conversation (composite foreign keys)']
+  message_id uuid [not null]
+  attachment_id uuid [not null]
+  conversation_id uuid [not null, note: 'Must match both the message and attachment conversation (composite foreign keys)']
 
   created_at timestamptz [not null, default: `now()`]
 
@@ -406,10 +406,10 @@ TableGroup Backend_2_Internal_Notes {
 }
 
 Table internal_notes {
-  id bigint [pk, increment]
-  conversation_id bigint [not null]
+  id uuid [pk, default: `gen_random_uuid()`]
+  conversation_id uuid [not null]
 
-  author_agent_id bigint [not null, note: 'External agents.id']
+  author_agent_id uuid [not null, note: 'External agents.id']
   content text [not null]
 
   created_at timestamptz [not null, default: `now()`]
@@ -422,9 +422,9 @@ Table internal_notes {
 }
 
 Table note_mentions {
-  id bigint [pk, increment]
-  note_id bigint [not null]
-  mentioned_agent_id bigint [not null, note: 'External agents.id']
+  id uuid [pk, default: `gen_random_uuid()`]
+  note_id uuid [not null]
+  mentioned_agent_id uuid [not null, note: 'External agents.id']
 
   created_at timestamptz [not null, default: `now()`]
 
@@ -435,14 +435,14 @@ Table note_mentions {
 }
 
 Table conversation_escalations {
-  id bigint [pk, increment]
-  conversation_id bigint [not null]
+  id uuid [pk, default: `gen_random_uuid()`]
+  conversation_id uuid [not null]
 
-  requested_by bigint [not null, note: 'External agents.id']
+  requested_by uuid [not null, note: 'External agents.id']
   reason text
 
   status varchar(30) [not null, default: 'PENDING']
-  resolved_by bigint [note: 'External agents.id']
+  resolved_by uuid [note: 'External agents.id']
 
   created_at timestamptz [not null, default: `now()`]
   resolved_at timestamptz
@@ -462,17 +462,17 @@ TableGroup Backend_2_Tags {
 }
 
 Table tags {
-  id bigint [pk, increment]
+  id uuid [pk, default: `gen_random_uuid()`]
   name varchar(100) [not null, unique]
   color varchar(30)
 
-  created_by bigint [note: 'External agents.id']
+  created_by uuid [note: 'External agents.id']
   created_at timestamptz [not null, default: `now()`]
 }
 
 Table conversation_tags {
-  conversation_id bigint [not null]
-  tag_id bigint [not null]
+  conversation_id uuid [not null]
+  tag_id uuid [not null]
 
   created_at timestamptz [not null, default: `now()`]
 
@@ -494,13 +494,13 @@ TableGroup Backend_2_Notifications {
 }
 
 Table notifications {
-  id bigint [pk, increment]
+  id uuid [pk, default: `gen_random_uuid()`]
 
   recipient_type varchar(30) [not null]
-  recipient_id bigint [not null, note: 'External Backend 1 ID']
+  recipient_id uuid [not null, note: 'External Backend 1 ID']
 
-  conversation_id bigint
-  message_id bigint
+  conversation_id uuid
+  message_id uuid
 
   notification_type varchar(50) [not null]
   title varchar(255) [not null]
@@ -518,8 +518,8 @@ Table notifications {
 }
 
 Table notification_preferences {
-  id bigint [pk, increment]
-  agent_id bigint [not null, unique, note: 'External agents.id']
+  id uuid [pk, default: `gen_random_uuid()`]
+  agent_id uuid [not null, unique, note: 'External agents.id']
 
   new_message_enabled boolean [not null, default: true]
   assignment_enabled boolean [not null, default: true]
@@ -533,9 +533,9 @@ Table notification_preferences {
 }
 
 Table conversation_notification_settings {
-  id bigint [pk, increment]
-  conversation_id bigint [not null]
-  agent_id bigint [not null, note: 'External agents.id']
+  id uuid [pk, default: `gen_random_uuid()`]
+  conversation_id uuid [not null]
+  agent_id uuid [not null, note: 'External agents.id']
 
   is_muted boolean [not null, default: false]
   updated_at timestamptz [not null, default: `now()`]
@@ -547,8 +547,8 @@ Table conversation_notification_settings {
 }
 
 Table agent_presence_history {
-  id bigint [pk, increment]
-  agent_id bigint [not null, note: 'External agents.id']
+  id uuid [pk, default: `gen_random_uuid()`]
+  agent_id uuid [not null, note: 'External agents.id']
 
   status varchar(30) [not null, note: 'AVAILABLE, BUSY, AWAY, OFFLINE']
 
@@ -573,15 +573,15 @@ TableGroup Backend_2_Automations {
 }
 
 Table canned_responses {
-  id bigint [pk, increment]
+  id uuid [pk, default: `gen_random_uuid()`]
   title varchar(255) [not null]
   content text [not null]
 
   shortcut varchar(50) [note: 'e.g. /greeting']
 
-  scope varchar(30) [not null, default: 'PERSONAL', note: 'PERSONAL or TEAM']
-  team_id bigint [note: 'External team id; set exactly when scope = TEAM (CHECK)']
-  created_by bigint [not null, note: 'External agents.id']
+  scope varchar(30) [not null, default: 'PERSONAL', note: 'PERSONAL, SHARED (everyone) or TEAM (unused until Backend 1 defines teams)']
+  team_id uuid [note: 'External team id; set exactly when scope = TEAM (CHECK)']
+  created_by uuid [not null, note: 'External agents.id']
 
   is_active boolean [not null, default: true]
 
@@ -595,7 +595,7 @@ Table canned_responses {
 }
 
 Table automation_rules {
-  id bigint [pk, increment]
+  id uuid [pk, default: `gen_random_uuid()`]
   name varchar(255) [not null]
 
   trigger_type varchar(50) [not null]
@@ -605,7 +605,7 @@ Table automation_rules {
   priority int [not null, default: 0]
   is_active boolean [not null, default: true]
 
-  created_by bigint [note: 'External agents.id']
+  created_by uuid [note: 'External agents.id']
   created_at timestamptz [not null, default: `now()`]
   updated_at timestamptz [not null, default: `now()`]
 
@@ -615,10 +615,10 @@ Table automation_rules {
 }
 
 Table automation_logs {
-  id bigint [pk, increment]
-  rule_id bigint [not null]
-  conversation_id bigint [not null]
-  message_id bigint
+  id uuid [pk, default: `gen_random_uuid()`]
+  rule_id uuid [not null]
+  conversation_id uuid [not null]
+  message_id uuid
 
   execution_status varchar(30) [not null]
   error_message text
@@ -633,70 +633,6 @@ Table automation_logs {
 }
 
 // =====================================================
-// AI HANDOFF
-// =====================================================
-
-TableGroup Backend_2_AI {
-  ai_handoffs
-  ai_summaries
-  ai_suggestions
-}
-
-Table ai_handoffs {
-  id bigint [pk, increment]
-  conversation_id bigint [not null]
-
-  requested_by_type varchar(30) [not null]
-  requested_by_id bigint
-
-  reason text
-  status varchar(30) [not null, default: 'PENDING']
-
-  accepted_by bigint [note: 'External agents.id']
-
-  requested_at timestamptz [not null, default: `now()`]
-  accepted_at timestamptz
-  completed_at timestamptz
-
-  indexes {
-    (conversation_id, status)
-  }
-
-  Note: 'At most one PENDING handoff per conversation (partial unique index).'
-}
-
-Table ai_summaries {
-  id bigint [pk, increment]
-  conversation_id bigint [not null]
-
-  summary text [not null]
-  model_version varchar(100)
-
-  generated_at timestamptz [not null, default: `now()`]
-
-  indexes {
-    (conversation_id, generated_at)
-  }
-}
-
-Table ai_suggestions {
-  id bigint [pk, increment]
-  conversation_id bigint [not null]
-  agent_id bigint [not null, note: 'External agents.id']
-
-  suggestion text [not null]
-  status varchar(30) [not null, default: 'PENDING']
-  final_content text
-
-  created_at timestamptz [not null, default: `now()`]
-  updated_at timestamptz [not null, default: `now()`]
-
-  indexes {
-    (conversation_id, agent_id)
-  }
-}
-
-// =====================================================
 // CALLBACKS AND CALLS
 // =====================================================
 
@@ -707,13 +643,13 @@ TableGroup Backend_2_Calls {
 }
 
 Table callback_requests {
-  id bigint [pk, increment]
-  conversation_id bigint [not null]
+  id uuid [pk, default: `gen_random_uuid()`]
+  conversation_id uuid [not null]
 
-  customer_id bigint [not null, note: 'External customers.id']
-  assigned_agent_id bigint [note: 'External agents.id']
+  customer_id uuid [not null, note: 'External customers.id']
+  assigned_agent_id uuid [note: 'External agents.id']
 
-  created_by bigint [note: 'External agents.id']
+  created_by uuid [note: 'External agents.id']
 
   scheduled_at timestamptz [not null]
   status varchar(30) [not null, default: 'PENDING']
@@ -734,11 +670,11 @@ Table callback_requests {
 }
 
 Table calls {
-  id bigint [pk, increment]
-  conversation_id bigint [not null]
+  id uuid [pk, default: `gen_random_uuid()`]
+  conversation_id uuid [not null]
 
   initiated_by_type varchar(30) [not null]
-  initiated_by_id bigint [not null]
+  initiated_by_id uuid [not null]
 
   call_type varchar(20) [not null]
   status varchar(30) [not null, default: 'INITIATING']
@@ -756,11 +692,11 @@ Table calls {
 }
 
 Table call_participants {
-  id bigint [pk, increment]
-  call_id bigint [not null]
+  id uuid [pk, default: `gen_random_uuid()`]
+  call_id uuid [not null]
 
   participant_type varchar(30) [not null]
-  participant_id bigint [not null]
+  participant_id uuid [not null]
 
   joined_at timestamptz
   left_at timestamptz
@@ -783,18 +719,18 @@ TableGroup Backend_2_Moderation {
 }
 
 Table spam_reports {
-  id bigint [pk, increment]
-  conversation_id bigint [not null]
+  id uuid [pk, default: `gen_random_uuid()`]
+  conversation_id uuid [not null]
 
   reported_by_type varchar(30) [not null]
-  reported_by_id bigint [not null]
+  reported_by_id uuid [not null]
 
-  message_id bigint [note: 'The reported message, if any']
+  message_id uuid [note: 'The reported message, if any']
 
   reason text [not null]
   status varchar(30) [not null, default: 'PENDING']
 
-  reviewed_by bigint [note: 'External agents.id']
+  reviewed_by uuid [note: 'External agents.id']
   reviewed_at timestamptz
   resolution_note varchar(500)
 
@@ -808,15 +744,15 @@ Table spam_reports {
 }
 
 Table customer_blocks {
-  id bigint [pk, increment]
-  customer_id bigint [not null, note: 'External customers.id']
-  blocked_by bigint [not null, note: 'External agents.id']
+  id uuid [pk, default: `gen_random_uuid()`]
+  customer_id uuid [not null, note: 'External customers.id']
+  blocked_by uuid [not null, note: 'External agents.id']
 
   reason text
 
   blocked_at timestamptz [not null, default: `now()`]
   unblocked_at timestamptz
-  unblocked_by bigint [note: 'External agents.id']
+  unblocked_by uuid [note: 'External agents.id']
 
   indexes {
     (customer_id, unblocked_at)
@@ -826,22 +762,22 @@ Table customer_blocks {
 }
 
 Table blocked_keywords {
-  id bigint [pk, increment]
+  id uuid [pk, default: `gen_random_uuid()`]
   keyword varchar(255) [not null, unique]
 
   is_active boolean [not null, default: true]
-  created_by bigint [note: 'External agents.id']
+  created_by uuid [note: 'External agents.id']
 
   created_at timestamptz [not null, default: `now()`]
 }
 
 Table moderation_activities {
-  id bigint [pk, increment]
-  actor_id bigint [not null, note: 'External agents.id']
+  id uuid [pk, default: `gen_random_uuid()`]
+  actor_id uuid [not null, note: 'External agents.id']
 
   action varchar(100) [not null]
   target_type varchar(50) [not null]
-  target_id bigint [not null]
+  target_id uuid [not null]
 
   metadata jsonb
   created_at timestamptz [not null, default: `now()`]
@@ -860,12 +796,13 @@ TableGroup Backend_2_Workspace {
   push_devices
   workspace_preferences
   workspace_open_conversations
+  conversation_drafts
   user_chat_settings
 }
 
 Table push_devices {
-  id bigint [pk, increment]
-  user_id bigint [not null, note: 'External users.id (every customer and agent has one)']
+  id uuid [pk, default: `gen_random_uuid()`]
+  user_id uuid [not null, note: 'External users.id (every customer and agent has one)']
 
   platform varchar(30) [not null]
   device_token varchar(512) [not null]
@@ -883,8 +820,8 @@ Table push_devices {
 }
 
 Table workspace_preferences {
-  id bigint [pk, increment]
-  agent_id bigint [not null, unique, note: 'External agents.id']
+  id uuid [pk, default: `gen_random_uuid()`]
+  agent_id uuid [not null, unique, note: 'External agents.id']
 
   layout jsonb
   sidebar_width int
@@ -894,9 +831,9 @@ Table workspace_preferences {
 }
 
 Table workspace_open_conversations {
-  id bigint [pk, increment]
-  agent_id bigint [not null, note: 'External agents.id']
-  conversation_id bigint [not null]
+  id uuid [pk, default: `gen_random_uuid()`]
+  agent_id uuid [not null, note: 'External agents.id']
+  conversation_id uuid [not null]
 
   sort_order int [not null, default: 0]
   last_opened_at timestamptz [not null, default: `now()`]
@@ -907,9 +844,24 @@ Table workspace_open_conversations {
   }
 }
 
+Table conversation_drafts {
+  id uuid [pk, default: `gen_random_uuid()`]
+  agent_id uuid [not null, note: 'External agents.id']
+  conversation_id uuid [not null]
+
+  content text [not null, note: 'Unsent composer text, at most 10000 characters. An empty draft is deleted, not stored.']
+
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (agent_id, conversation_id) [unique]
+    conversation_id
+  }
+}
+
 Table user_chat_settings {
-  id bigint [pk, increment]
-  user_id bigint [not null, unique, note: 'External users.id']
+  id uuid [pk, default: `gen_random_uuid()`]
+  user_id uuid [not null, unique, note: 'External users.id']
 
   typing_sound_enabled boolean [not null, default: true]
   notification_sound_enabled boolean [not null, default: true]
@@ -980,9 +932,6 @@ Ref: conversations.id < automation_logs.conversation_id
 Ref: messages.id < automation_logs.message_id
 
 // AI
-Ref: conversations.id < ai_handoffs.conversation_id
-Ref: conversations.id < ai_summaries.conversation_id
-Ref: conversations.id < ai_suggestions.conversation_id
 
 // Calls
 Ref: conversations.id < callback_requests.conversation_id
@@ -995,6 +944,7 @@ Ref: messages.id < spam_reports.message_id
 
 // Workspace
 Ref: conversations.id < workspace_open_conversations.conversation_id
+Ref: conversations.id < conversation_drafts.conversation_id
 
 // =====================================================
 // BACKEND 1 ↔ BACKEND 2 — CONCEPTUAL REFERENCES ONLY
@@ -1012,7 +962,6 @@ Ref: agents.id < notification_preferences.agent_id
 Ref: agents.id < conversation_notification_settings.agent_id
 Ref: agents.id < agent_presence_history.agent_id
 Ref: agents.id < canned_responses.created_by
-Ref: agents.id < ai_suggestions.agent_id
 Ref: agents.id < callback_requests.assigned_agent_id
 Ref: customers.id < callback_requests.customer_id
 Ref: agents.id < spam_reports.reviewed_by
@@ -1020,6 +969,7 @@ Ref: agents.id < customer_blocks.blocked_by
 Ref: customers.id < customer_blocks.customer_id
 Ref: agents.id < workspace_preferences.agent_id
 Ref: agents.id < workspace_open_conversations.agent_id
+Ref: agents.id < conversation_drafts.agent_id
 Ref: users.id < user_chat_settings.user_id
 Ref: agents.id < conversations.assigned_agent_id
 Ref: agents.id < conversation_assignments.ended_by

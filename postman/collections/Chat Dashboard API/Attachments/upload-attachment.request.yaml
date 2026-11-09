@@ -1,0 +1,16 @@
+$kind: http-request
+name: 'Upload Attachment'
+method: POST
+url: '{{base_url}}/api/v1/admin/attachments/upload'
+order: 1000
+body:
+  type: formdata
+  content:
+    - key: file
+      type: file
+      src: ''
+      description: File to upload
+    - key: conversationId
+      type: text
+      value: '{{conversation_id}}'
+      description: Associated conversation ID

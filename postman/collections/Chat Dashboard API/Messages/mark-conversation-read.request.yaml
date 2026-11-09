@@ -1,0 +1,17 @@
+$kind: http-request
+name: 'Mark Conversation Read'
+method: POST
+url: '{{base_url}}/api/v1/admin/conversations/:id/read'
+order: 4000
+pathVariables:
+  - key: id
+    value: '{{conversation_id}}'
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "messageId": "{{message_id}}"
+    }

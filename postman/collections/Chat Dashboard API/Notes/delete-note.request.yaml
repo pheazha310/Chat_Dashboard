@@ -1,0 +1,8 @@
+$kind: http-request
+name: 'Delete Note'
+method: DELETE
+url: '{{base_url}}/api/v1/admin/notes/:noteId'
+order: 4000
+pathVariables:
+  - key: noteId
+    value: '{{note_id}}'

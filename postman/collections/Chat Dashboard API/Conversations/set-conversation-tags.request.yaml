@@ -1,0 +1,17 @@
+$kind: http-request
+name: 'Set Conversation Tags'
+method: PUT
+url: '{{base_url}}/api/v1/admin/conversations/:id/tags'
+order: 10000
+pathVariables:
+  - key: id
+    value: '{{conversation_id}}'
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "tagIds": ["{{tag_id}}"]
+    }

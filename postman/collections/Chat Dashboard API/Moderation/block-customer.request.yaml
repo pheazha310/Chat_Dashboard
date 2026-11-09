@@ -1,0 +1,17 @@
+$kind: http-request
+name: 'Block Customer'
+method: POST
+url: '{{base_url}}/api/v1/admin/moderation/customers/:customerId/block'
+order: 2000
+pathVariables:
+  - key: customerId
+    value: '{{customer_id}}'
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "reason": "Abusive behaviour"
+    }

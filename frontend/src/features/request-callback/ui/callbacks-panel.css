@@ -1,0 +1,85 @@
+.callback-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 16px;
+}
+.callback-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+}
+.callback-form input,
+.callback-form textarea {
+  padding: 8px 10px;
+  border: 1px solid #d7deeb;
+  border-radius: 10px;
+  font: inherit;
+}
+.callback-form textarea {
+  min-height: 64px;
+  resize: vertical;
+}
+.callback-form > button,
+.callback-actions button {
+  align-self: flex-start;
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 8px;
+  color: #fff;
+  background: #3b6df0;
+  font: inherit;
+  cursor: pointer;
+}
+.callback-form > button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.callback-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 16px 16px;
+}
+.callback-list h4 {
+  margin: 8px 0 0;
+  font-size: 12px;
+  opacity: 0.7;
+}
+.callback-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid #e3e8f2;
+  border-radius: 12px;
+}
+.callback-item header {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.callback-item header span {
+  font-size: 12px;
+  text-transform: capitalize;
+}
+.callback-item p {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.callback-missed header span {
+  color: #b42318;
+}
+.callback-completed,
+.callback-cancelled {
+  opacity: 0.7;
+}
+.callback-actions {
+  display: flex;
+  gap: 8px;
+}
+.callback-actions button:last-child {
+  background: #6b7a99;
+}

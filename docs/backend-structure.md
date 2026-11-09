@@ -9,16 +9,31 @@ backend/
 ├── vitest.config.ts         aliases + coverage thresholds
 └── src/
     ├── server.ts            http server, websocket attach, graceful shutdown
-    ├── app.ts               express app: helmet, cors, request context, pino-http, json, /api, notFound, errorHandler
-    ├── routes.ts            mounts every module router under /api
+    ├── app.ts               express app: helmet, cors, request context, pino-http, json, /api/health, /api/v1/admin, notFound, errorHandler
+    ├── routes.ts            mounts every module router (served under /api/v1/admin)
+    ├── container.ts         builds every service once (composition root); app-container.ts is the running app's instance
     ├── config/              env.ts (zod-validated env), cors.ts, database.ts (Prisma singleton), redis.ts,
     │                        logger.ts (pino), request-context.ts (AsyncLocalStorage requestId)
     ├── modules/
-    │   └── health/          routes, controller, service, repository, types, index.ts, __tests__/  (reference module)
-    ├── websocket/           websocket.server.ts (/ws, Redis chat:events fan-out, heartbeat)
+    │   ├── health/          reference module
+    │   ├── conversations/   inbox, detail, create, status changes, archive, activities
+    │   ├── assignments/     assign (takeover), transfer, unassign, history
+    │   ├── messages/        send (idempotent), history/sync cursors, read/unread, receipts, SYSTEM messages
+    │   ├── presence/        agent availability (Redis live state + Postgres history), REST + used by the socket
+    │   ├── realtime/        turns committed changes into audience-targeted events on the event bus (service only)
+    │   ├── customers/       customer profile (redacted by role), other conversations, participants (Backend 1 via Directory)
+    │   └── notifications/   list, unread count, mark read, preferences, per-conversation mute; also creates notifications for other modules
+    ├── websocket/           server (transport, heartbeat), auth (first-frame token), handler (event → service),
+    │                        events (zod schemas), rooms (per-socket audience filter), bus (Redis / in-memory)
     └── shared/
+        ├── auth/            AuthClient port, DevAuthClient (dev/test only), createAuthClient
         ├── errors/          AppError.ts (AppError + subclasses)
-        └── middleware/      validate, error-handler, not-found, request-context (+ __tests__/)
+        ├── middleware/      auth, validate (+ `parsed()`), error-handler, not-found, request-context
+        ├── directory/       DevDirectory (dev/test stand-in for Backend 1), CachedDirectory (agent names), createDirectory
+        ├── ports/           interfaces between modules and the outside: SystemMessagePort, RealtimeNotifier, Directory (Backend 1),
+        │                    ConversationAccess, AvailableAgents
+        ├── policy/          conversation-access.ts: who can view/do what (used by two modules, so shared)
+        └── utils/           ids (UUID validation), pagination (page + cursor), best-effort (post-commit side effects)
 ```
 
 Import with aliases (`@config/*`, `@modules/*`, `@shared/*`, `@lib/*`); `build` runs `tsc && tsc-alias` so they
@@ -40,42 +55,67 @@ modules/<plural>/                e.g. conversations/
 ```
 
 Folder names are plural, file prefixes singular (`health` has no plural, so it keeps one name).
-Create `schema`, `openapi` and `types` files only when a module needs them.
+Create `schema` and `types` files only when a module needs them; every module that exposes routes has an `openapi` file.
 
-### OpenAPI (not wired yet)
+### OpenAPI
 
-`<name>.openapi.ts` registers paths with `@asteasolutions/zod-to-openapi`, reusing the zod schemas from
-`<name>.schema.ts`. That package is not installed and no docs endpoint exists. When adopting it, add the dependency
-(check zod 4 support), create a shared registry in `shared/openapi/`, and document how the spec is served, in one change.
-Until then, do not add `.openapi.ts` files.
+Each module's `<name>.openapi.ts` exports `register<Name>OpenApi(registry)`, which registers its paths with
+`@asteasolutions/zod-to-openapi` (v9, zod 4), reusing the request schemas from `<name>.schema.ts`. Response schemas are
+declared in the same file with `satisfies z.ZodType<SomeDto>`, so a DTO change that is not mirrored fails the build.
+`src/openapi.ts` collects every module and `GET /api/v1/admin/openapi.json` serves the OpenAPI 3.1 document (public; no Swagger UI
+is bundled, point any viewer at that URL). Shared helpers are in `shared/openapi/` (`registry.ts`, `envelopes.ts`).
+When you add a route, register it in the module's `.openapi.ts` and add it to the route list in
+`shared/openapi/__tests__/openapi.test.ts`, which fails if the two drift.
+
+File purposes inside a module: `controller` (HTTP in/out), `service` (business logic, DTO shaping, no `req`/`res`, no
+Prisma), `repository` (Prisma queries and the query builders they need), `routes`, `schema` (zod), `openapi`, `types`.
+Do not add other per-module file kinds (no `mapper`, `query`, `policy`); rules shared by two modules go in `shared/`.
 
 Rules: no `req`/`res` below controllers; a module never imports another module's repository; add a
 `shared/<folder>` only when a second module needs it.
 
-## Planned modules (map to existing Prisma models; create when the behaviour is designed)
+## Modules
 
-| Module          | Prisma models                                         | Notes                                                                 |
-| --------------- | ----------------------------------------------------- | --------------------------------------------------------------------- |
-| `users`         | `User`                                                | profile data only; credentials are owned by the external auth service |
-| `agents`        | `Agent`                                               |                                                                       |
-| `customers`     | `Customer`, `Application`, `ApplicationStatusHistory` |                                                                       |
-| `conversations` | `Conversation`, `ConversationRead`                    | read state lives here until it grows                                  |
-| `messages`      | `Message`                                             | delivery status transitions                                           |
-| `assignments`   | `AgentConversation`                                   |                                                                       |
-| `attachments`   | `SharedFile`                                          |                                                                       |
-| `notifications` | `Notification`                                        |                                                                       |
-| `settings`      | `Setting`                                             |                                                                       |
-| `activity`      | `Activity`                                            |                                                                       |
-| `ai-handoff`    | `Conversation` (`HandoffStatus`)                      | AI worker integration, designed in `chat-logic-design.md`             |
+Built (each has its API guide, listed in [AGENTS.md](../AGENTS.md)):
+
+| Module                                                         | Owns                                                                                               | Guide                    |
+| -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- | ------------------------ |
+| `conversations`                                                | Conversations, status, archive, priority, activity log, inbox filters and search                   | api-conversations.md     |
+| `assignments`                                                  | Takeover, assign, transfer, unassign, assignment history                                           | api-conversations.md     |
+| `messages`                                                     | Messages, receipts, unread; message actions (reply, edit, delete, reactions, forward)              | api-message-actions.md   |
+| `attachments`                                                  | Files, images, voice messages, secured downloads (`Storage` port, local-disk driver)               | api-attachments.md       |
+| `notes`                                                        | Internal notes and agent mentions                                                                  | api-notes-escalations.md |
+| `escalations`                                                  | Escalation to a supervisor                                                                         | api-notes-escalations.md |
+| `tags`                                                         | Tag catalog and tagging of conversations                                                           | api-tags-priority.md     |
+| `canned-responses`                                             | Personal and shared reply templates                                                                | api-canned-responses.md  |
+| `workspace`                                                    | Per-agent open tabs, drafts, tab preferences                                                       | api-workspace.md         |
+| `chat-settings`                                                | Per-agent chat switches                                                                            | api-chat-settings.md     |
+| `callbacks`                                                    | Scheduled callbacks and the reminder job                                                           | api-callbacks.md         |
+| `calls`                                                        | Call records and WebRTC signalling relay                                                           | api-calls.md             |
+| `moderation`                                                   | Blocked customers, blocked keywords, spam reports, audit log                                       | api-moderation.md        |
+| `notifications`, `presence`, `customers`, `realtime`, `health` | Notifications, presence and typing, customer info via the `Directory` port, the realtime publisher | api-conversations.md     |
+
+Modules call each other only through services or the ports in `shared/ports/` (`ConversationAccess`,
+`CustomerConversationAccess`, `ConversationSummaries`, `RealtimeNotifier`, `Directory`, `CustomerGuard`, `MessageLookup`,
+`Storage`, `SystemMessagePort`). Two kinds of background job run inside the API process, started only by `server.ts`: the
+callback job (`CallbackScheduler`) and the call job (`IntervalJob`); both claim rows in the database, so several instances
+can run them.
+
+Still to build: the customer channel (`/api/v1/customer`, its own authentication; the entry points it will call already
+exist as service methods), the AI worker and handoff (`AiHandoff` models were removed from the schema until designed),
+automations and analytics.
 
 `auth` is **not** a module that issues tokens (external service, contract unknown); once the contract
-is known it becomes a verifier middleware plus an `AuthClient`. Presence, receipts, internal notes,
-tags, canned responses, automations, callbacks, calls, moderation and analytics have **no schema or
-design yet**: propose them and update the schema, protocol and docs first.
+is known it becomes a verifier middleware plus an `AuthClient`. Automations and analytics have **no schema or design
+yet**: propose them and update the schema, protocol and docs first.
 
 ## Websocket
 
-`websocket.server.ts` is the transport. When handlers are added, split into
-`websocket.auth.ts` (connection auth), `websocket.handler.ts` (dispatch: ws event → service),
-`websocket.events.ts` and `websocket.rooms.ts`, and keep the contract in sync with
-`frontend/src/shared/api/ws/protocol.ts`.
+`src/websocket/` is the gateway. It has no business rules: `websocket.handler.ts` validates a frame with the same zod
+schemas as REST and calls the same services; services report committed changes to `RealtimeService`, which publishes
+audience-targeted events to the `EventBus`; `websocket.rooms.ts` delivers each event only to the sockets that pass the
+shared `canView` rule. The contract is in [websocket-events.md](websocket-events.md).
+
+`container.ts` exists because REST and the gateway must share one set of service instances (and the realtime/service
+cycle needs a single place to be tied). Modules never import it; only `*.routes.ts` (through `app-container.ts`) and the
+gateway do. Wiring a new service means adding it there.

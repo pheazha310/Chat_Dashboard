@@ -33,3 +33,6 @@ coverage/
 
 # macOS
 .DS_Store
+
+# Uploaded files (local storage driver)
+/backend/storage/

@@ -1,0 +1,7 @@
+# Use this workspace to collaborate
+workspace:
+  id: af2b677b-6204-475e-8cc5-d94e03d4422e
+
+localResources:
+  collections:
+    - ../docs/postman/chat-dashboard.postman_collection.json

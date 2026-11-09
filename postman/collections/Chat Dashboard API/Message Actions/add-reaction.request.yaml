@@ -1,0 +1,17 @@
+$kind: http-request
+name: 'Add Reaction'
+method: PUT
+url: '{{base_url}}/api/v1/admin/messages/:messageId/reactions'
+order: 5000
+pathVariables:
+  - key: messageId
+    value: '{{message_id}}'
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "emoji": "👍"
+    }

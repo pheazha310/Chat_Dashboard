@@ -7,7 +7,8 @@ import { logger } from "@config/logger.js";
 import { errorHandler } from "@shared/middleware/error-handler.middleware.js";
 import { notFound } from "@shared/middleware/not-found.middleware.js";
 import { withRequestContext } from "@shared/middleware/request-context.middleware.js";
-import { apiRouter } from "./routes.js";
+import { healthRoutes } from "@modules/health/index.js";
+import { ADMIN_API_PREFIX, apiRouter } from "./routes.js";
 
 export const app = express();
 
@@ -17,7 +18,9 @@ app.use(withRequestContext);
 app.use(pinoHttp({ logger }));
 app.use(express.json());
 
-app.use("/api", apiRouter);
+// Liveness/readiness probes keep a stable, unversioned path outside the staff namespace.
+app.use("/api/health", healthRoutes);
+app.use(ADMIN_API_PREFIX, apiRouter);
 
 app.use(notFound);
 app.use(errorHandler);

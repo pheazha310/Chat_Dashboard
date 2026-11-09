@@ -3,20 +3,20 @@ CREATE SCHEMA IF NOT EXISTS "public";
 
 -- CreateTable
 CREATE TABLE "conversations" (
-    "id" BIGSERIAL NOT NULL,
-    "customer_id" BIGINT,
-    "application_id" BIGINT,
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "customer_id" UUID,
+    "application_id" UUID,
     "customer_name" VARCHAR(150),
     "customer_identifier" VARCHAR(100),
     "conversation_type" VARCHAR(30) NOT NULL DEFAULT 'CUSTOMER_SUPPORT',
     "channel" VARCHAR(32) NOT NULL DEFAULT 'web',
     "created_by_type" VARCHAR(30),
-    "created_by_id" BIGINT,
+    "created_by_id" UUID,
     "status" VARCHAR(30) NOT NULL DEFAULT 'OPEN',
     "priority" VARCHAR(20) NOT NULL DEFAULT 'MEDIUM',
     "conversation_mode" VARCHAR(20) NOT NULL DEFAULT 'AI',
     "handoff_status" VARCHAR(30) NOT NULL DEFAULT 'NONE',
-    "assigned_agent_id" BIGINT,
+    "assigned_agent_id" UUID,
     "subject" VARCHAR(255),
     "summary" TEXT,
     "is_archived" BOOLEAN NOT NULL DEFAULT false,
@@ -34,10 +34,10 @@ CREATE TABLE "conversations" (
 
 -- CreateTable
 CREATE TABLE "conversation_participants" (
-    "id" BIGSERIAL NOT NULL,
-    "conversation_id" BIGINT NOT NULL,
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "conversation_id" UUID NOT NULL,
     "participant_type" VARCHAR(30) NOT NULL,
-    "participant_id" BIGINT,
+    "participant_id" UUID,
     "participant_role" VARCHAR(30) NOT NULL DEFAULT 'MEMBER',
     "joined_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "left_at" TIMESTAMPTZ(6),
@@ -47,26 +47,26 @@ CREATE TABLE "conversation_participants" (
 
 -- CreateTable
 CREATE TABLE "conversation_assignments" (
-    "id" BIGSERIAL NOT NULL,
-    "conversation_id" BIGINT NOT NULL,
-    "agent_id" BIGINT NOT NULL,
-    "assigned_by" BIGINT,
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "conversation_id" UUID NOT NULL,
+    "agent_id" UUID NOT NULL,
+    "assigned_by" UUID,
     "assignment_type" VARCHAR(30) NOT NULL DEFAULT 'OWNER',
     "assignment_action" VARCHAR(30) NOT NULL DEFAULT 'ASSIGNED',
     "note" VARCHAR(500),
     "assigned_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "ended_at" TIMESTAMPTZ(6),
-    "ended_by" BIGINT,
+    "ended_by" UUID,
 
     CONSTRAINT "conversation_assignments_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "conversation_activities" (
-    "id" BIGSERIAL NOT NULL,
-    "conversation_id" BIGINT NOT NULL,
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "conversation_id" UUID NOT NULL,
     "actor_type" VARCHAR(30) NOT NULL,
-    "actor_id" BIGINT,
+    "actor_id" UUID,
     "activity_type" VARCHAR(50) NOT NULL,
     "description" TEXT,
     "metadata" JSONB,
@@ -77,22 +77,22 @@ CREATE TABLE "conversation_activities" (
 
 -- CreateTable
 CREATE TABLE "messages" (
-    "id" BIGSERIAL NOT NULL,
-    "conversation_id" BIGINT NOT NULL,
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "conversation_id" UUID NOT NULL,
     "client_id" VARCHAR(100),
     "sequence_number" BIGINT NOT NULL,
     "sender_type" VARCHAR(30) NOT NULL,
-    "sender_id" BIGINT,
+    "sender_id" UUID,
     "message_type" VARCHAR(30) NOT NULL DEFAULT 'TEXT',
     "content" TEXT,
     "metadata" JSONB,
-    "reply_to_message_id" BIGINT,
-    "forwarded_from_message_id" BIGINT,
+    "reply_to_message_id" UUID,
+    "forwarded_from_message_id" UUID,
     "status" VARCHAR(20) NOT NULL DEFAULT 'SENT',
     "is_edited" BOOLEAN NOT NULL DEFAULT false,
     "edited_at" TIMESTAMPTZ(6),
     "deleted_at" TIMESTAMPTZ(6),
-    "deleted_by" BIGINT,
+    "deleted_by" UUID,
     "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -101,10 +101,10 @@ CREATE TABLE "messages" (
 
 -- CreateTable
 CREATE TABLE "message_receipts" (
-    "id" BIGSERIAL NOT NULL,
-    "message_id" BIGINT NOT NULL,
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "message_id" UUID NOT NULL,
     "recipient_type" VARCHAR(30) NOT NULL,
-    "recipient_id" BIGINT NOT NULL,
+    "recipient_id" UUID NOT NULL,
     "delivered_at" TIMESTAMPTZ(6),
     "read_at" TIMESTAMPTZ(6),
     "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -114,11 +114,11 @@ CREATE TABLE "message_receipts" (
 
 -- CreateTable
 CREATE TABLE "conversation_reads" (
-    "id" BIGSERIAL NOT NULL,
-    "conversation_id" BIGINT NOT NULL,
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "conversation_id" UUID NOT NULL,
     "reader_type" VARCHAR(30) NOT NULL,
-    "reader_id" BIGINT NOT NULL,
-    "last_read_message_id" BIGINT,
+    "reader_id" UUID NOT NULL,
+    "last_read_message_id" UUID,
     "last_read_sequence_number" BIGINT NOT NULL DEFAULT 0,
     "last_read_at" TIMESTAMPTZ(6),
     "marked_unread" BOOLEAN NOT NULL DEFAULT false,
@@ -130,10 +130,10 @@ CREATE TABLE "conversation_reads" (
 
 -- CreateTable
 CREATE TABLE "message_edit_history" (
-    "id" BIGSERIAL NOT NULL,
-    "message_id" BIGINT NOT NULL,
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "message_id" UUID NOT NULL,
     "editor_type" VARCHAR(30) NOT NULL,
-    "editor_id" BIGINT NOT NULL,
+    "editor_id" UUID NOT NULL,
     "previous_content" TEXT NOT NULL,
     "edited_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -142,10 +142,10 @@ CREATE TABLE "message_edit_history" (
 
 -- CreateTable
 CREATE TABLE "message_reactions" (
-    "id" BIGSERIAL NOT NULL,
-    "message_id" BIGINT NOT NULL,
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "message_id" UUID NOT NULL,
     "user_type" VARCHAR(30) NOT NULL,
-    "user_id" BIGINT NOT NULL,
+    "user_id" UUID NOT NULL,
     "emoji" VARCHAR(50) NOT NULL,
     "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -154,10 +154,10 @@ CREATE TABLE "message_reactions" (
 
 -- CreateTable
 CREATE TABLE "attachments" (
-    "id" BIGSERIAL NOT NULL,
-    "conversation_id" BIGINT NOT NULL,
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "conversation_id" UUID NOT NULL,
     "uploaded_by_type" VARCHAR(30) NOT NULL,
-    "uploaded_by_id" BIGINT NOT NULL,
+    "uploaded_by_id" UUID NOT NULL,
     "storage_key" VARCHAR(500) NOT NULL,
     "file_name" VARCHAR(255) NOT NULL,
     "mime_type" VARCHAR(150) NOT NULL,
@@ -174,9 +174,9 @@ CREATE TABLE "attachments" (
 
 -- CreateTable
 CREATE TABLE "message_attachments" (
-    "message_id" BIGINT NOT NULL,
-    "attachment_id" BIGINT NOT NULL,
-    "conversation_id" BIGINT NOT NULL,
+    "message_id" UUID NOT NULL,
+    "attachment_id" UUID NOT NULL,
+    "conversation_id" UUID NOT NULL,
     "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "message_attachments_pkey" PRIMARY KEY ("message_id","attachment_id")
@@ -184,9 +184,9 @@ CREATE TABLE "message_attachments" (
 
 -- CreateTable
 CREATE TABLE "internal_notes" (
-    "id" BIGSERIAL NOT NULL,
-    "conversation_id" BIGINT NOT NULL,
-    "author_agent_id" BIGINT NOT NULL,
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "conversation_id" UUID NOT NULL,
+    "author_agent_id" UUID NOT NULL,
     "content" TEXT NOT NULL,
     "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -197,9 +197,9 @@ CREATE TABLE "internal_notes" (
 
 -- CreateTable
 CREATE TABLE "note_mentions" (
-    "id" BIGSERIAL NOT NULL,
-    "note_id" BIGINT NOT NULL,
-    "mentioned_agent_id" BIGINT NOT NULL,
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "note_id" UUID NOT NULL,
+    "mentioned_agent_id" UUID NOT NULL,
     "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "note_mentions_pkey" PRIMARY KEY ("id")
@@ -207,12 +207,12 @@ CREATE TABLE "note_mentions" (
 
 -- CreateTable
 CREATE TABLE "conversation_escalations" (
-    "id" BIGSERIAL NOT NULL,
-    "conversation_id" BIGINT NOT NULL,
-    "requested_by" BIGINT NOT NULL,
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "conversation_id" UUID NOT NULL,
+    "requested_by" UUID NOT NULL,
     "reason" TEXT,
     "status" VARCHAR(30) NOT NULL DEFAULT 'PENDING',
-    "resolved_by" BIGINT,
+    "resolved_by" UUID,
     "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "resolved_at" TIMESTAMPTZ(6),
 
@@ -221,10 +221,10 @@ CREATE TABLE "conversation_escalations" (
 
 -- CreateTable
 CREATE TABLE "tags" (
-    "id" BIGSERIAL NOT NULL,
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
     "name" VARCHAR(100) NOT NULL,
     "color" VARCHAR(30),
-    "created_by" BIGINT,
+    "created_by" UUID,
     "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "tags_pkey" PRIMARY KEY ("id")
@@ -232,8 +232,8 @@ CREATE TABLE "tags" (
 
 -- CreateTable
 CREATE TABLE "conversation_tags" (
-    "conversation_id" BIGINT NOT NULL,
-    "tag_id" BIGINT NOT NULL,
+    "conversation_id" UUID NOT NULL,
+    "tag_id" UUID NOT NULL,
     "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "conversation_tags_pkey" PRIMARY KEY ("conversation_id","tag_id")
@@ -241,11 +241,11 @@ CREATE TABLE "conversation_tags" (
 
 -- CreateTable
 CREATE TABLE "notifications" (
-    "id" BIGSERIAL NOT NULL,
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
     "recipient_type" VARCHAR(30) NOT NULL,
-    "recipient_id" BIGINT NOT NULL,
-    "conversation_id" BIGINT,
-    "message_id" BIGINT,
+    "recipient_id" UUID NOT NULL,
+    "conversation_id" UUID,
+    "message_id" UUID,
     "notification_type" VARCHAR(50) NOT NULL,
     "title" VARCHAR(255) NOT NULL,
     "body" TEXT,
@@ -257,8 +257,8 @@ CREATE TABLE "notifications" (
 
 -- CreateTable
 CREATE TABLE "notification_preferences" (
-    "id" BIGSERIAL NOT NULL,
-    "agent_id" BIGINT NOT NULL,
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "agent_id" UUID NOT NULL,
     "new_message_enabled" BOOLEAN NOT NULL DEFAULT true,
     "assignment_enabled" BOOLEAN NOT NULL DEFAULT true,
     "transfer_enabled" BOOLEAN NOT NULL DEFAULT true,
@@ -272,9 +272,9 @@ CREATE TABLE "notification_preferences" (
 
 -- CreateTable
 CREATE TABLE "conversation_notification_settings" (
-    "id" BIGSERIAL NOT NULL,
-    "conversation_id" BIGINT NOT NULL,
-    "agent_id" BIGINT NOT NULL,
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "conversation_id" UUID NOT NULL,
+    "agent_id" UUID NOT NULL,
     "is_muted" BOOLEAN NOT NULL DEFAULT false,
     "updated_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -283,8 +283,8 @@ CREATE TABLE "conversation_notification_settings" (
 
 -- CreateTable
 CREATE TABLE "agent_presence_history" (
-    "id" BIGSERIAL NOT NULL,
-    "agent_id" BIGINT NOT NULL,
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "agent_id" UUID NOT NULL,
     "status" VARCHAR(30) NOT NULL,
     "started_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "ended_at" TIMESTAMPTZ(6),
@@ -294,13 +294,13 @@ CREATE TABLE "agent_presence_history" (
 
 -- CreateTable
 CREATE TABLE "canned_responses" (
-    "id" BIGSERIAL NOT NULL,
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
     "title" VARCHAR(255) NOT NULL,
     "content" TEXT NOT NULL,
     "shortcut" VARCHAR(50),
     "scope" VARCHAR(30) NOT NULL DEFAULT 'PERSONAL',
-    "team_id" BIGINT,
-    "created_by" BIGINT NOT NULL,
+    "team_id" UUID,
+    "created_by" UUID NOT NULL,
     "is_active" BOOLEAN NOT NULL DEFAULT true,
     "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -310,14 +310,14 @@ CREATE TABLE "canned_responses" (
 
 -- CreateTable
 CREATE TABLE "automation_rules" (
-    "id" BIGSERIAL NOT NULL,
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
     "name" VARCHAR(255) NOT NULL,
     "trigger_type" VARCHAR(50) NOT NULL,
     "conditions" JSONB,
     "response_content" TEXT NOT NULL,
     "priority" INTEGER NOT NULL DEFAULT 0,
     "is_active" BOOLEAN NOT NULL DEFAULT true,
-    "created_by" BIGINT,
+    "created_by" UUID,
     "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -326,10 +326,10 @@ CREATE TABLE "automation_rules" (
 
 -- CreateTable
 CREATE TABLE "automation_logs" (
-    "id" BIGSERIAL NOT NULL,
-    "rule_id" BIGINT NOT NULL,
-    "conversation_id" BIGINT NOT NULL,
-    "message_id" BIGINT,
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "rule_id" UUID NOT NULL,
+    "conversation_id" UUID NOT NULL,
+    "message_id" UUID,
     "execution_status" VARCHAR(30) NOT NULL,
     "error_message" TEXT,
     "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -338,53 +338,12 @@ CREATE TABLE "automation_logs" (
 );
 
 -- CreateTable
-CREATE TABLE "ai_handoffs" (
-    "id" BIGSERIAL NOT NULL,
-    "conversation_id" BIGINT NOT NULL,
-    "requested_by_type" VARCHAR(30) NOT NULL,
-    "requested_by_id" BIGINT,
-    "reason" TEXT,
-    "status" VARCHAR(30) NOT NULL DEFAULT 'PENDING',
-    "accepted_by" BIGINT,
-    "requested_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "accepted_at" TIMESTAMPTZ(6),
-    "completed_at" TIMESTAMPTZ(6),
-
-    CONSTRAINT "ai_handoffs_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "ai_summaries" (
-    "id" BIGSERIAL NOT NULL,
-    "conversation_id" BIGINT NOT NULL,
-    "summary" TEXT NOT NULL,
-    "model_version" VARCHAR(100),
-    "generated_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "ai_summaries_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "ai_suggestions" (
-    "id" BIGSERIAL NOT NULL,
-    "conversation_id" BIGINT NOT NULL,
-    "agent_id" BIGINT NOT NULL,
-    "suggestion" TEXT NOT NULL,
-    "status" VARCHAR(30) NOT NULL DEFAULT 'PENDING',
-    "final_content" TEXT,
-    "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "ai_suggestions_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
 CREATE TABLE "callback_requests" (
-    "id" BIGSERIAL NOT NULL,
-    "conversation_id" BIGINT NOT NULL,
-    "customer_id" BIGINT NOT NULL,
-    "assigned_agent_id" BIGINT,
-    "created_by" BIGINT,
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "conversation_id" UUID NOT NULL,
+    "customer_id" UUID NOT NULL,
+    "assigned_agent_id" UUID,
+    "created_by" UUID,
     "scheduled_at" TIMESTAMPTZ(6) NOT NULL,
     "status" VARCHAR(30) NOT NULL DEFAULT 'PENDING',
     "notes" TEXT,
@@ -398,10 +357,10 @@ CREATE TABLE "callback_requests" (
 
 -- CreateTable
 CREATE TABLE "calls" (
-    "id" BIGSERIAL NOT NULL,
-    "conversation_id" BIGINT NOT NULL,
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "conversation_id" UUID NOT NULL,
     "initiated_by_type" VARCHAR(30) NOT NULL,
-    "initiated_by_id" BIGINT NOT NULL,
+    "initiated_by_id" UUID NOT NULL,
     "call_type" VARCHAR(20) NOT NULL,
     "status" VARCHAR(30) NOT NULL DEFAULT 'INITIATING',
     "started_at" TIMESTAMPTZ(6),
@@ -413,10 +372,10 @@ CREATE TABLE "calls" (
 
 -- CreateTable
 CREATE TABLE "call_participants" (
-    "id" BIGSERIAL NOT NULL,
-    "call_id" BIGINT NOT NULL,
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "call_id" UUID NOT NULL,
     "participant_type" VARCHAR(30) NOT NULL,
-    "participant_id" BIGINT NOT NULL,
+    "participant_id" UUID NOT NULL,
     "joined_at" TIMESTAMPTZ(6),
     "left_at" TIMESTAMPTZ(6),
 
@@ -425,14 +384,14 @@ CREATE TABLE "call_participants" (
 
 -- CreateTable
 CREATE TABLE "spam_reports" (
-    "id" BIGSERIAL NOT NULL,
-    "conversation_id" BIGINT NOT NULL,
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "conversation_id" UUID NOT NULL,
     "reported_by_type" VARCHAR(30) NOT NULL,
-    "reported_by_id" BIGINT NOT NULL,
-    "message_id" BIGINT,
+    "reported_by_id" UUID NOT NULL,
+    "message_id" UUID,
     "reason" TEXT NOT NULL,
     "status" VARCHAR(30) NOT NULL DEFAULT 'PENDING',
-    "reviewed_by" BIGINT,
+    "reviewed_by" UUID,
     "reviewed_at" TIMESTAMPTZ(6),
     "resolution_note" VARCHAR(500),
     "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -442,23 +401,23 @@ CREATE TABLE "spam_reports" (
 
 -- CreateTable
 CREATE TABLE "customer_blocks" (
-    "id" BIGSERIAL NOT NULL,
-    "customer_id" BIGINT NOT NULL,
-    "blocked_by" BIGINT NOT NULL,
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "customer_id" UUID NOT NULL,
+    "blocked_by" UUID NOT NULL,
     "reason" TEXT,
     "blocked_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "unblocked_at" TIMESTAMPTZ(6),
-    "unblocked_by" BIGINT,
+    "unblocked_by" UUID,
 
     CONSTRAINT "customer_blocks_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "blocked_keywords" (
-    "id" BIGSERIAL NOT NULL,
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
     "keyword" VARCHAR(255) NOT NULL,
     "is_active" BOOLEAN NOT NULL DEFAULT true,
-    "created_by" BIGINT,
+    "created_by" UUID,
     "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "blocked_keywords_pkey" PRIMARY KEY ("id")
@@ -466,11 +425,11 @@ CREATE TABLE "blocked_keywords" (
 
 -- CreateTable
 CREATE TABLE "moderation_activities" (
-    "id" BIGSERIAL NOT NULL,
-    "actor_id" BIGINT NOT NULL,
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "actor_id" UUID NOT NULL,
     "action" VARCHAR(100) NOT NULL,
     "target_type" VARCHAR(50) NOT NULL,
-    "target_id" BIGINT NOT NULL,
+    "target_id" UUID NOT NULL,
     "metadata" JSONB,
     "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -479,8 +438,8 @@ CREATE TABLE "moderation_activities" (
 
 -- CreateTable
 CREATE TABLE "push_devices" (
-    "id" BIGSERIAL NOT NULL,
-    "user_id" BIGINT NOT NULL,
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "user_id" UUID NOT NULL,
     "platform" VARCHAR(30) NOT NULL,
     "device_token" VARCHAR(512) NOT NULL,
     "is_active" BOOLEAN NOT NULL DEFAULT true,
@@ -493,8 +452,8 @@ CREATE TABLE "push_devices" (
 
 -- CreateTable
 CREATE TABLE "workspace_preferences" (
-    "id" BIGSERIAL NOT NULL,
-    "agent_id" BIGINT NOT NULL,
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "agent_id" UUID NOT NULL,
     "layout" JSONB,
     "sidebar_width" INTEGER,
     "settings" JSONB,
@@ -505,9 +464,9 @@ CREATE TABLE "workspace_preferences" (
 
 -- CreateTable
 CREATE TABLE "workspace_open_conversations" (
-    "id" BIGSERIAL NOT NULL,
-    "agent_id" BIGINT NOT NULL,
-    "conversation_id" BIGINT NOT NULL,
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "agent_id" UUID NOT NULL,
+    "conversation_id" UUID NOT NULL,
     "sort_order" INTEGER NOT NULL DEFAULT 0,
     "last_opened_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -516,8 +475,8 @@ CREATE TABLE "workspace_open_conversations" (
 
 -- CreateTable
 CREATE TABLE "user_chat_settings" (
-    "id" BIGSERIAL NOT NULL,
-    "user_id" BIGINT NOT NULL,
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "user_id" UUID NOT NULL,
     "typing_sound_enabled" BOOLEAN NOT NULL DEFAULT true,
     "notification_sound_enabled" BOOLEAN NOT NULL DEFAULT true,
     "ai_suggestions_enabled" BOOLEAN NOT NULL DEFAULT true,
@@ -688,15 +647,6 @@ CREATE INDEX "automation_logs_conversation_id_idx" ON "automation_logs"("convers
 CREATE INDEX "automation_logs_message_id_idx" ON "automation_logs"("message_id");
 
 -- CreateIndex
-CREATE INDEX "ai_handoffs_conversation_id_status_idx" ON "ai_handoffs"("conversation_id", "status");
-
--- CreateIndex
-CREATE INDEX "ai_summaries_conversation_id_generated_at_idx" ON "ai_summaries"("conversation_id", "generated_at");
-
--- CreateIndex
-CREATE INDEX "ai_suggestions_conversation_id_agent_id_idx" ON "ai_suggestions"("conversation_id", "agent_id");
-
--- CreateIndex
 CREATE INDEX "callback_requests_assigned_agent_id_status_scheduled_at_idx" ON "callback_requests"("assigned_agent_id", "status", "scheduled_at");
 
 -- CreateIndex
@@ -832,15 +782,6 @@ ALTER TABLE "automation_logs" ADD CONSTRAINT "automation_logs_conversation_id_fk
 ALTER TABLE "automation_logs" ADD CONSTRAINT "automation_logs_message_id_fkey" FOREIGN KEY ("message_id") REFERENCES "messages"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "ai_handoffs" ADD CONSTRAINT "ai_handoffs_conversation_id_fkey" FOREIGN KEY ("conversation_id") REFERENCES "conversations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "ai_summaries" ADD CONSTRAINT "ai_summaries_conversation_id_fkey" FOREIGN KEY ("conversation_id") REFERENCES "conversations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "ai_suggestions" ADD CONSTRAINT "ai_suggestions_conversation_id_fkey" FOREIGN KEY ("conversation_id") REFERENCES "conversations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
 ALTER TABLE "callback_requests" ADD CONSTRAINT "callback_requests_conversation_id_fkey" FOREIGN KEY ("conversation_id") REFERENCES "conversations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -905,9 +846,6 @@ ALTER TABLE agent_presence_history ADD CONSTRAINT agent_presence_history_status_
 ALTER TABLE canned_responses ADD CONSTRAINT canned_responses_scope_check CHECK (scope IN ('PERSONAL', 'TEAM'));
 ALTER TABLE automation_logs ADD CONSTRAINT automation_logs_execution_status_check CHECK (execution_status IN ('SUCCESS', 'FAILED', 'SKIPPED'));
 
-ALTER TABLE ai_handoffs ADD CONSTRAINT ai_handoffs_requested_by_type_check CHECK (requested_by_type IN ('AI', 'CUSTOMER', 'AGENT', 'SYSTEM'));
-ALTER TABLE ai_handoffs ADD CONSTRAINT ai_handoffs_status_check CHECK (status IN ('PENDING', 'ACCEPTED', 'COMPLETED', 'CANCELLED'));
-ALTER TABLE ai_suggestions ADD CONSTRAINT ai_suggestions_status_check CHECK (status IN ('PENDING', 'ACCEPTED', 'EDITED', 'DISMISSED'));
 
 ALTER TABLE callback_requests ADD CONSTRAINT callback_requests_status_check CHECK (status IN ('PENDING', 'COMPLETED', 'CANCELLED', 'MISSED'));
 ALTER TABLE calls ADD CONSTRAINT calls_initiated_by_type_check CHECK (initiated_by_type IN ('CUSTOMER', 'AGENT'));
@@ -1001,13 +939,8 @@ CREATE UNIQUE INDEX conversations_one_open_per_application
 
 -- A participant is in a conversation at most once at a time.
 CREATE UNIQUE INDEX conversation_participants_one_active
-  ON conversation_participants (conversation_id, participant_type, coalesce(participant_id, 0))
+  ON conversation_participants (conversation_id, participant_type, coalesce(participant_id, '00000000-0000-0000-0000-000000000000'::uuid))
   WHERE left_at IS NULL;
-
--- At most one pending AI handoff per conversation.
-CREATE UNIQUE INDEX ai_handoffs_one_pending
-  ON ai_handoffs (conversation_id)
-  WHERE status = 'PENDING';
 
 -- One active OWNER per conversation (race-safe takeover/assign relies on this).
 CREATE UNIQUE INDEX conversation_assignments_one_active_owner
@@ -1042,9 +975,9 @@ ALTER TABLE callback_requests ADD CONSTRAINT callback_requests_completed_matches
 
 CREATE FUNCTION assert_conversation_owner_consistent() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
-  conv_id  bigint;
-  actual   bigint;
-  expected bigint;
+  conv_id  uuid;
+  actual   uuid;
+  expected uuid;
 BEGIN
   IF TG_TABLE_NAME = 'conversations' THEN conv_id := NEW.id; ELSE conv_id := NEW.conversation_id; END IF;
 

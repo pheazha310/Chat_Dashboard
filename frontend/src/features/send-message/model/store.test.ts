@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const send = vi.hoisted(() => vi.fn());
-vi.mock("@/shared/api/ws", () => ({ wsClient: { send } }));
+vi.mock("@/shared/api/ws", () => ({ wsClient: { send }, isMockTransport: true }));
 
 import { useMessageStore } from "@/entities/message";
 import { retryMessage, sendMessage, useComposerStore } from "./store";

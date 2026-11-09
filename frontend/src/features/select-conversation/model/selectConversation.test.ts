@@ -1,7 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const send = vi.hoisted(() => vi.fn());
-vi.mock("@/shared/api/ws", () => ({ wsClient: { send } }));
+const loaders = vi.hoisted(() => ({ loadHistory: vi.fn(), loadDetails: vi.fn() }));
+vi.mock("@/shared/api/ws", () => ({ wsClient: { send }, isMockTransport: false }));
+vi.mock("@/entities/message", () => ({ loadHistory: loaders.loadHistory }));
+vi.mock("@/entities/conversation", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/entities/conversation")>()),
+  loadDetails: loaders.loadDetails,
+}));
 
 import { useConversationStore, type Conversation } from "@/entities/conversation";
 import { selectConversation } from "./selectConversation";
@@ -24,6 +30,12 @@ describe("selectConversation", () => {
     expect(useConversationStore.getState().selectedId).toBe("a");
     expect(useConversationStore.getState().byId.a.unread).toBe(0);
     expect(send).toHaveBeenCalledWith("conversation.read", { conversationId: "a" });
+  });
+
+  it("loads the conversation's history and details", () => {
+    selectConversation("b");
+    expect(loaders.loadHistory).toHaveBeenCalledWith("b");
+    expect(loaders.loadDetails).toHaveBeenCalledWith("b");
   });
 
   it("does not notify the server when nothing was unread", () => {

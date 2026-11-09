@@ -1,0 +1,16 @@
+$kind: http-request
+name: 'Create Canned Response'
+method: POST
+url: '{{base_url}}/api/v1/admin/canned-responses'
+order: 2000
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "shortcut": "greet",
+      "content": "Hello! How can I assist you today?",
+      "scope": "shared"
+    }

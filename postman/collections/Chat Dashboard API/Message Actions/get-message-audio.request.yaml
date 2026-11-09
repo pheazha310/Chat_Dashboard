@@ -1,0 +1,8 @@
+$kind: http-request
+name: 'Get Message Audio'
+method: GET
+url: '{{base_url}}/api/v1/admin/messages/:messageId/audio'
+order: 8000
+pathVariables:
+  - key: messageId
+    value: '{{message_id}}'

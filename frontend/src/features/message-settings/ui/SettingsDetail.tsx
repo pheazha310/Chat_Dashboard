@@ -1,6 +1,9 @@
 import { useRef, useState } from "react";
 import { useMessageSettingsStore } from "../model/store";
 import { notify } from "@/shared/ui";
+import { isMockTransport } from "@/shared/api/ws";
+import { API_URL } from "@/shared/config";
+import ModerationLists from "./ModerationLists";
 import "./settings-detail.css";
 
 export type SettingsPage = "training" | "responses" | "blocked" | "spam";
@@ -29,6 +32,8 @@ export default function SettingsDetail({ page, onBack }: { page: SettingsPage; o
   );
   const listKey = page === "blocked" ? "blockedCustomers" : "blockedKeywords";
   const list = store[listKey];
+  /** Against the real backend these two lists belong to the team and live on the server. */
+  const shared = Boolean(API_URL) && !isMockTransport && (page === "blocked" || page === "spam");
 
   return (
     <div className="settings-detail">
@@ -37,7 +42,7 @@ export default function SettingsDetail({ page, onBack }: { page: SettingsPage; o
           ← Message settings
         </button>
         <p className="settings-detail-hint">
-          <span aria-hidden="true">✓</span> Saved on this device
+          <span aria-hidden="true">✓</span> {shared ? "Shared with your team" : "Saved on this device"}
         </p>
       </div>
       {page === "responses" ? (
@@ -204,6 +209,8 @@ export default function SettingsDetail({ page, onBack }: { page: SettingsPage; o
             </article>
           ))}
         </>
+      ) : shared ? (
+        <ModerationLists page={page as "blocked" | "spam"} />
       ) : (
         <>
           <p>
