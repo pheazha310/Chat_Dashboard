@@ -1,5 +1,6 @@
 import { ConflictError, ForbiddenError, NotFoundError } from "@shared/errors/AppError.js";
-import { isSupervisor, type AuthContext } from "@shared/auth/auth.types.js";
+import type { AuthContext } from "@shared/auth/auth.types.js";
+import { can } from "@shared/auth/permissions.js";
 import type { RealtimeNotifier } from "@shared/ports/realtime.js";
 import type { SystemMessagePort } from "@shared/ports/system-message.js";
 import { bestEffort } from "@shared/utils/best-effort.js";
@@ -172,7 +173,10 @@ export class AssignmentService {
   /** Another agent's assigned conversation looks missing, as in the conversations module, so existence is not leaked. */
   private async load(auth: AuthContext, id: string): Promise<ConversationState> {
     const state = await this.repository.findState(id);
-    const hidden = state?.handoffStatus === "ASSIGNED" && !isSupervisor(auth) && state.assignedAgentId !== auth.userId;
+    const hidden =
+      state?.handoffStatus === "ASSIGNED" &&
+      !can(auth, "conversations.view_all") &&
+      state.assignedAgentId !== auth.userId;
     if (!state || hidden) throw new NotFoundError(`Conversation ${idToString(id)} not found`);
     return state;
   }

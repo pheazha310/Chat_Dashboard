@@ -1,4 +1,5 @@
 import { useConversationStore } from "@/entities/conversation";
+import { ProfileMenu } from "@/features/auth";
 import { assets } from "@/shared/config";
 import { AssetIcon, IconButton, notify } from "@/shared/ui";
 
@@ -52,12 +53,7 @@ export default function TopNavbar({ onOpenInbox }: { onOpenInbox: () => void }) 
         >
           <AssetIcon src={assets.icons.bell} />
         </button>
-        <button className="profile-action" onClick={() => notify("Agent profile opened")} aria-label="Open profile">
-          <img src={assets.users.currentUser} alt="" />
-          <span>
-            <AssetIcon src={assets.icons.chevron} size={8} />
-          </span>
-        </button>
+        <ProfileMenu />
       </div>
     </header>
   );

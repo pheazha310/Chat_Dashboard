@@ -1,7 +1,8 @@
 import { prisma, runInTransaction, type Db } from "@config/database.js";
 import type { Prisma } from "../../../prisma/generated/prisma/client.js";
 import { z } from "zod";
-import { isSupervisor, type AuthContext } from "@shared/auth/auth.types.js";
+import type { AuthContext } from "@shared/auth/auth.types.js";
+import { can } from "@shared/auth/permissions.js";
 import { pageArgs, type PageQuery } from "@shared/utils/pagination.js";
 import type { ListQuery } from "./conversation.schema.js";
 import type { AccessibleConversation, ConversationWithTags } from "./conversation.types.js";
@@ -230,7 +231,7 @@ export class ConversationRepository {
 
 /** SQL form of `canView` so search and filters never return conversations the caller cannot open (FR-07). */
 export function visibilityWhere(auth: AuthContext): Prisma.ConversationWhereInput {
-  if (isSupervisor(auth)) return {};
+  if (can(auth, "conversations.view_all")) return {};
   return {
     OR: [
       { handoffStatus: { not: "ASSIGNED" } },

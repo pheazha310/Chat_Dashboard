@@ -21,13 +21,16 @@ Tables are snake_case plural (`conversations`, `message_receipts`); in code use 
 
 Two independent backends, each with its own PostgreSQL database:
 
-- **Backend 1 (main):** users, roles, permissions, customers, agents, loan applications and authentication.
+- **Backend 1 (main):** customers, agents and loan applications. (Authentication and the `users` accounts moved to
+  this backend on 2026-11-07, see `docs/api-auth.md`; roles and permissions on 2026-11-09, see `docs/api-roles.md`.)
   Its tables appear in the DBML (group `Backend_1_External`) and are mirrored as Prisma models (`User`, `Role`,
   `Permission`, `UserRole`, `RolePermission`, `Customer`, `Agent`, `LoanApplication`) **without `password_hash`**.
   Backend 1 owns the data; chat tables never have a foreign key to these models.
 - **Backend 2 (chat, this repo):** everything else in the DBML.
 
-Backend 2 stores Backend 1 records as plain `BIGINT` ids with **no foreign key**. A foreign key cannot span two
+Backend 2 stores Backend 1 records as plain ids with **no foreign key**. The exceptions are the people who chat:
+`conversations.customer_id`, `messages.sender_id` and `attachments.uploaded_by_id` reference
+`chat_users.external_id` (= `users.id`), so every one of them has a chat identity. A foreign key cannot span two
 databases, so existence and permissions of those ids are checked in the service layer against Backend 1 (contract not
 yet known; see `authentication-security`). The id spaces are:
 
@@ -106,22 +109,37 @@ and `customer_identifier` are snapshots kept so the inbox can be searched and so
 
 ### Callbacks, calls, moderation, mobile and workspace
 
-| Table                                                                                                | Purpose                                                                                                                                                                                                                                 |
-| ---------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `callback_requests`                                                                                  | `scheduled_at`, `assigned_agent_id`, `created_by`, `status`, `notes`, `completion_note`, `reminder_sent_at`, `completed_at`.                                                                                                            |
-| `calls`, `call_participants`                                                                         | Call history: `call_type`, `status`, `started_at`, `ended_at`; participants with join/leave times. Media is not stored.                                                                                                                 |
-| `spam_reports`, `customer_blocks`, `blocked_keywords`, `moderation_activities`                       | Spam reports (optionally of a message), customer blocks (one active per customer), keyword rules (unique ignoring case) and a moderation audit log.                                                                                     |
-| `push_devices`                                                                                       | FCM/APNs tokens for a `user_id` (external `users.id`, customer or agent): `platform`, `device_token`, `is_active`; unique `(platform, device_token)`.                                                                                   |
-| `workspace_preferences`, `workspace_open_conversations`, `conversation_drafts`, `user_chat_settings` | Per-agent layout JSON (and tab preferences), restorable open tabs, unsent composer drafts per agent and conversation; per-user chat switches (typing and notification sounds, AI suggestions and summaries, auto-assign opt-in).        |
-| `chat_users`                                                                                         | Identity mapping: `(user_type, external_id)` (the Backend 1 id) to this backend's own `id`, with `role` and `status` (`ACTIVE`/`DISABLED`). Created on first sign-in from the verified token; other tables still store the external id. |
+| Table                                                                                                | Purpose                                                                                                                                                                                                                          |
+| ---------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `callback_requests`                                                                                  | `scheduled_at`, `assigned_agent_id`, `created_by`, `status`, `notes`, `completion_note`, `reminder_sent_at`, `completed_at`.                                                                                                     |
+| `calls`, `call_participants`                                                                         | Call history: `call_type`, `status`, `started_at`, `ended_at`; participants with join/leave times. Media is not stored.                                                                                                          |
+| `spam_reports`, `customer_blocks`, `blocked_keywords`, `moderation_activities`                       | Spam reports (optionally of a message), customer blocks (one active per customer), keyword rules (unique ignoring case) and a moderation audit log.                                                                              |
+| `push_devices`                                                                                       | FCM/APNs tokens for a `user_id` (external `users.id`, customer or agent): `platform`, `device_token`, `is_active`; unique `(platform, device_token)`.                                                                            |
+| `workspace_preferences`, `workspace_open_conversations`, `conversation_drafts`, `user_chat_settings` | Per-agent layout JSON (and tab preferences), restorable open tabs, unsent composer drafts per agent and conversation; per-user chat switches (typing and notification sounds, AI suggestions and summaries, auto-assign opt-in). |
+| `chat_users`                                                                                         | Chat identity per person: `external_id` (= `users.id`, unique), `user_type` (`CUSTOMER`/`STAFF`), `role_id`, `username`, `status`, `los_user_id` (not set yet). Referenced by conversations, messages and attachments.           |
+| `roles`                                                                                              | Fixed role names (`CUSTOMER`, `AGENT`, `SUPERVISOR`, `ADMIN`) with `kind`; `users.role` references `name`.                                                                                                                       |
+| `permissions`                                                                                        | Permission catalogue: unique `(module, action)`, e.g. `tags` + `delete`. Seeded from code.                                                                                                                                       |
+| `role_permissions`                                                                                   | Which role has which permission; unique `(role_id, permission_id)`. Edited by admins.                                                                                                                                            |
+| `users`                                                                                              | Sign-in accounts (this backend owns auth): lower-case unique `email`, scrypt `password_hash`, `role`, `display_name`, `status`, lockout (`failed_login_count`, `locked_until`). Its `id` is the token `sub`.                     |
+| `auth_sessions`                                                                                      | One row per refresh token: `token_hash` (SHA-256, unique), `family_id` (one sign-in and its rotations), `expires_at`, `revoked_at`, user agent and IP. FK to `users`, cascade.                                                   |
 
-## Chat identity (`chat_users`)
+## Chat identity (`chat_users`) and roles
 
 Every verified token is mapped to a `chat_users` row (`MappedAuthClient`, used by REST and the WebSocket): looked up by
-`(CUSTOMER|STAFF, Backend 1 id)` and created on first sign-in, with the role refreshed on each sign-in. `AuthContext.chatUserId`
-carries the internal id. The identity always comes from the verified token, never from the request, and never from the
-email. Setting `status = 'DISABLED'` refuses that user on REST and `/ws` (within 60 s, the mapping cache time); there is no
-admin endpoint for it yet, so it is an SQL update. This backend still issues no tokens.
+`external_id` (= `users.id`, unique on its own) and created on first sign-in, with the kind and role refreshed each time.
+Rows are also created when an account is created (and, in migration `20261112000000_roles_permissions`, for every
+existing account and for every id already used in conversations, messages and attachments), and when an agent opens a
+conversation for a customer who never signed in. `username` and the role follow `users` on sign-in and account
+changes. `AuthContext.chatUserId` carries the internal id; `AuthContext.permissions` the role's permissions. The
+identity always comes from the verified token, never from the request, and never from the email. Setting
+`status = 'DISABLED'` refuses that user on REST and `/ws` (within 60 s, the mapping cache time). An admin disabling an
+account (`PATCH /users/:userId`) sets it here too.
+
+`roles` (CUSTOMER, AGENT, SUPERVISOR, ADMIN; fixed names), `permissions` (`module` + `action`, seeded from
+`shared/auth/permissions.ts`) and `role_permissions` (editable by admins) decide what each role may do; services check
+`can(auth, "module.action")`. The seeded grants reproduce the earlier rules (supervisors and admins everything, only
+admins `users.manage` and `roles.manage`). Role and permission ids are `int` (small seeded lookup tables), unlike the
+UUIDs used elsewhere. `chat_users.los_user_id` (the person's id in the loan system) exists but is not filled yet.
 
 ## Value sets (proposed)
 

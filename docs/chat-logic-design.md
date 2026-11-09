@@ -10,12 +10,11 @@ and the step-by-step logic of each event. It builds on the data model in
 The product is a loan-support chat with an AI-to-human handoff: customers talk to an
 AI assistant, the AI escalates, and a human agent takes over.
 
-The system is two independent backends plus web and mobile clients. **Backend 1 (main)** owns identity,
-authentication, users, agents, customers, loan applications and permissions. **Backend 2 (chat, this repo)** owns
-conversations, messages, receipts, assignments, realtime and AI handoff. Clients log in through Backend 1, then use
-the same access token against Backend 2. Backend 2 never issues tokens or stores credentials; it verifies them and
-asks Backend 1 for identity, permissions and customer/loan context. The Backend 1 API contract (token format,
-verify endpoint, claims, id format) is **not yet known and is not designed here**.
+The system is two independent backends plus web and mobile clients. **Backend 2 (chat, this repo)** owns
+authentication and accounts (since 2026-11-07: `users`, scrypt passwords, JWT access tokens and rotating refresh
+tokens, see [api-auth.md](api-auth.md)), conversations, messages, receipts, assignments, realtime and AI handoff.
+**Backend 1 (main)** owns customers' loan applications and loan data. Its API contract is **not yet known and is not
+designed here**; agent and customer names come from this backend's `users` table (`BACKEND1_MODE=local`).
 
 ## 2. Architecture
 
@@ -35,11 +34,11 @@ WebSocket gateway --> event handlers --> services (chat, handoff, ai) --> Prisma
 
 ## 3. Connection, authentication and sync
 
-1. The client connects with the access token issued by Backend 1. The server verifies it through Backend 1
-   (mechanism TBD: local verification or introspection) and takes the user id and role from the result.
-   There is no `sessions` table in this database.
+1. The client signs in at `/api/v1/admin/auth/login` (staff) or `/api/v1/customer/auth/login` (customers) and
+   connects with the access token. The server verifies the JWT locally (`JWT_SECRET`) and takes the user id (`sub`)
+   and role from it. Refresh tokens live hashed in `auth_sessions` ([api-auth.md](api-auth.md)).
 2. Only users with role `AGENT`, `SUPERVISOR` or `ADMIN` can open the dashboard socket.
-   Customers use a separate channel. Roles come from Backend 1.
+   Customers get a restricted event set on the same socket. Roles come from `users.role`.
 3. On `sync.request` the server sends:
    - the inbox (see visibility rules below),
    - the last N messages per conversation (not the full history),
@@ -193,8 +192,8 @@ Implemented in `shared/policy/conversation-access.ts`; the API returns the calle
 - **Messages.** The conversation row is locked (`SELECT ... FOR UPDATE`) while a message is appended, so sequence
   numbers are contiguous and a retried `clientId` finds the original instead of failing on the unique key. Message
   `created_at` is the database clock (the same instant as `last_message_at`). `receiveFromCustomer` (reopen, notify the
-  owner) is reached by the mobile REST API (`/api/v1/customer`, [api-customer-mobile.md](api-customer-mobile.md)); customer
-  authentication is dev-only until the Backend 1 contract is known.
+  owner) is reached by the mobile REST API (`/api/v1/customer`, [api-customer-mobile.md](api-customer-mobile.md)); customers
+  register and sign in at `/api/v1/customer/auth`.
 - **Side effects after commit** (notifications, SYSTEM messages) are best effort: a failure is logged, never undoes the
   committed change.
 - **Retention (FR-10):** only soft delete exists (deleted messages are excluded from history). No policy or job is
@@ -225,6 +224,11 @@ Implemented in `shared/policy/conversation-access.ts`; the API returns the calle
 
 Enforce these in the service layer, not only in the UI.
 
+"Supervisor" above means a role holding the matching permission (`conversations.view_all`, `conversations.manage_all`,
+...). Since 2026-11-09 what each role may do is data (`roles`, `permissions`, `role_permissions`; `docs/api-roles.md`):
+services check `can(auth, "module.action")`, and the seeded grants reproduce this matrix. Ownership rules (own
+messages, notes, tags, callbacks, the conversation one owns) stay in code.
+
 ## 7. Protocol additions needed
 
 The current protocol cannot express several cases. Add:
@@ -243,14 +247,14 @@ The current protocol cannot express several cases. Add:
 
 ## 8. Differences from the current mock server
 
-| Mock behaviour                                 | Real backend                                                   |
-| ---------------------------------------------- | -------------------------------------------------------------- |
-| Broadcasts every event to every socket         | Per-socket visibility rules                                    |
-| No authentication; agent hardcoded             | Backend 1 token verified on connect; real agent from the token |
-| `message.ack` reuses `clientId` as the id      | Real integer id plus `clientId` mapping                        |
-| `conversation.read` clears unread for everyone | Per-reader position in `conversation_reads`                    |
-| No errors, no conflict check on takeover       | Conditional update and error events                            |
-| Nothing persisted                              | PostgreSQL via Prisma                                          |
+| Mock behaviour                                 | Real backend                                                |
+| ---------------------------------------------- | ----------------------------------------------------------- |
+| Broadcasts every event to every socket         | Per-socket visibility rules                                 |
+| No authentication; agent hardcoded             | Access token verified on connect; real agent from the token |
+| `message.ack` reuses `clientId` as the id      | Real integer id plus `clientId` mapping                     |
+| `conversation.read` clears unread for everyone | Per-reader position in `conversation_reads`                 |
+| No errors, no conflict check on takeover       | Conditional update and error events                         |
+| Nothing persisted                              | PostgreSQL via Prisma                                       |
 
 ## 9. Build order
 

@@ -37,6 +37,7 @@ const repo = {
   listActivities: vi.fn(),
   inTransaction: vi.fn(),
 };
+const identities = { ensureCustomer: vi.fn(async () => {}) };
 const service = new ConversationService(
   fromPartial<ConversationRepository>(repo),
   systemMessages,
@@ -44,6 +45,7 @@ const service = new ConversationService(
   directory,
   fromPartial<NotificationService>(notifications),
   availableAgents,
+  identities,
 );
 
 const agent: AuthContext = { userId: uid(1), role: "AGENT" };
@@ -217,6 +219,7 @@ describe("create", () => {
     repo.create.mockResolvedValue(row());
     repo.findForAccess.mockResolvedValue(row({ handoffStatus: "NEEDS_HUMAN", assignedAgentId: null }));
     const result = await service.create(agent, input);
+    expect(identities.ensureCustomer).toHaveBeenCalledWith(input.customerId);
     expect(result.created).toBe(true);
     expect(repo.lockCustomer).toHaveBeenCalledWith(uid(100));
     expect(repo.create).toHaveBeenCalledWith(

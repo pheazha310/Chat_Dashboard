@@ -1,4 +1,5 @@
 import type { BackendAttachment, BackendMessage } from "@/shared/api/backend/types";
+import { ensureFreshToken } from "@/shared/api/auth";
 import { API_URL, getAuthToken } from "@/shared/config";
 import { ApiError, apiRequest } from "./client";
 
@@ -10,7 +11,12 @@ export type UploadOptions = {
 };
 
 /** A multipart POST with upload progress (fetch cannot report it). Resolves with the unwrapped `data`. */
-function upload<T>(path: string, form: FormData, { onProgress, signal }: Pick<UploadOptions, "onProgress" | "signal">) {
+async function upload<T>(
+  path: string,
+  form: FormData,
+  { onProgress, signal }: Pick<UploadOptions, "onProgress" | "signal">,
+) {
+  await ensureFreshToken();
   return new Promise<T>((resolve, reject) => {
     if (!API_URL) return reject(new ApiError(0, "NOT_CONFIGURED", "The chat backend URL is not configured"));
     const request = new XMLHttpRequest();
@@ -84,6 +90,7 @@ export const deleteAttachmentRequest = (attachmentId: string) =>
  */
 export async function fetchAttachmentBlob(downloadPath: string, signal?: AbortSignal): Promise<Blob> {
   if (!API_URL) throw new ApiError(0, "NOT_CONFIGURED", "The chat backend URL is not configured");
+  await ensureFreshToken();
   const token = getAuthToken();
   let response: Response;
   try {

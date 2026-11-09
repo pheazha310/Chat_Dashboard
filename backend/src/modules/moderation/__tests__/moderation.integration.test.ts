@@ -23,6 +23,7 @@ describe.skipIf(!url)("moderation on PostgreSQL", () => {
     db = (await import("@config/database.js")).prisma;
     await assertTestDatabase(db);
     c = await createTestContainer();
+    await c.identify(agent1, agent2, supervisor);
   });
   afterAll(async () => {
     // Other test files share this database and use the same customer ids: leave no block or keyword behind.

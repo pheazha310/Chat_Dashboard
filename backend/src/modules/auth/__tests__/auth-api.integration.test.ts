@@ -1,0 +1,240 @@
+import type { Server } from "node:http";
+import type { AddressInfo } from "node:net";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { assertTestDatabase } from "../../../__tests__/support/container.js";
+
+/** Sign-in, refresh, accounts and protected routes over real HTTP and PostgreSQL. Needs TEST_DATABASE_URL. */
+const url = process.env.TEST_DATABASE_URL;
+if (url && !/test/i.test(new URL(url).pathname)) throw new Error("TEST_DATABASE_URL must point at a *test* database");
+
+describe.skipIf(!url)("authentication over HTTP", () => {
+  let server: Server;
+  let origin: string;
+  let db: typeof import("@config/database.js").prisma;
+  let users: typeof import("../../../app-container.js").userService;
+
+  beforeAll(async () => {
+    process.env.DATABASE_URL = url as string;
+    process.env.AUTH_MODE = "jwt";
+    process.env.EVENT_BUS = "memory";
+    process.env.BACKEND1_MODE = "local";
+    process.env.AUTH_RATE_LIMIT_PER_MINUTE = "1000";
+    process.env.JWT_SECRET = "integration-test-secret-0123456789abcdef";
+    db = (await import("@config/database.js")).prisma;
+    await assertTestDatabase(db);
+    users = (await import("../../../app-container.js")).userService;
+    const { app } = await import("../../../app.js");
+    server = app.listen(0);
+    await new Promise((resolve) => server.once("listening", resolve));
+    origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  });
+
+  afterAll(async () => {
+    await new Promise((resolve) => server?.close(resolve));
+    await db?.$disconnect();
+  });
+
+  beforeEach(async () => {
+    await db.$executeRaw`TRUNCATE users, auth_sessions, chat_users CASCADE`;
+    await users.bootstrapAdmin({ email: "admin@example.com", displayName: "Admin", password: "admin-password" });
+  });
+
+  const call = async (path: string, init: { method?: string; token?: string; body?: unknown } = {}) => {
+    const response = await fetch(`${origin}${path}`, {
+      method: init.method ?? (init.body === undefined ? "GET" : "POST"),
+      headers: {
+        "content-type": "application/json",
+        ...(init.token ? { authorization: `Bearer ${init.token}` } : {}),
+      },
+      ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
+    });
+    const text = await response.text();
+    return {
+      status: response.status,
+      headers: response.headers,
+      body: (text ? JSON.parse(text) : null) as Record<string, any>,
+    };
+  };
+  const staffLogin = (email: string, password: string) =>
+    call("/api/v1/admin/auth/login", { body: { email, password } });
+
+  it("signs an admin in, serves protected routes with the token and refuses without it", async () => {
+    const login = await staffLogin("Admin@Example.com", "admin-password");
+    expect(login.status).toBe(200);
+    expect(login.headers.get("cache-control")).toBe("no-store");
+    const { accessToken } = login.body.data;
+
+    expect((await call("/api/v1/admin/auth/me", { token: accessToken })).body.data).toMatchObject({
+      email: "admin@example.com",
+      role: "ADMIN",
+    });
+    expect((await call("/api/v1/admin/conversations", { token: accessToken })).status).toBe(200);
+    expect((await call("/api/v1/admin/conversations")).status).toBe(401);
+    expect(
+      (await call("/api/v1/admin/conversations", { token: "dev:00000000-0000-4000-8000-000000000001:ADMIN" })).status,
+    ).toBe(401);
+    // The password hash is stored, never the password.
+    const row = await db.authUser.findUniqueOrThrow({ where: { email: "admin@example.com" } });
+    expect(row.passwordHash).toMatch(/^scrypt\$/);
+  });
+
+  it("lets an admin create an agent who can then sign in; agents cannot manage accounts", async () => {
+    const admin = (await staffLogin("admin@example.com", "admin-password")).body.data.accessToken;
+    const created = await call("/api/v1/admin/users", {
+      token: admin,
+      body: { email: "agent@example.com", displayName: "Agent", role: "AGENT", password: "agent-password" },
+    });
+    expect(created.status).toBe(201);
+    expect(created.body.data).not.toHaveProperty("passwordHash");
+
+    const agent = (await staffLogin("agent@example.com", "agent-password")).body.data.accessToken;
+    expect((await call("/api/v1/admin/users", { token: agent })).status).toBe(403);
+    expect((await call("/api/v1/admin/users?role=AGENT", { token: admin })).body.meta.total).toBe(1);
+
+    // Names now come from the users table (BACKEND1_MODE=local).
+    expect((await call("/api/v1/admin/agents/me", { token: agent })).body.data.profile).toEqual({
+      id: created.body.data.id,
+      name: "Agent",
+      avatarUrl: null,
+    });
+  });
+
+  it("disabling an agent ends their sign-in and refuses their access token", async () => {
+    const admin = (await staffLogin("admin@example.com", "admin-password")).body.data.accessToken;
+    const { id } = (
+      await call("/api/v1/admin/users", {
+        token: admin,
+        body: { email: "agent@example.com", displayName: "Agent", role: "AGENT", password: "agent-password" },
+      })
+    ).body.data;
+    const agent = (await staffLogin("agent@example.com", "agent-password")).body.data;
+    // The agent has not used the API yet: no cached identity, so the refusal is immediate.
+    expect(
+      (await call(`/api/v1/admin/users/${id}`, { method: "PATCH", token: admin, body: { status: "DISABLED" } })).status,
+    ).toBe(200);
+    expect((await call("/api/v1/admin/auth/me", { token: agent.accessToken })).status).toBe(403);
+    expect((await call("/api/v1/admin/auth/refresh", { body: { refreshToken: agent.refreshToken } })).status).toBe(401);
+    expect((await staffLogin("agent@example.com", "agent-password")).status).toBe(403);
+  });
+
+  it("rotates refresh tokens and revokes the sign-in when an old one is replayed", async () => {
+    const first = (await staffLogin("admin@example.com", "admin-password")).body.data;
+    const second = await call("/api/v1/admin/auth/refresh", { body: { refreshToken: first.refreshToken } });
+    expect(second.status).toBe(200);
+    expect((await call("/api/v1/admin/auth/refresh", { body: { refreshToken: first.refreshToken } })).status).toBe(401);
+    expect(
+      (await call("/api/v1/admin/auth/refresh", { body: { refreshToken: second.body.data.refreshToken } })).status,
+    ).toBe(401);
+    expect(await db.authSession.count({ where: { revokedAt: null } })).toBe(0);
+  });
+
+  it("locks an account after 5 wrong passwords", async () => {
+    for (let i = 0; i < 5; i++) expect((await staffLogin("admin@example.com", "wrong")).status).toBe(401);
+    const locked = await staffLogin("admin@example.com", "admin-password");
+    expect(locked.status).toBe(429);
+    expect(locked.body.error.code).toBe("ACCOUNT_LOCKED");
+  });
+
+  it("registers a mobile customer who can use the customer API but not the dashboard", async () => {
+    const registered = await call("/api/v1/customer/auth/register", {
+      body: { email: "cus@example.com", password: "customer-pass", displayName: "Cus" },
+    });
+    expect(registered.status).toBe(201);
+    const { accessToken, refreshToken } = registered.body.data;
+    expect((await call("/api/v1/customer/auth/me", { token: accessToken })).body.data.role).toBe("CUSTOMER");
+    expect((await call("/api/v1/admin/conversations", { token: accessToken })).status).toBe(403);
+    expect((await staffLogin("cus@example.com", "customer-pass")).status).toBe(401);
+    expect((await call("/api/v1/admin/auth/refresh", { body: { refreshToken } })).status).toBe(401);
+    expect(
+      (await call("/api/v1/customer/auth/login", { body: { email: "cus@example.com", password: "customer-pass" } }))
+        .status,
+    ).toBe(200);
+    expect(
+      (
+        await call("/api/v1/customer/auth/register", {
+          body: { email: "CUS@example.com", password: "customer-pass", displayName: "Again" },
+        })
+      ).status,
+    ).toBe(409);
+  });
+
+  it("changes a password: the old one stops working and other devices are signed out", async () => {
+    const laptop = (await staffLogin("admin@example.com", "admin-password")).body.data;
+    const phone = (await staffLogin("admin@example.com", "admin-password")).body.data;
+    const changed = await call("/api/v1/admin/auth/me/password", {
+      token: phone.accessToken,
+      body: { currentPassword: "admin-password", newPassword: "admin-password-2" },
+    });
+    expect(changed.status).toBe(200);
+    expect((await call("/api/v1/admin/auth/refresh", { body: { refreshToken: laptop.refreshToken } })).status).toBe(
+      401,
+    );
+    expect((await staffLogin("admin@example.com", "admin-password")).status).toBe(401);
+    expect((await staffLogin("admin@example.com", "admin-password-2")).status).toBe(200);
+  });
+
+  it("lets an admin change what a role may do; the next sign-in of that role gets it", async () => {
+    const admin = (await staffLogin("admin@example.com", "admin-password")).body.data.accessToken;
+    const roles = (await call("/api/v1/admin/roles", { token: admin })).body.data as { id: number; name: string }[];
+    const agentRole = roles.find((role) => role.name === "AGENT")!;
+    const adminRole = roles.find((role) => role.name === "ADMIN")!;
+    expect((await call("/api/v1/admin/permissions", { token: admin })).body.data.length).toBeGreaterThan(20);
+
+    for (const [email, name] of [
+      ["one@example.com", "One"],
+      ["two@example.com", "Two"],
+    ]) {
+      await call("/api/v1/admin/users", {
+        token: admin,
+        body: { email, displayName: name, role: "AGENT", password: "agent-password" },
+      });
+    }
+    const tag = (await call("/api/v1/admin/tags", { token: admin, body: { name: "VIP" } })).body.data;
+    const setAgent = (permissions: string[]) =>
+      call(`/api/v1/admin/roles/${agentRole.id}/permissions`, { method: "PUT", token: admin, body: { permissions } });
+
+    try {
+      const one = (await staffLogin("one@example.com", "agent-password")).body.data.accessToken;
+      expect((await call(`/api/v1/admin/tags/${tag.id}`, { method: "DELETE", token: one })).status).toBe(403);
+      expect(
+        (
+          await call(`/api/v1/admin/roles/${agentRole.id}/permissions`, {
+            method: "PUT",
+            token: one,
+            body: { permissions: [] },
+          })
+        ).status,
+      ).toBe(403);
+
+      expect((await setAgent(["tags.delete"])).body.data.permissions).toEqual(["tags.delete"]);
+      const two = (await staffLogin("two@example.com", "agent-password")).body.data.accessToken;
+      expect((await call(`/api/v1/admin/tags/${tag.id}`, { method: "DELETE", token: two })).status).toBe(200);
+
+      const lockout = await call(`/api/v1/admin/roles/${adminRole.id}/permissions`, {
+        method: "PUT",
+        token: admin,
+        body: { permissions: [] },
+      });
+      expect(lockout.status).toBe(400);
+    } finally {
+      await setAgent([]);
+    }
+  });
+
+  it("keeps the chat identity in step with the account: name, role, and one row per account", async () => {
+    const admin = (await staffLogin("admin@example.com", "admin-password")).body.data.accessToken;
+    const created = (
+      await call("/api/v1/admin/users", {
+        token: admin,
+        body: { email: "sam@example.com", displayName: "Sam", role: "AGENT", password: "agent-password" },
+      })
+    ).body.data;
+    await call(`/api/v1/admin/users/${created.id}`, {
+      method: "PATCH",
+      token: admin,
+      body: { displayName: "Sam Lead", role: "SUPERVISOR" },
+    });
+    const row = await db.chatUser.findUnique({ where: { externalId: created.id }, include: { role: true } });
+    expect(row).toMatchObject({ userType: "STAFF", username: "Sam Lead", role: { name: "SUPERVISOR" } });
+  });
+});

@@ -1,5 +1,6 @@
 import type { WebSocket } from "ws";
-import { isSupervisor, type AuthContext } from "@shared/auth/auth.types.js";
+import type { AuthContext } from "@shared/auth/auth.types.js";
+import { can } from "@shared/auth/permissions.js";
 import type { Audience, BusEvent, ConversationVisibility } from "@shared/events/event-bus.js";
 import { canView } from "@shared/policy/conversation-access.js";
 
@@ -91,7 +92,7 @@ export function canReceive(audience: Audience, auth: AuthContext): boolean {
 
 function mayView(visibility: ConversationVisibility, auth: AuthContext): boolean {
   return (
-    isSupervisor(auth) ||
+    can(auth, "conversations.view_all") ||
     canView(
       auth,
       {

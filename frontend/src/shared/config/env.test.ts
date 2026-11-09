@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { deriveApiUrl } from "./env";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { deriveApiUrl, getAuthToken } from "./env";
 
 describe("deriveApiUrl", () => {
   it.each([
@@ -13,5 +13,20 @@ describe("deriveApiUrl", () => {
   it("is undefined when there is no usable WebSocket URL", () => {
     expect(deriveApiUrl(undefined)).toBeUndefined();
     expect(deriveApiUrl("not a url")).toBeUndefined();
+  });
+});
+
+describe("getAuthToken", () => {
+  const stub = (entries: Record<string, string>) =>
+    vi.stubGlobal("localStorage", { getItem: (key: string) => entries[key] ?? null });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("reads the signed-in session first, then the legacy key", () => {
+    stub({ "auth.session": JSON.stringify({ accessToken: "jwt" }), "auth.token": "legacy" });
+    expect(getAuthToken()).toBe("jwt");
+    stub({ "auth.token": "legacy" });
+    expect(getAuthToken()).toBe("legacy");
+    stub({ "auth.session": "not json" });
+    expect(getAuthToken()).toBeUndefined();
   });
 });

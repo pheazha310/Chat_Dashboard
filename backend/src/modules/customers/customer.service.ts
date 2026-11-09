@@ -1,6 +1,7 @@
 import { logger } from "@config/logger.js";
 import { NotFoundError, ServiceUnavailableError } from "@shared/errors/AppError.js";
-import { isSupervisor, type AuthContext } from "@shared/auth/auth.types.js";
+import type { AuthContext } from "@shared/auth/auth.types.js";
+import { can } from "@shared/auth/permissions.js";
 import type { AccessibleConversationState, ConversationAccess } from "@shared/ports/conversation-access.js";
 import type { CustomerProfile, Directory } from "@shared/ports/directory.js";
 import { isOwner } from "@shared/policy/conversation-access.js";
@@ -24,15 +25,15 @@ export function redactCustomer(
   conversation: Pick<AccessibleConversationState, "assignedAgentId">,
   source: string,
 ): CustomerDto {
-  const supervisor = isSupervisor(auth);
-  const canSeeContact = supervisor || isOwner(auth, conversation);
+  const canSeeContact = can(auth, "customers.view_contact") || isOwner(auth, conversation);
+  const canSeeSensitive = can(auth, "customers.view_sensitive");
   const restricted: string[] = [];
   const dto: CustomerDto = { ...profile, restricted, source };
   for (const field of CONTACT) {
     if (!canSeeContact) ((dto[field] = null), restricted.push(field));
   }
   for (const field of SENSITIVE) {
-    if (!supervisor) ((dto[field] = null), restricted.push(field));
+    if (!canSeeSensitive) ((dto[field] = null), restricted.push(field));
   }
   return dto;
 }

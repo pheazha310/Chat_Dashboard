@@ -1,3 +1,4 @@
+import { authRequired, ensureFreshToken, readSession, refreshSession } from "@/shared/api/auth";
 import { API_URL, getAuthToken } from "@/shared/config";
 
 /** An error response from the backend (`{ status: "error", error: { code, message } }`) or a network failure. */
@@ -21,8 +22,22 @@ type Options = {
   signal?: AbortSignal;
 };
 
-/** One request to the chat backend with the bearer token; unwraps the `{ status, data, meta }` envelope. */
+/**
+ * One request to the chat backend with the bearer token; unwraps the `{ status, data, meta }` envelope. With a
+ * signed-in session the token is refreshed ahead of expiry, and a `401` is retried once after a refresh.
+ */
 export async function apiRequest<T, M = unknown>(path: string, options: Options = {}): Promise<ApiResult<T, M>> {
+  await ensureFreshToken();
+  try {
+    return await send<T, M>(path, options);
+  } catch (error) {
+    if (!(error instanceof ApiError) || error.status !== 401 || !authRequired || !readSession()) throw error;
+    if (!(await refreshSession().catch(() => false))) throw error;
+    return send<T, M>(path, options);
+  }
+}
+
+async function send<T, M>(path: string, options: Options): Promise<ApiResult<T, M>> {
   if (!API_URL) throw new ApiError(0, "NOT_CONFIGURED", "The chat backend URL is not configured");
   const token = getAuthToken();
   const url = new URL(`${API_URL}${path}`);

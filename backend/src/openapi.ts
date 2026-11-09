@@ -1,3 +1,4 @@
+import { registerAuthOpenApi } from "@modules/auth/auth.openapi.js";
 import { registerAttachmentOpenApi } from "@modules/attachments/attachment.openapi.js";
 import { registerAssignmentOpenApi } from "@modules/assignments/assignment.openapi.js";
 import { registerConversationOpenApi } from "@modules/conversations/conversation.openapi.js";
@@ -5,6 +6,7 @@ import { registerHealthOpenApi } from "@modules/health/health.openapi.js";
 import { registerEscalationOpenApi } from "@modules/escalations/escalation.openapi.js";
 import { registerNoteOpenApi } from "@modules/notes/note.openapi.js";
 import { registerTagOpenApi } from "@modules/tags/tag.openapi.js";
+import { registerRoleOpenApi } from "@modules/roles/role.openapi.js";
 import { registerCannedResponseOpenApi } from "@modules/canned-responses/canned-response.openapi.js";
 import { registerPresenceOpenApi } from "@modules/presence/presence.openapi.js";
 import { registerCustomerOpenApi } from "@modules/customers/customer.openapi.js";
@@ -23,6 +25,7 @@ import { createRegistry, generateDocument } from "@shared/openapi/registry.js";
 export function buildOpenApiDocument() {
   const registry = createRegistry();
   registerHealthOpenApi(registry);
+  registerAuthOpenApi(registry);
   registerConversationOpenApi(registry);
   registerAssignmentOpenApi(registry);
   registerMessageOpenApi(registry);
@@ -30,6 +33,7 @@ export function buildOpenApiDocument() {
   registerAttachmentOpenApi(registry);
   registerNoteOpenApi(registry);
   registerTagOpenApi(registry);
+  registerRoleOpenApi(registry);
   registerCannedResponseOpenApi(registry);
   registerEscalationOpenApi(registry);
   registerPresenceOpenApi(registry);

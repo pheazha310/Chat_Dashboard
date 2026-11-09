@@ -11,9 +11,10 @@ datasource db {
 // GENERATED from docs/database-schema.dbml. Edit the DBML, then regenerate.
 //
 // This service (Backend 2, the chat backend) owns chat data. Backend 1 tables are documentation
-// references only and are not created in this database. Columns that hold a Backend 1 id
-// (customer_id, application_id, agent_id, user_id, *_by,
-// actor/participant/sender ids) are plain UUID columns with NO foreign key.
+// references only and are not created in this database. Columns that hold a person's or Backend 1 id
+// (application_id, agent_id, user_id, *_by, actor/participant ids) are plain UUID columns with NO foreign key,
+// except conversations.customer_id, messages.sender_id and attachments.uploaded_by_id, which reference
+// chat_users.external_id (= users.id).
 //
 // No database enums: fixed-value columns are VARCHAR strings whose allowed values are enforced by
 // CHECK constraints in prisma/sql/constraints.sql and listed in docs/database-schema.md.
@@ -22,7 +23,7 @@ datasource db {
 /// CUSTOMER_SUPPORT or INTERNAL. Customer and application are external references.
 model Conversation {
   id                               String                            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  customerId                       String?                           @map("customer_id") @db.Uuid /// External customers.id. Required for CUSTOMER_SUPPORT, NULL for INTERNAL (CHECK)
+  customerId                       String?                           @map("customer_id") @db.Uuid /// chat_users.external_id (= users.id). Required for CUSTOMER_SUPPORT, NULL for INTERNAL (CHECK)
   applicationId                    String?                           @map("application_id") @db.Uuid /// External loan_applications.id
   customerName                     String?                           @map("customer_name") @db.VarChar(150) /// Snapshot of the Backend 1 customer name so the inbox can be searched and sorted in SQL (FR-07); refresh when Backend 1 reports a change
   customerIdentifier               String?                           @map("customer_identifier") @db.VarChar(100) /// Snapshot of a searchable identifier (customer_code, phone, application_number)
@@ -46,6 +47,7 @@ model Conversation {
   lastSequenceNumber               BigInt                            @default(0) @map("last_sequence_number") /// Last messages.sequence_number issued. Allocate with UPDATE ... SET last_sequence_number = last_sequence_number + 1 RETURNING
   createdAt                        DateTime                          @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt                        DateTime                          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  customer                         ChatUser?                         @relation(fields: [customerId], references: [externalId], onDelete: Restrict)
   conversationParticipants         ConversationParticipant[]
   conversationAssignments          ConversationAssignment[]
   conversationActivities           ConversationActivity[]
@@ -129,7 +131,7 @@ model Message {
   clientId               String?              @map("client_id") @db.VarChar(100) /// Client-generated ID for duplicate prevention
   sequenceNumber         BigInt               @map("sequence_number")
   senderType             String               @map("sender_type") @db.VarChar(30) /// CUSTOMER, AGENT, ASSISTANT, SYSTEM
-  senderId               String?              @map("sender_id") @db.Uuid /// External sender ID, null for system
+  senderId               String?              @map("sender_id") @db.Uuid /// chat_users.external_id (= users.id) of a CUSTOMER or AGENT sender; null for SYSTEM and ASSISTANT
   messageType            String               @default("TEXT") @map("message_type") @db.VarChar(30)
   content                String?              @db.Text
   metadata               Json? /// Payload for SYSTEM messages, e.g. who took over; call or callback references
@@ -143,6 +145,7 @@ model Message {
   createdAt              DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt              DateTime             @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   conversation           Conversation         @relation(fields: [conversationId], references: [id], onDelete: Restrict)
+  sender                 ChatUser?            @relation(fields: [senderId], references: [externalId], onDelete: Restrict)
   replyToMessage         Message?             @relation(name: "MessageReplyToMessage", fields: [replyToMessageId, conversationId], references: [id, conversationId], onDelete: Restrict)
   replies                Message[]            @relation("MessageReplyToMessage")
   forwardedFromMessage   Message?             @relation(name: "MessageForwardedFromMessage", fields: [forwardedFromMessageId], references: [id], onDelete: SetNull)
@@ -230,7 +233,7 @@ model Attachment {
   id                 String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   conversationId     String              @map("conversation_id") @db.Uuid /// Needed for the Media & Files panel and access control; an upload exists before its message
   uploadedByType     String              @map("uploaded_by_type") @db.VarChar(30)
-  uploadedById       String              @map("uploaded_by_id") @db.Uuid
+  uploadedById       String              @map("uploaded_by_id") @db.Uuid /// chat_users.external_id (= users.id)
   storageKey         String              @unique @map("storage_key") @db.VarChar(500)
   fileName           String              @map("file_name") @db.VarChar(255)
   mimeType           String              @map("mime_type") @db.VarChar(150)
@@ -242,6 +245,7 @@ model Attachment {
   createdAt          DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
   deletedAt          DateTime?           @map("deleted_at") @db.Timestamptz(6)
   conversation       Conversation        @relation(fields: [conversationId], references: [id], onDelete: Restrict)
+  uploader           ChatUser            @relation(fields: [uploadedById], references: [externalId], onDelete: Restrict)
   messageAttachments MessageAttachment[]
 
   @@unique([id, conversationId], map: "attachments_id_conversation_key")
@@ -621,17 +625,112 @@ model UserChatSetting {
   @@map("user_chat_settings")
 }
 
-/// Chat identity: maps a Backend 1 user (customer or staff) to this backend's own id. Created on first sign-in from the
-/// verified token; `external_id` is the Backend 1 id (never the email). Other tables still store the external id.
+/// Chat identity: one row per person who takes part in chats (customer or staff), keyed by `external_id` = `users.id`
+/// (the token's `sub`; with AUTH_MODE=dev, the id in a `dev:` token). Created on first sign-in or when the account is
+/// created. `messages.sender_id`, `attachments.uploaded_by_id` and `conversations.customer_id` reference `external_id`.
 model ChatUser {
-  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userType   String   @map("user_type") @db.VarChar(20) /// CUSTOMER or STAFF
-  externalId String   @map("external_id") @db.Uuid /// Backend 1 customers.id or agents/users.id
-  role       String   @db.VarChar(20) /// Last role seen in a verified token: CUSTOMER, AGENT, SUPERVISOR, ADMIN
-  status     String   @default("ACTIVE") @db.VarChar(20) /// ACTIVE or DISABLED; a disabled user is refused everywhere
-  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  lastSeenAt DateTime @default(now()) @map("last_seen_at") @db.Timestamptz(6)
+  id            String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userType      String         @map("user_type") @db.VarChar(20) /// CUSTOMER or STAFF (the diagram's `kind`)
+  externalId    String         @unique @map("external_id") @db.Uuid /// users.id. Unique on its own: one identity per person
+  losUserId     Int?           @map("los_user_id") /// The person's id in the loan system (LOS), when known. Not set yet: the LOS contract is pending
+  username      String?        @db.VarChar(100) /// Display name, copied from users.display_name on sign-in and account changes
+  roleId        Int            @map("role_id")
+  status        String         @default("ACTIVE") @db.VarChar(20) /// ACTIVE or DISABLED; a disabled user is refused everywhere
+  createdAt     DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  lastSeenAt    DateTime       @default(now()) @map("last_seen_at") @db.Timestamptz(6)
+  role          Role           @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  conversations Conversation[]
+  messages      Message[]
+  attachments   Attachment[]
 
   @@unique([userType, externalId])
+  @@unique([userType, losUserId])
+  @@index([roleId])
   @@map("chat_users")
+}
+
+/// A role (CUSTOMER, AGENT, SUPERVISOR, ADMIN). The names are fixed: they are carried in access tokens and stored in
+/// users.role. What each role may do is data (role_permissions), edited by admins.
+model Role {
+  id              Int              @id @default(autoincrement())
+  name            String           @unique @db.VarChar(20) /// CUSTOMER, AGENT, SUPERVISOR or ADMIN
+  kind            String           @db.VarChar(20) /// CUSTOMER or STAFF
+  description     String?          @db.VarChar(255)
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  rolePermissions RolePermission[]
+  chatUsers       ChatUser[]
+  users           AuthUser[]
+
+  @@map("roles")
+}
+
+/// One thing a role may be allowed to do, as `module` + `action` (e.g. tags + delete = "tags.delete"). The catalogue is
+/// defined in code (shared/auth/permissions.ts) and seeded by migrations; it is not edited at runtime.
+model Permission {
+  id              Int              @id @default(autoincrement())
+  module          String           @db.VarChar(50)
+  action          String           @db.VarChar(50)
+  description     String?          @db.VarChar(255)
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  rolePermissions RolePermission[]
+
+  @@unique([module, action])
+  @@map("permissions")
+}
+
+/// Grants a permission to a role.
+model RolePermission {
+  id           Int        @id @default(autoincrement())
+  roleId       Int        @map("role_id")
+  permissionId Int        @map("permission_id")
+  createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+  @@index([permissionId])
+  @@map("role_permissions")
+}
+
+/// Sign-in accounts (staff and customers). This backend owns authentication: `users.id` is the id carried in access
+/// tokens (`sub`) and stored in every other table's user/agent/customer id columns. Email is stored lower-case.
+model AuthUser {
+  id                String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email             String        @unique @db.VarChar(254) /// Lower-case; unique
+  passwordHash      String        @map("password_hash") @db.VarChar(255) /// scrypt$N$r$p$salt$hash, never returned by the API
+  role              String        @db.VarChar(20) /// roles.name: CUSTOMER, AGENT, SUPERVISOR, ADMIN
+  displayName       String        @map("display_name") @db.VarChar(100)
+  status            String        @default("ACTIVE") @db.VarChar(20) /// ACTIVE or DISABLED
+  failedLoginCount  Int           @default(0) @map("failed_login_count")
+  lockedUntil       DateTime?     @map("locked_until") @db.Timestamptz(6) /// Set after too many failed sign-ins
+  passwordChangedAt DateTime      @default(now()) @map("password_changed_at") @db.Timestamptz(6)
+  lastLoginAt       DateTime?     @map("last_login_at") @db.Timestamptz(6)
+  createdBy         String?       @map("created_by") @db.Uuid /// The admin who created a staff account; null for self-registration
+  createdAt         DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  sessions          AuthSession[]
+  roleRef           Role          @relation(fields: [role], references: [name], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([role, status])
+  @@map("users")
+}
+
+/// One signed-in device. Only the SHA-256 of the refresh token is stored. Each refresh rotates the token: the old row is
+/// revoked and a new one created in the same `family_id`; presenting a revoked token revokes the whole family.
+model AuthSession {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  familyId  String    @map("family_id") @db.Uuid /// All rotations of one sign-in
+  tokenHash String    @unique @map("token_hash") @db.Char(64) /// hex SHA-256 of the refresh token
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(6)
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz(6)
+  userAgent String?   @map("user_agent") @db.VarChar(255)
+  ipAddress String?   @map("ip_address") @db.VarChar(45)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  user      AuthUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([familyId])
+  @@map("auth_sessions")
 }

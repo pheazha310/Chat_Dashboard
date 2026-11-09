@@ -1,4 +1,5 @@
-import { isSupervisor, type AuthContext } from "@shared/auth/auth.types.js";
+import type { AuthContext } from "@shared/auth/auth.types.js";
+import { can } from "@shared/auth/permissions.js";
 
 /** What the caller may do right now. The server enforces the same rules; the UI only reads these flags. */
 export interface ConversationPermissions {
@@ -32,11 +33,14 @@ export const isOwner = (auth: AuthContext, conversation: Pick<PolicyInput, "assi
  * conversations, ones they own, and ones they were added to as VIEWER. Other agents' chats are hidden.
  */
 export const canView = (auth: AuthContext, conversation: PolicyInput, isViewer: boolean) =>
-  isSupervisor(auth) || conversation.handoffStatus !== "ASSIGNED" || isOwner(auth, conversation) || isViewer;
+  can(auth, "conversations.view_all") ||
+  conversation.handoffStatus !== "ASSIGNED" ||
+  isOwner(auth, conversation) ||
+  isViewer;
 
 /** Permission matrix (§6), enforced here in the service layer and reported to the UI as flags. */
 export function permissionsFor(auth: AuthContext, c: PolicyInput): ConversationPermissions {
-  const supervisor = isSupervisor(auth);
+  const supervisor = can(auth, "conversations.manage_all");
   const owner = isOwner(auth, c);
   const manages = supervisor || owner;
   const open = c.status !== "CLOSED";

@@ -8,12 +8,22 @@ const schema = z.object({
   CORS_ORIGIN: z.string().default("http://localhost:5173"),
   DATABASE_URL: z.string().min(1),
   REDIS_URL: z.string().default("redis://localhost:6379"),
-  // "dev" accepts `dev:<userId>:<ROLE>` tokens; "external" will verify against Backend 1 (contract pending).
   // "redis" fans events out across API instances; "memory" is for one process (tests, single-instance dev).
   EVENT_BUS: z.enum(["redis", "memory"]).default("redis"),
-  // Customer and agent profiles. "dev" returns labelled synthetic data; "external" will call Backend 1 (contract pending).
-  BACKEND1_MODE: z.enum(["dev", "external"]).default("dev"),
-  AUTH_MODE: z.enum(["dev", "external"]).default("dev"),
+  // Customer and agent profiles. "local" reads the `users` table; "dev" returns labelled synthetic data;
+  // "external" is reserved for a Backend 1 loan-data client (contract pending).
+  BACKEND1_MODE: z.enum(["dev", "local", "external"]).default("dev"),
+  // "jwt" accepts only access tokens issued by this backend; "dev" also accepts `dev:<userId>:<ROLE>` tokens.
+  AUTH_MODE: z.enum(["dev", "jwt"]).default("dev"),
+  // HMAC key for access tokens (HS256), at least 32 characters. Required in production; elsewhere a random key is
+  // generated at start-up (tokens then stop working on restart and are not shared between instances).
+  JWT_SECRET: z.string().min(32).optional(),
+  ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().int().min(60).max(86400).default(900),
+  REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().min(1).max(365).default(30),
+  // Sign-in, registration and refresh requests per client IP per minute; 0 turns the limit off.
+  AUTH_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(0).default(20),
+  // Express `trust proxy` hop count, so the client IP is read from X-Forwarded-For behind a load balancer. 0 = direct.
+  TRUST_PROXY: z.coerce.number().int().min(0).max(10).default(0),
   // Uploaded files. "local" keeps them on this server's disk under STORAGE_DIR (object storage can be added as a driver).
   STORAGE_DRIVER: z.enum(["local"]).default("local"),
   STORAGE_DIR: z.string().min(1).default("./storage"),
@@ -48,6 +58,10 @@ export const env = schema
   .refine((value) => !(value.NODE_ENV === "production" && value.AUTH_MODE === "dev"), {
     message: "AUTH_MODE=dev is not allowed in production",
     path: ["AUTH_MODE"],
+  })
+  .refine((value) => !(value.NODE_ENV === "production" && !value.JWT_SECRET), {
+    message: "JWT_SECRET is required in production",
+    path: ["JWT_SECRET"],
   })
   .refine((value) => !(value.NODE_ENV === "production" && value.BACKEND1_MODE === "dev"), {
     message: "BACKEND1_MODE=dev is not allowed in production",

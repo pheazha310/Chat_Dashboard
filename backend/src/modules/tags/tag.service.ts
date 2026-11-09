@@ -1,5 +1,6 @@
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "@shared/errors/AppError.js";
-import { isSupervisor, type AuthContext } from "@shared/auth/auth.types.js";
+import type { AuthContext } from "@shared/auth/auth.types.js";
+import { can } from "@shared/auth/permissions.js";
 import { permissionsFor } from "@shared/policy/conversation-access.js";
 import type { ConversationAccess } from "@shared/ports/conversation-access.js";
 import type { RealtimeNotifier } from "@shared/ports/realtime.js";
@@ -40,7 +41,7 @@ export class TagService {
 
   async update(auth: AuthContext, tagId: string, input: UpdateTagInput): Promise<TagDto> {
     const tag = await this.requireTag(tagId);
-    if (tag.createdBy !== auth.userId && !isSupervisor(auth)) {
+    if (tag.createdBy !== auth.userId && !can(auth, "tags.edit_any")) {
       throw new ForbiddenError("Only the tag's creator or a supervisor can change it");
     }
     if (input.name !== undefined && input.name.toLowerCase() !== tag.name.toLowerCase()) {
@@ -56,7 +57,7 @@ export class TagService {
   }
 
   async remove(auth: AuthContext, tagId: string, options: { force: boolean }) {
-    if (!isSupervisor(auth)) throw new ForbiddenError("Only a supervisor can delete a tag");
+    if (!can(auth, "tags.delete")) throw new ForbiddenError("You are not allowed to delete tags");
     const tag = await this.requireTag(tagId);
     const affected = await this.repository.inTransaction(async (tx) => {
       const conversationIds = await tx.conversationIdsUsing(tagId);

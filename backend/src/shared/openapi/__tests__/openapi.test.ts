@@ -22,6 +22,20 @@ describe("OpenAPI document", () => {
     expect(keys.sort()).toEqual(
       [
         "GET /health",
+        "POST /auth/login",
+        "POST /auth/refresh",
+        "POST /auth/logout",
+        "POST /auth/logout-all",
+        "GET /auth/me",
+        "POST /auth/me/password",
+        "GET /users",
+        "POST /users",
+        "GET /users/{userId}",
+        "PATCH /users/{userId}",
+        "POST /users/{userId}/password",
+        "GET /roles",
+        "PUT /roles/{roleId}/permissions",
+        "GET /permissions",
         "GET /conversations",
         "POST /conversations",
         "GET /conversations/{id}",
@@ -124,16 +138,19 @@ describe("OpenAPI document", () => {
     );
   });
 
-  it("requires the bearer token everywhere except /health", () => {
-    for (const { key, path, operation } of operations) {
-      if (path === "/health") expect(operation.security, key).toBeUndefined();
+  /** Reachable without an access token: the health probe, and sign-in itself (it is how a token is obtained). */
+  const PUBLIC = new Set(["GET /health", "POST /auth/login", "POST /auth/refresh", "POST /auth/logout"]);
+
+  it("requires the bearer token everywhere except /health and sign-in", () => {
+    for (const { key, operation } of operations) {
+      if (PUBLIC.has(key)) expect(operation.security, key).toBeUndefined();
       else expect(operation.security, key).toEqual([{ bearerAuth: [] }]);
     }
     expect(doc.components?.securitySchemes?.bearerAuth).toMatchObject({ type: "http", scheme: "bearer" });
   });
 
   it("documents the error responses of authenticated routes", () => {
-    for (const { key, path, operation } of operations.filter((o) => o.path !== "/health")) {
+    for (const { key, path, operation } of operations.filter((o) => !PUBLIC.has(o.key))) {
       expect(Object.keys(operation.responses), key).toEqual(expect.arrayContaining(["401"]));
       if (path.includes("{id}")) expect(Object.keys(operation.responses), key).toContain("404");
     }

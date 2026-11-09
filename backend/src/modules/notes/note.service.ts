@@ -1,6 +1,7 @@
 import { logger } from "@config/logger.js";
 import { BadRequestError, ForbiddenError, NotFoundError, ServiceUnavailableError } from "@shared/errors/AppError.js";
-import { isSupervisor, type AuthContext } from "@shared/auth/auth.types.js";
+import type { AuthContext } from "@shared/auth/auth.types.js";
+import { can } from "@shared/auth/permissions.js";
 import type { ConversationAccess } from "@shared/ports/conversation-access.js";
 import type { AgentProfile, Directory } from "@shared/ports/directory.js";
 import type { RealtimeNotifier } from "@shared/ports/realtime.js";
@@ -86,7 +87,7 @@ export class NoteService {
 
   async remove(auth: AuthContext, noteId: string) {
     const existing = await this.requireNote(auth, noteId);
-    if (existing.authorAgentId !== auth.userId && !isSupervisor(auth)) {
+    if (existing.authorAgentId !== auth.userId && !can(auth, "notes.delete_any")) {
       throw new ForbiddenError("You can only delete your own notes");
     }
     if (!(await this.repository.softDelete(noteId))) throw new NotFoundError("Note not found");
@@ -202,6 +203,6 @@ function toNote(note: NoteRow, auth: AuthContext, authors: Map<string, AgentProf
     isEdited: note.updatedAt.getTime() !== note.createdAt.getTime(),
     createdAt: note.createdAt.toISOString(),
     updatedAt: note.updatedAt.toISOString(),
-    permissions: { canEdit: own, canDelete: own || isSupervisor(auth) },
+    permissions: { canEdit: own, canDelete: own || can(auth, "notes.delete_any") },
   };
 }

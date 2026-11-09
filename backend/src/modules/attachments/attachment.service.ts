@@ -2,7 +2,8 @@ import { createHash, randomUUID } from "node:crypto";
 import type { Readable } from "node:stream";
 import { logger } from "@config/logger.js";
 import { AppError, BadRequestError, ForbiddenError, NotFoundError } from "@shared/errors/AppError.js";
-import { isSupervisor, type AuthContext } from "@shared/auth/auth.types.js";
+import type { AuthContext } from "@shared/auth/auth.types.js";
+import { can } from "@shared/auth/permissions.js";
 import { permissionsFor } from "@shared/policy/conversation-access.js";
 import type { ConversationAccess, CustomerConversationAccess } from "@shared/ports/conversation-access.js";
 import type { RealtimeNotifier } from "@shared/ports/realtime.js";
@@ -150,7 +151,8 @@ export class AttachmentService {
   async remove(auth: AuthContext, attachmentId: string) {
     const row = await this.visible(auth, await this.repository.findLive(attachmentId));
     const own = row.uploadedByType === "AGENT" && row.uploadedById === auth.userId;
-    if (!own && !isSupervisor(auth)) throw new ForbiddenError("You can only delete files you uploaded");
+    if (!own && !can(auth, "attachments.delete_any"))
+      throw new ForbiddenError("You can only delete files you uploaded");
     if (!(await this.repository.softDelete(row.id))) throw new NotFoundError("File not found");
     await bestEffort("delete stored file", () => this.storage.delete(row.storageKey));
 

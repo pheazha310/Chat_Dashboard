@@ -24,6 +24,7 @@ describe.skipIf(!url)("messaging on PostgreSQL", () => {
     db = (await import("@config/database.js")).prisma;
     await assertTestDatabase(db);
     const container = await createTestContainer();
+    await container.identify(agent1, agent2, { userId: uid(9), role: "SUPERVISOR" });
     messages = container.messages;
     conversations = container.conversations;
     assignments = container.assignments;

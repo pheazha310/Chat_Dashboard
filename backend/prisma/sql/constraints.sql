@@ -250,5 +250,17 @@ CREATE UNIQUE INDEX blocked_keywords_keyword_lower_key ON blocked_keywords (lowe
 
 -- Chat identity mapping.
 ALTER TABLE chat_users ADD CONSTRAINT chat_users_user_type_check CHECK (user_type IN ('CUSTOMER', 'STAFF'));
-ALTER TABLE chat_users ADD CONSTRAINT chat_users_role_check CHECK (role IN ('CUSTOMER', 'AGENT', 'SUPERVISOR', 'ADMIN'));
+-- chat_users.role_id references roles (the role name CHECK lives on roles).
 ALTER TABLE chat_users ADD CONSTRAINT chat_users_status_check CHECK (status IN ('ACTIVE', 'DISABLED'));
+
+-- users / auth_sessions (sign-in accounts; this backend owns authentication)
+ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('CUSTOMER', 'AGENT', 'SUPERVISOR', 'ADMIN'));
+ALTER TABLE users ADD CONSTRAINT users_status_check CHECK (status IN ('ACTIVE', 'DISABLED'));
+ALTER TABLE users ADD CONSTRAINT users_email_lower_check CHECK (email = lower(email));
+ALTER TABLE users ADD CONSTRAINT users_failed_login_count_check CHECK (failed_login_count >= 0);
+
+-- roles / permissions (what each role may do is data; names are fixed because tokens carry them)
+ALTER TABLE roles ADD CONSTRAINT roles_kind_check CHECK (kind IN ('CUSTOMER', 'STAFF'));
+ALTER TABLE roles ADD CONSTRAINT roles_name_check CHECK (name IN ('CUSTOMER', 'AGENT', 'SUPERVISOR', 'ADMIN'));
+ALTER TABLE permissions ADD CONSTRAINT permissions_module_check CHECK (module ~ '^[a-z_]+$');
+ALTER TABLE permissions ADD CONSTRAINT permissions_action_check CHECK (action ~ '^[a-z_]+$');

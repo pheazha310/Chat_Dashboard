@@ -19,6 +19,8 @@ import { chatSettingsRoutes } from "@modules/chat-settings/index.js";
 import { agentProfileRoutes, customerProfileRoutes } from "@modules/profile/index.js";
 import { customerChannelRoutes } from "@modules/customer-channel/index.js";
 import { workspaceRoutes } from "@modules/workspace/index.js";
+import { customerAuthRoutes, staffAuthRoutes, userRoutes } from "@modules/auth/index.js";
+import { permissionRoutes, roleRoutes } from "@modules/roles/index.js";
 import { buildOpenApiDocument } from "./openapi.js";
 
 /** Namespace of the internal-staff API (agents, supervisors, admins). Customer and guest APIs use their own prefixes. */
@@ -29,6 +31,8 @@ export const CUSTOMER_API_PREFIX = "/api/v1/customer";
 
 /** Mobile customer API: join the conversation, send text/files/voice, read messages. See docs/api-customer-mobile.md. */
 export const customerApiRouter = Router();
+// Registration, sign-in and refresh are public, so they are mounted before the authentication below.
+customerApiRouter.use("/auth", customerAuthRoutes);
 customerApiRouter.use(authenticate(authClient, ["CUSTOMER"]), customerProfileRoutes, customerChannelRoutes);
 
 // Mount each module's router here; app.ts serves it under ADMIN_API_PREFIX.
@@ -39,6 +43,12 @@ let openApiDocument: ReturnType<typeof buildOpenApiDocument> | undefined;
 apiRouter.get("/openapi.json", (_req, res) => {
   res.json((openApiDocument ??= buildOpenApiDocument()));
 });
+
+// Sign-in for staff: login and refresh are public; /me and password changes authenticate inside the router.
+apiRouter.use("/auth", staffAuthRoutes);
+apiRouter.use("/users", authenticate(authClient), userRoutes);
+apiRouter.use("/roles", authenticate(authClient), roleRoutes);
+apiRouter.use("/permissions", authenticate(authClient), permissionRoutes);
 
 // Every conversation route requires a verified dashboard user (agent, supervisor or admin).
 apiRouter.use(

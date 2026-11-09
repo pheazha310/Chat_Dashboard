@@ -11,6 +11,20 @@ vi.mock("@/shared/config", () => ({
   getAuthToken: () => config.token,
 }));
 
+const auth = vi.hoisted(() => ({
+  required: false,
+  session: null as object | null,
+  refresh: vi.fn<() => Promise<boolean>>(),
+}));
+vi.mock("@/shared/api/auth", () => ({
+  get authRequired() {
+    return auth.required;
+  },
+  ensureFreshToken: async () => {},
+  readSession: () => auth.session,
+  refreshSession: auth.refresh,
+}));
+
 import { ApiError, apiRequest } from "./client";
 import { getMessages } from "./conversations";
 
@@ -20,6 +34,9 @@ const reply = (status: number, body: unknown) =>
 beforeEach(() => {
   config.apiUrl = "http://localhost:4000/api/v1/admin";
   config.token = "dev:3:AGENT";
+  auth.required = false;
+  auth.session = null;
+  auth.refresh.mockReset();
 });
 afterEach(() => vi.unstubAllGlobals());
 
@@ -75,6 +92,46 @@ describe("apiRequest", () => {
     vi.stubGlobal("fetch", fetchMock);
     await apiRequest("/x");
     expect(fetchMock.mock.calls[0]![1].headers).not.toHaveProperty("authorization");
+  });
+});
+
+describe("apiRequest with a signed-in session", () => {
+  const unauthorized = {
+    ok: false,
+    status: 401,
+    json: async () => ({ status: "error", error: { code: "UNAUTHORIZED" } }),
+  };
+
+  it("refreshes after a 401 and retries once with the new token", async () => {
+    auth.required = true;
+    auth.session = {};
+    auth.refresh.mockImplementation(async () => {
+      config.token = "fresh";
+      return true;
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(unauthorized)
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ status: "success", data: 7 }) });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(apiRequest("/x")).resolves.toMatchObject({ data: 7 });
+    expect(auth.refresh).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[1]![1].headers).toMatchObject({ authorization: "Bearer fresh" });
+  });
+
+  it("gives up with the 401 when the refresh is refused, and never refreshes without a session", async () => {
+    auth.required = true;
+    auth.session = {};
+    auth.refresh.mockResolvedValue(false);
+    const fetchMock = vi.fn().mockResolvedValue(unauthorized);
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(apiRequest("/x")).rejects.toMatchObject({ status: 401 });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    auth.session = null;
+    await expect(apiRequest("/x")).rejects.toMatchObject({ status: 401 });
+    expect(auth.refresh).toHaveBeenCalledTimes(1);
   });
 });
 

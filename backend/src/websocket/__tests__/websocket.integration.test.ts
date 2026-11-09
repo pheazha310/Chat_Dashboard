@@ -25,6 +25,13 @@ describe.skipIf(!url || !redisUrl)("WebSocket gateway", () => {
 
   beforeAll(async () => {
     c = await createTestContainer(); // also verifies we are connected to a *test* database
+    // Services called directly below act for these ids; give them identities as signing in would.
+    await c.identify(
+      { userId: uid(1), role: "AGENT" },
+      { userId: uid(2), role: "AGENT" },
+      { userId: uid(7), role: "SUPERVISOR" },
+      { userId: uid(9), role: "SUPERVISOR" },
+    );
     db = c.db;
     const { attachWebSocketServer } = await import("../websocket.server.js");
     const { DevAuthClient } = await import("@shared/auth/dev-auth-client.js");
@@ -105,7 +112,7 @@ describe.skipIf(!url || !redisUrl)("WebSocket gateway", () => {
       expect((await client.waitClosed()).code).toBe(4401);
     });
 
-    it("rejects any event before auth, bad tokens, and customer tokens", async () => {
+    it("rejects any event before auth and bad tokens; customers get only their own event set", async () => {
       const early = new TestClient(wsUrl);
       open.push(early);
       await early.ready();
@@ -123,9 +130,12 @@ describe.skipIf(!url || !redisUrl)("WebSocket gateway", () => {
       const customer = new TestClient(wsUrl);
       open.push(customer);
       await customer.ready();
+      // Customers connect since the mobile channel (docs/websocket-events.md#customer-connections), but staff events
+      // such as sync.request are refused.
       customer.send("auth", { token: `dev:${uid(5)}:CUSTOMER` });
+      await customer.waitFor("connection.authenticated");
+      customer.send("sync.request", {});
       expect(await customer.waitFor("error")).toMatchObject({ code: "FORBIDDEN" });
-      expect((await customer.waitClosed()).code).toBe(4403);
     });
 
     it("refuses browser origins that are not allowed", async () => {
