@@ -112,8 +112,16 @@ export class MessageRepository {
   }
 
   /** Oldest-to-newest page. `before` pages back in time, `after` forward (reconnect sync); default is the latest. */
-  async history(conversationId: string, query: CursorQuery): Promise<MessagePage> {
-    const base = { conversationId, deletedAt: null };
+  async history(
+    conversationId: string,
+    query: CursorQuery,
+    options: { excludeSystem?: boolean } = {},
+  ): Promise<MessagePage> {
+    const base = {
+      conversationId,
+      deletedAt: null,
+      ...(options.excludeSystem ? { senderType: { not: "SYSTEM" } } : {}),
+    };
     if (query.after !== undefined) {
       const rows = await this.db.message.findMany({
         where: { ...base, sequenceNumber: { gt: query.after } },
@@ -277,11 +285,18 @@ export class MessageRepository {
   // ─── Attachments carried by a message ────────────────────────────────────
 
   /** Stores the file's metadata and links it to the message. The bytes are already in storage. */
-  async addAttachment(data: NewAttachment & { conversationId: string; messageId: string; uploadedById: string }) {
+  async addAttachment(
+    data: NewAttachment & {
+      conversationId: string;
+      messageId: string;
+      uploadedById: string;
+      uploadedByType?: "AGENT" | "CUSTOMER";
+    },
+  ) {
     const attachment = await this.db.attachment.create({
       data: {
         conversationId: data.conversationId,
-        uploadedByType: "AGENT",
+        uploadedByType: data.uploadedByType ?? "AGENT",
         uploadedById: data.uploadedById,
         storageKey: data.storageKey,
         fileName: data.fileName,

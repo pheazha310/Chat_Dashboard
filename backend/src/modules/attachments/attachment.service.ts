@@ -4,7 +4,7 @@ import { logger } from "@config/logger.js";
 import { AppError, BadRequestError, ForbiddenError, NotFoundError } from "@shared/errors/AppError.js";
 import { isSupervisor, type AuthContext } from "@shared/auth/auth.types.js";
 import { permissionsFor } from "@shared/policy/conversation-access.js";
-import type { ConversationAccess } from "@shared/ports/conversation-access.js";
+import type { ConversationAccess, CustomerConversationAccess } from "@shared/ports/conversation-access.js";
 import type { RealtimeNotifier } from "@shared/ports/realtime.js";
 import type { Storage } from "@shared/storage/storage.js";
 import { bestEffort } from "@shared/utils/best-effort.js";
@@ -37,6 +37,9 @@ export interface FileResponse {
   stream: Readable;
 }
 
+/** Who is sending: a dashboard agent, or a customer on the mobile channel. */
+type Sender = { kind: "agent"; auth: AuthContext } | { kind: "customer"; customerId: string };
+
 const LABEL: Record<string, string> = { IMAGE: "Photo", DOCUMENT: "File", AUDIO: "Audio", VIDEO: "Video" };
 
 /**
@@ -49,18 +52,71 @@ export class AttachmentService {
     private readonly repository: AttachmentRepository,
     private readonly storage: Storage,
     private readonly messages: MessageService,
-    private readonly conversations: () => ConversationAccess,
+    private readonly conversations: () => ConversationAccess & CustomerConversationAccess,
     private readonly realtime: RealtimeNotifier,
   ) {}
 
   /** Sends a message that carries one file (and an optional caption). */
   upload(auth: AuthContext, fields: UploadFields, file: UploadedFile | undefined) {
-    return this.store(auth, fields.conversationId, { clientId: fields.clientId, text: fields.text }, file, false);
+    return this.store(
+      { kind: "agent", auth },
+      fields.conversationId,
+      { clientId: fields.clientId, text: fields.text },
+      file,
+      false,
+    );
   }
 
   /** Sends a recorded voice message. */
   uploadVoice(auth: AuthContext, conversationId: string, fields: VoiceFields, file: UploadedFile | undefined) {
-    return this.store(auth, conversationId, { clientId: fields.clientId }, file, true, fields);
+    return this.store({ kind: "agent", auth }, conversationId, { clientId: fields.clientId }, file, true, fields);
+  }
+
+  /** A customer sends a file (and an optional caption) in their own conversation. */
+  uploadFromCustomer(
+    customerId: string,
+    conversationId: string,
+    fields: { clientId: string; text?: string | undefined },
+    file: UploadedFile | undefined,
+  ) {
+    return this.store({ kind: "customer", customerId }, conversationId, fields, file, false);
+  }
+
+  /** A customer sends a recorded voice message in their own conversation. */
+  uploadVoiceFromCustomer(
+    customerId: string,
+    conversationId: string,
+    fields: VoiceFields,
+    file: UploadedFile | undefined,
+  ) {
+    return this.store(
+      { kind: "customer", customerId },
+      conversationId,
+      { clientId: fields.clientId },
+      file,
+      true,
+      fields,
+    );
+  }
+
+  /** The bytes of a file in one of the customer's own conversations. Honours a single `Range`. */
+  async downloadForCustomer(
+    customerId: string,
+    attachmentId: string,
+    options: { range?: string | undefined; inline: boolean },
+  ) {
+    const row = await this.repository.findLive(attachmentId);
+    if (!row) throw new NotFoundError("File not found");
+    await this.conversations().requireForCustomer(customerId, row.conversationId);
+    return this.open(row, options);
+  }
+
+  /** The audio of a voice message in one of the customer's own conversations. */
+  async messageAudioForCustomer(customerId: string, messageId: string, options: { range?: string | undefined }) {
+    const row = await this.repository.findAudioOfMessage(messageId);
+    if (!row) throw new NotFoundError("File not found");
+    await this.conversations().requireForCustomer(customerId, row.conversationId);
+    return this.open(row, { ...options, inline: true });
   }
 
   async list(auth: AuthContext, conversationId: string, query: ListQuery) {
@@ -79,12 +135,15 @@ export class AttachmentService {
 
   /** The file's bytes, for preview or download. Honours a single `Range` so audio and video can seek. */
   async download(auth: AuthContext, attachmentId: string, options: { range?: string | undefined; inline: boolean }) {
-    return this.open(auth, await this.repository.findLive(attachmentId), options);
+    return this.open(await this.visible(auth, await this.repository.findLive(attachmentId)), options);
   }
 
   /** The audio of a voice or audio message. */
   async messageAudio(auth: AuthContext, messageId: string, options: { range?: string | undefined }) {
-    return this.open(auth, await this.repository.findAudioOfMessage(messageId), { ...options, inline: true });
+    return this.open(await this.visible(auth, await this.repository.findAudioOfMessage(messageId)), {
+      ...options,
+      inline: true,
+    });
   }
 
   /** The uploader, or a supervisor/admin. The record is kept (soft delete); the bytes are removed from storage. */
@@ -110,7 +169,7 @@ export class AttachmentService {
   // ─── internals ─────────────────────────────────────────────────────────────
 
   private async store(
-    auth: AuthContext,
+    sender: Sender,
     conversationId: string,
     fields: { clientId: string; text?: string | undefined },
     file: UploadedFile | undefined,
@@ -118,9 +177,13 @@ export class AttachmentService {
     voiceFields?: VoiceFields,
   ) {
     if (!file) throw new BadRequestError('Send the file in a multipart field named "file"');
-    const state = await this.conversations().requireVisible(auth, conversationId);
-    if (!permissionsFor(auth, state).canSendMessage) {
-      throw new ForbiddenError("Only the agent who owns an open conversation can send files");
+    if (sender.kind === "agent") {
+      const state = await this.conversations().requireVisible(sender.auth, conversationId);
+      if (!permissionsFor(sender.auth, state).canSendMessage) {
+        throw new ForbiddenError("Only the agent who owns an open conversation can send files");
+      }
+    } else {
+      await this.conversations().requireForCustomer(sender.customerId, conversationId);
     }
     const checked = validateFile(file, { voice });
 
@@ -130,7 +193,7 @@ export class AttachmentService {
 
     let result;
     try {
-      result = await this.messages.sendWithAttachment(auth, conversationId, {
+      const common = {
         clientId: fields.clientId,
         text: fields.text,
         messageType: messageTypeFor(checked.kind, voice),
@@ -144,7 +207,15 @@ export class AttachmentService {
           waveform: voiceFields?.waveform,
           checksumSha256: createHash("sha256").update(file.buffer).digest("hex"),
         },
-      });
+      };
+      result =
+        sender.kind === "agent"
+          ? await this.messages.sendWithAttachment(sender.auth, conversationId, common)
+          : await this.messages.receiveFileFromCustomer({
+              ...common,
+              customerId: sender.customerId,
+              conversationId,
+            });
     } catch (error) {
       await this.discard(storageKey);
       throw error;
@@ -180,11 +251,9 @@ export class AttachmentService {
   }
 
   private async open(
-    auth: AuthContext,
-    found: Awaited<ReturnType<AttachmentRepository["findLive"]>>,
+    row: NonNullable<Awaited<ReturnType<AttachmentRepository["findLive"]>>>,
     options: { range?: string | undefined; inline: boolean },
   ): Promise<FileResponse> {
-    const row = await this.visible(auth, found);
     const stat = await this.storage.stat(row.storageKey);
     if (!stat) {
       logger.error({ attachmentId: row.id }, "stored file is missing");

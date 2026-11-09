@@ -25,7 +25,13 @@ export interface RealtimeNotifier {
   /** An agent's effective presence changed (AVAILABLE, BUSY, AWAY or OFFLINE). Sent to every dashboard session. */
   presenceChanged(userId: string, status: string): Promise<void>;
   /** An agent started or stopped typing. `origin` is the socket that sent it. */
-  typing(conversationId: string, userId: string, active: boolean, origin?: string): Promise<void>;
+  typing(
+    conversationId: string,
+    userId: string,
+    active: boolean,
+    origin?: string,
+    side?: "agent" | "customer",
+  ): Promise<void>;
   /** An agent marked notifications read; delivered to all of that agent's sessions. */
   notificationRead(agentId: string, payload: object): Promise<void>;
   /** A notification was stored for an agent. */

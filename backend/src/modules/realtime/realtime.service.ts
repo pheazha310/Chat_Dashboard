@@ -111,12 +111,18 @@ export class RealtimeService implements RealtimeNotifier {
     });
   }
 
-  async typing(conversationId: string, userId: string, active: boolean, origin?: string) {
+  async typing(
+    conversationId: string,
+    userId: string,
+    active: boolean,
+    origin?: string,
+    side: "agent" | "customer" = "agent",
+  ) {
     const snapshot = await this.conversations().snapshot(conversationId);
     if (!snapshot) return;
     await this.bus.publish({
       type: "typing",
-      payload: { conversationId: idToString(conversationId), userId: idToString(userId), side: "agent", active },
+      payload: { conversationId: idToString(conversationId), userId: idToString(userId), side, active },
       audience: conversationAudience(snapshot),
       ...(origin ? { except: origin } : {}),
     });

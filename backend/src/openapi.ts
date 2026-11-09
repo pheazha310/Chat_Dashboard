@@ -14,6 +14,7 @@ import { registerMessageOpenApi } from "@modules/messages/message.openapi.js";
 import { registerModerationOpenApi } from "@modules/moderation/moderation.openapi.js";
 import { registerCallOpenApi } from "@modules/calls/call.openapi.js";
 import { registerCallbackOpenApi } from "@modules/callbacks/callback.openapi.js";
+import { registerProfileOpenApi } from "@modules/profile/profile.openapi.js";
 import { registerChatSettingsOpenApi } from "@modules/chat-settings/chat-settings.openapi.js";
 import { registerWorkspaceOpenApi } from "@modules/workspace/workspace.openapi.js";
 import { createRegistry, generateDocument } from "@shared/openapi/registry.js";
@@ -36,6 +37,7 @@ export function buildOpenApiDocument() {
   registerCustomerOpenApi(registry);
   registerWorkspaceOpenApi(registry);
   registerChatSettingsOpenApi(registry);
+  registerProfileOpenApi(registry);
   registerCallbackOpenApi(registry);
   registerCallOpenApi(registry);
   registerModerationOpenApi(registry);

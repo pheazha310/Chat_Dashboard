@@ -43,7 +43,13 @@ export function attachWebSocketServer(
 
   const alive = new WeakSet<WebSocket>();
   wss.on("connection", (socket) => {
-    const connection: Connection = { id: randomUUID(), socket, typing: new Map(), queue: Promise.resolve() };
+    const connection: Connection = {
+      id: randomUUID(),
+      socket,
+      typing: new Map(),
+      queue: Promise.resolve(),
+      rooms: new Set(),
+    };
     registry.add(connection);
     alive.add(socket);
 
@@ -82,7 +88,7 @@ export function attachWebSocketServer(
       }
       alive.delete(socket);
       socket.ping();
-      if (auth) void services.presence.heartbeat(auth, connection.id);
+      if (auth && auth.role !== "CUSTOMER") void services.presence.heartbeat(auth, connection.id);
     }
   }, options.heartbeatMs ?? HEARTBEAT_MS);
   heartbeat.unref();

@@ -25,7 +25,9 @@ export default function MessageComposer({
   const draft = useDraft(conversationId);
   const attachment = useAttachment(conversationId);
   const { recording, setAttachment, toggleRecording } = useComposerStore();
-  const uploading = useUploadStore((state) => Object.values(state.progress));
+  // Select the stable object; a selector returning a fresh array loops forever in Zustand 5.
+  const progress = useUploadStore((state) => state.progress);
+  const uploading = Object.values(progress);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const replyTargetId = useMessageStore((state) => state.replyTarget[conversationId]);
   const replyTarget = useConversationMessages(conversationId).find((message) => message.id === replyTargetId);

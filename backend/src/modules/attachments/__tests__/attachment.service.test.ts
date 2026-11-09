@@ -14,8 +14,8 @@ vi.mock("@config/logger.js", () => ({ logger: { warn: vi.fn(), error: vi.fn() } 
 
 const repo = { findLive: vi.fn(), findAudioOfMessage: vi.fn(), list: vi.fn(), softDelete: vi.fn() };
 const storage = { put: vi.fn(), stat: vi.fn(), open: vi.fn(), delete: vi.fn() };
-const messages = { sendWithAttachment: vi.fn() };
-const access = { requireVisible: vi.fn() };
+const messages = { sendWithAttachment: vi.fn(), receiveFileFromCustomer: vi.fn() };
+const access = { requireVisible: vi.fn(), requireForCustomer: vi.fn() };
 const realtime = fakeRealtime();
 const service = new AttachmentService(
   fromPartial<AttachmentRepository>(repo),
@@ -58,6 +58,11 @@ beforeEach(() => {
   vi.resetAllMocks();
   for (const mock of Object.values(realtime)) mock.mockResolvedValue(undefined);
   access.requireVisible.mockResolvedValue(open);
+  access.requireForCustomer.mockResolvedValue(open);
+  messages.receiveFileFromCustomer.mockResolvedValue({
+    message: { id: uid(50), attachments: [{ id: uid(60) }] },
+    created: true,
+  });
   storage.put.mockResolvedValue(undefined);
   storage.delete.mockResolvedValue(undefined);
   messages.sendWithAttachment.mockResolvedValue({
@@ -231,5 +236,75 @@ describe("remove", () => {
     await expect(service.remove(other, uid(60))).rejects.toBeInstanceOf(ForbiddenError);
     repo.softDelete.mockResolvedValue(false);
     await expect(service.remove(owner, uid(60))).rejects.toBeInstanceOf(NotFoundError);
+  });
+});
+
+describe("customer uploads", () => {
+  const customer = uid(100);
+  const fields = { clientId: "c1", text: undefined };
+
+  it("stores the file, then a CUSTOMER message, and announces the attachment", async () => {
+    await service.uploadFromCustomer(customer, uid(10), fields, upload);
+    expect(access.requireForCustomer).toHaveBeenCalledWith(customer, uid(10));
+    expect(access.requireVisible).not.toHaveBeenCalled();
+    expect(messages.sendWithAttachment).not.toHaveBeenCalled();
+    expect(messages.receiveFileFromCustomer).toHaveBeenCalledWith(
+      expect.objectContaining({ customerId: customer, conversationId: uid(10), clientId: "c1", messageType: "IMAGE" }),
+    );
+    expect(realtime.messageEvent).toHaveBeenCalledWith(uid(10), "attachment.uploaded", { attachment: { id: uid(60) } });
+  });
+
+  it("sends a voice message with its duration", async () => {
+    const audio = {
+      originalname: "v.webm",
+      mimetype: "audio/webm",
+      size: 4,
+      buffer: Buffer.from([0x1a, 0x45, 0xdf, 0xa3]),
+    };
+    await service.uploadVoiceFromCustomer(customer, uid(10), { clientId: "v1", durationMs: 1500 }, audio);
+    expect(messages.receiveFileFromCustomer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        messageType: "VOICE",
+        preview: "Voice message",
+        attachment: expect.objectContaining({ durationMs: 1500 }),
+      }),
+    );
+  });
+
+  it("does not store anything for a conversation that is not theirs, or without a file", async () => {
+    access.requireForCustomer.mockRejectedValue(new NotFoundError());
+    await expect(service.uploadFromCustomer(customer, uid(10), fields, upload)).rejects.toBeInstanceOf(NotFoundError);
+    await expect(service.uploadFromCustomer(customer, uid(10), fields, undefined)).rejects.toBeInstanceOf(
+      BadRequestError,
+    );
+    expect(storage.put).not.toHaveBeenCalled();
+  });
+
+  it("discards the stored file when the customer is refused (blocked) or it is a retry", async () => {
+    messages.receiveFileFromCustomer.mockRejectedValue(new ForbiddenError("This customer is blocked"));
+    await expect(service.uploadFromCustomer(customer, uid(10), fields, upload)).rejects.toBeInstanceOf(ForbiddenError);
+    expect(storage.delete).toHaveBeenCalledWith(storage.put.mock.calls[0]?.[0]);
+    storage.delete.mockClear();
+    messages.receiveFileFromCustomer.mockResolvedValue({ message: { id: uid(50), attachments: [] }, created: false });
+    await service.uploadFromCustomer(customer, uid(10), fields, upload);
+    expect(storage.delete).toHaveBeenCalledTimes(1);
+  });
+
+  it("downloads only files of the customer's own conversations", async () => {
+    repo.findLive.mockResolvedValue(row());
+    storage.stat.mockResolvedValue({ size: 10 });
+    storage.open.mockReturnValue(Readable.from(["x"]));
+    const file = await service.downloadForCustomer(customer, uid(60), { inline: false });
+    expect(access.requireForCustomer).toHaveBeenCalledWith(customer, uid(10));
+    expect(file.status).toBe(200);
+
+    access.requireForCustomer.mockRejectedValue(new NotFoundError());
+    await expect(service.downloadForCustomer(uid(999), uid(60), { inline: false })).rejects.toBeInstanceOf(
+      NotFoundError,
+    );
+    repo.findLive.mockResolvedValue(null);
+    await expect(service.downloadForCustomer(customer, uid(61), { inline: false })).rejects.toBeInstanceOf(
+      NotFoundError,
+    );
   });
 });

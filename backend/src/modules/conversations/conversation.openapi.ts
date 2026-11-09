@@ -53,7 +53,9 @@ const summaryShape = {
 };
 
 // `satisfies` keeps these response schemas in step with the TypeScript DTOs: drift fails the build.
-const summary = z.object(summaryShape).openapi("ConversationSummary") satisfies z.ZodType<ConversationSummaryDto>;
+export const summary = z
+  .object(summaryShape)
+  .openapi("ConversationSummary") satisfies z.ZodType<ConversationSummaryDto>;
 const detail = z
   .object({ ...summaryShape, summary: nullableString, lastSequenceNumber: z.string(), permissions })
   .openapi("ConversationDetail") satisfies z.ZodType<ConversationDetailDto>;

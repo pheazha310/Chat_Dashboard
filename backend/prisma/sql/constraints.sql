@@ -247,3 +247,8 @@ CREATE INDEX messages_content_fts ON messages USING GIN (to_tsvector('simple', c
 -- Tag names and blocked keywords are unique ignoring case (the plain UNIQUE from the schema also stays).
 CREATE UNIQUE INDEX tags_name_lower_key ON tags (lower(name));
 CREATE UNIQUE INDEX blocked_keywords_keyword_lower_key ON blocked_keywords (lower(keyword));
+
+-- Chat identity mapping.
+ALTER TABLE chat_users ADD CONSTRAINT chat_users_user_type_check CHECK (user_type IN ('CUSTOMER', 'STAFF'));
+ALTER TABLE chat_users ADD CONSTRAINT chat_users_role_check CHECK (role IN ('CUSTOMER', 'AGENT', 'SUPERVISOR', 'ADMIN'));
+ALTER TABLE chat_users ADD CONSTRAINT chat_users_status_check CHECK (status IN ('ACTIVE', 'DISABLED'));

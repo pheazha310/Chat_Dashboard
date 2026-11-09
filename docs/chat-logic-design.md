@@ -193,7 +193,8 @@ Implemented in `shared/policy/conversation-access.ts`; the API returns the calle
 - **Messages.** The conversation row is locked (`SELECT ... FOR UPDATE`) while a message is appended, so sequence
   numbers are contiguous and a retried `clientId` finds the original instead of failing on the unique key. Message
   `created_at` is the database clock (the same instant as `last_message_at`). `receiveFromCustomer` (reopen, notify the
-  owner) is implemented and tested but has no entry point yet: the customer channel and its authentication are not built.
+  owner) is reached by the mobile REST API (`/api/v1/customer`, [api-customer-mobile.md](api-customer-mobile.md)); customer
+  authentication is dev-only until the Backend 1 contract is known.
 - **Side effects after commit** (notifications, SYSTEM messages) are best effort: a failure is logged, never undoes the
   committed change.
 - **Retention (FR-10):** only soft delete exists (deleted messages are excluded from history). No policy or job is
@@ -208,7 +209,7 @@ Implemented in `shared/policy/conversation-access.ts`; the API returns the calle
 - **Customer data (Backend 1).** Reached only through the `Directory` port (`BACKEND1_MODE=dev` returns labelled
   synthetic data; `external` is not implemented because the contract is unknown). Sensitive fields are redacted by role
   with a provisional policy (see api-conversations.md); replace it when Backend 1 defines its permissions.
-- **Not yet built:** the customer channel, customer-level communication activity (per-conversation activity exists),
+- **Not yet built:** push notifications to customers (the mobile REST API and customer sockets exist), customer-level communication activity (per-conversation activity exists),
   and the frontend integration (the frontend still talks to its mock protocol).
 - **Timezone.** Database sessions are pinned to UTC (`config/database.ts`): the Prisma pg adapter reads `timestamptz`
   as UTC, so a non-UTC server timezone shifted database-generated timestamps by the offset.
@@ -236,7 +237,7 @@ The current protocol cannot express several cases. Add:
 - The PDF names events `message:send`, `message:new`, `message:sent`, `message:delivered`, `message:read`,
   `typing:start`, `typing:stop`, `conversation:assigned`; the protocol uses dotted names (`message.ack`, ...).
   Pick one naming scheme and change protocol, gateway, frontend and mock together.
-- REST paths in the PDF are under `/api/v1`; the chat backend mounts the staff API under `/api/v1/admin` (guest: `/api/v1/guest`, customer: `/api/v1/customer`, not built). `/api/health` is the only path outside it.
+- REST paths in the PDF are under `/api/v1`; the chat backend mounts the staff API under `/api/v1/admin` (customer mobile app: `/api/v1/customer`; guest: `/api/v1/guest`, not built). `/api/health` is the only path outside it.
 - The DTO `id` is currently the conversation slug (e.g. `maya`), but `conversations` has no `slug` column (ids are
   UUIDs). Either add a `slug` column or change the protocol to use the conversation UUID.
 

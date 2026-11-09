@@ -2,7 +2,7 @@ import { prisma, runInTransaction, type Db } from "@config/database.js";
 import type { Prisma } from "../../../prisma/generated/prisma/client.js";
 import { z } from "zod";
 import { isSupervisor, type AuthContext } from "@shared/auth/auth.types.js";
-import { pageArgs } from "@shared/utils/pagination.js";
+import { pageArgs, type PageQuery } from "@shared/utils/pagination.js";
 import type { ListQuery } from "./conversation.schema.js";
 import type { AccessibleConversation, ConversationWithTags } from "./conversation.types.js";
 
@@ -134,6 +134,30 @@ export class ConversationRepository {
 
   findByApplication(applicationId: string): Promise<ConversationWithTags | null> {
     return this.db.conversation.findFirst({ where: { applicationId, status: { not: "CLOSED" } }, include: withTags });
+  }
+
+  /** The customer's own support conversations (archived ones excluded), latest activity first. */
+  async listForCustomer(customerId: string, query: PageQuery) {
+    const where = { customerId, conversationType: "CUSTOMER_SUPPORT", isArchived: false };
+    const [items, total] = await Promise.all([
+      this.db.conversation.findMany({
+        where,
+        orderBy: [{ lastMessageAt: "desc" }, { id: "desc" }],
+        ...pageArgs(query),
+        include: withTags,
+      }),
+      this.db.conversation.count({ where }),
+    ]);
+    return { items, total };
+  }
+
+  /** The customer's most recently active conversation that is not closed (support conversations only). */
+  findOpenForCustomer(customerId: string): Promise<ConversationWithTags | null> {
+    return this.db.conversation.findFirst({
+      where: { customerId, conversationType: "CUSTOMER_SUPPORT", status: { not: "CLOSED" }, isArchived: false },
+      orderBy: { lastMessageAt: "desc" },
+      include: withTags,
+    });
   }
 
   /** Serializes concurrent creates for one customer for the rest of the transaction. */

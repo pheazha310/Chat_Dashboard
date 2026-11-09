@@ -7,5 +7,3 @@ export function createAuthClient(): AuthClient {
   if (env.AUTH_MODE === "dev") return new DevAuthClient();
   throw new Error("AUTH_MODE=external is not implemented: the Backend 1 auth contract has not been provided");
 }
-
-export const authClient: AuthClient = createAuthClient();

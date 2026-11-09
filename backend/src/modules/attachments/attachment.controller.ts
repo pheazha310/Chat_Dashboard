@@ -67,33 +67,37 @@ export class AttachmentController {
     res.json({ status: "success", data: await this.service.remove(getAuth(req), attachmentId) });
   };
 
-  /** Streams a stored file with the headers that keep it from being run by the browser. */
-  private async send(_req: Request, res: Response, load: () => Promise<FileResponse>) {
-    let file: FileResponse;
-    try {
-      file = await load();
-    } catch (error) {
-      if (error instanceof RangeNotSatisfiable) res.setHeader("Content-Range", `bytes */${error.size}`);
-      throw error;
-    }
-    const length = file.range ? file.range.end - file.range.start + 1 : file.size;
-    res.status(file.status);
-    res.setHeader("Content-Type", file.mimeType);
-    res.setHeader("Content-Length", String(length));
-    res.setHeader("Accept-Ranges", "bytes");
-    if (file.range) res.setHeader("Content-Range", `bytes ${file.range.start}-${file.range.end}/${file.size}`);
-    res.setHeader("Content-Disposition", disposition(file.inline ? "inline" : "attachment", file.fileName));
-    // Private: only for the signed-in agent. Never cached by shared caches. The sandbox policy stops a file from running as a page.
-    res.setHeader("Cache-Control", "private, max-age=0, must-revalidate");
-    res.setHeader("X-Content-Type-Options", "nosniff");
-    res.setHeader("Content-Security-Policy", "sandbox; default-src 'none'");
-
-    file.stream.on("error", (error) => {
-      logger.warn({ err: error }, "reading a stored file failed");
-      // Headers are out already; cutting the connection tells the client the file is incomplete.
-      res.destroy(error);
-    });
-    res.on("close", () => file.stream.destroy());
-    file.stream.pipe(res);
+  private send(req: Request, res: Response, load: () => Promise<FileResponse>) {
+    return sendFileResponse(req, res, load);
   }
+}
+
+/** Streams a stored file with the headers that keep it from being run by the browser. Shared with the customer API. */
+export async function sendFileResponse(_req: Request, res: Response, load: () => Promise<FileResponse>) {
+  let file: FileResponse;
+  try {
+    file = await load();
+  } catch (error) {
+    if (error instanceof RangeNotSatisfiable) res.setHeader("Content-Range", `bytes */${error.size}`);
+    throw error;
+  }
+  const length = file.range ? file.range.end - file.range.start + 1 : file.size;
+  res.status(file.status);
+  res.setHeader("Content-Type", file.mimeType);
+  res.setHeader("Content-Length", String(length));
+  res.setHeader("Accept-Ranges", "bytes");
+  if (file.range) res.setHeader("Content-Range", `bytes ${file.range.start}-${file.range.end}/${file.size}`);
+  res.setHeader("Content-Disposition", disposition(file.inline ? "inline" : "attachment", file.fileName));
+  // Private: only for the signed-in agent. Never cached by shared caches. The sandbox policy stops a file from running as a page.
+  res.setHeader("Cache-Control", "private, max-age=0, must-revalidate");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Content-Security-Policy", "sandbox; default-src 'none'");
+
+  file.stream.on("error", (error) => {
+    logger.warn({ err: error }, "reading a stored file failed");
+    // Headers are out already; cutting the connection tells the client the file is incomplete.
+    res.destroy(error);
+  });
+  res.on("close", () => file.stream.destroy());
+  file.stream.pipe(res);
 }

@@ -31,6 +31,9 @@ export const clientEvents = {
   "conversation.transfer": transferBody.extend({ conversationId }),
   "conversation.release": unassignBody.extend({ conversationId }),
   "conversation.set_status": statusBody.extend({ conversationId }),
+  /** Join the realtime room of a conversation the caller may open. Customers only receive events of joined rooms. */
+  "room.join": z.object({ conversationId }),
+  "room.leave": z.object({ conversationId }),
   "typing.start": z.object({ conversationId }),
   "typing.stop": z.object({ conversationId }),
   /** Omit `notificationId` to mark all of the caller's notifications read. */

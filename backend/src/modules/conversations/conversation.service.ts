@@ -28,6 +28,7 @@ import type {
   ConversationStatus,
   ConversationSummaryDto,
   ConversationWithTags,
+  CustomerConversationDto,
 } from "./conversation.types.js";
 import type { ConversationActivity } from "../../../prisma/generated/prisma/client.js";
 
@@ -99,6 +100,63 @@ export class ConversationService implements ConversationAccess, CustomerConversa
       await bestEffort("new-conversation notifications", () => this.notifyAvailableAgents(auth, id, input));
     }
     return { conversation: await this.get(auth, id), created };
+  }
+
+  /**
+   * "Join room" for the mobile app: the customer's own conversation for the application (or, without an application,
+   * their latest conversation that is not closed), created when there is none. Always scoped to `customerId`, which
+   * comes from the verified token and never from the request body. NOTE: like `create`, the application is not
+   * verified with Backend 1 (contract unknown).
+   */
+  async joinForCustomer(
+    customerId: string,
+    input: { applicationId?: string | undefined; subject?: string | undefined },
+  ) {
+    const { id, created } = await this.repository.inTransaction(async (tx) => {
+      await tx.lockCustomer(customerId);
+      const existing =
+        input.applicationId === undefined
+          ? await tx.findOpenForCustomer(customerId)
+          : await tx.findByApplication(input.applicationId);
+      if (existing) {
+        if (existing.customerId !== customerId) throw new NotFoundError("Application not found");
+        return { id: existing.id, created: false };
+      }
+      const conversation = await tx.create({
+        customerId,
+        applicationId: input.applicationId ?? null,
+        subject: input.subject ?? null,
+        priority: "MEDIUM",
+        createdByType: "CUSTOMER",
+        createdById: customerId,
+        // The AI worker is not built, so a new customer conversation waits in the shared queue for a human.
+        conversationMode: "HUMAN",
+        handoffStatus: "NEEDS_HUMAN",
+      });
+      await tx.addCustomerParticipant(conversation.id, customerId);
+      return { id: conversation.id, created: true };
+    });
+    if (created) {
+      await bestEffort("realtime", () => this.realtime.conversationEvent(id, "created"));
+      await bestEffort("new-conversation notifications", () =>
+        this.notifyAvailableAgents(undefined, id, { customerId }),
+      );
+    }
+    return { conversation: await this.getForCustomer(customerId, id), created };
+  }
+
+  /** The customer's own conversation, in the customer-safe shape. 404 when it is not theirs. */
+  async getForCustomer(customerId: string, id: string): Promise<CustomerConversationDto> {
+    await this.requireForCustomer(customerId, id);
+    const row = await this.repository.findForAccess(id, customerId);
+    if (!row) throw new NotFoundError(`Conversation ${idToString(id)} not found`);
+    return toCustomerView(row);
+  }
+
+  /** The customer's own conversations (their "my chats" list), customer-safe shape, latest activity first. */
+  async listForCustomer(customerId: string, query: PageQuery) {
+    const { items, total } = await this.repository.listForCustomer(customerId, query);
+    return { items: items.map(toCustomerView), meta: pageMeta(total, query) };
   }
 
   async changeStatus(auth: AuthContext, id: string, to: ConversationStatus) {
@@ -221,8 +279,12 @@ export class ConversationService implements ConversationAccess, CustomerConversa
   }
 
   /** A conversation is waiting for a human: tell the agents who are online and AVAILABLE (not the one who opened it). */
-  private async notifyAvailableAgents(auth: AuthContext, id: string, input: CreateInput) {
-    const agents = (await this.availableAgents.availableAgentIds()).filter((agent) => agent !== auth.userId);
+  private async notifyAvailableAgents(
+    auth: AuthContext | undefined,
+    id: string,
+    input: { customerId: string; customerName?: string | undefined },
+  ) {
+    const agents = (await this.availableAgents.availableAgentIds()).filter((agent) => agent !== auth?.userId);
     const who = input.customerName ?? `customer ${input.customerId}`;
     await Promise.all(
       agents.map((agentId) =>
@@ -292,6 +354,7 @@ export class ConversationService implements ConversationAccess, CustomerConversa
         assignedAgentId:
           found.conversation.assignedAgentId === null ? null : idToString(found.conversation.assignedAgentId),
         viewerIds: found.viewerIds.map(idToString),
+        customerId: nullableId(found.conversation.customerId),
       },
     };
   }
@@ -390,3 +453,17 @@ const toActivity = (row: ConversationActivity): ActivityDto => ({
   metadata: row.metadata,
   createdAt: row.createdAt.toISOString(),
 });
+
+function toCustomerView(row: ConversationWithTags): CustomerConversationDto {
+  return {
+    id: idToString(row.id),
+    applicationId: nullableId(row.applicationId),
+    subject: row.subject,
+    status: row.status,
+    agentAssigned: row.assignedAgentId !== null,
+    lastMessageAt: row.lastMessageAt.toISOString(),
+    lastMessagePreview: row.lastMessagePreview,
+    lastSequenceNumber: row.lastSequenceNumber.toString(),
+    createdAt: row.createdAt.toISOString(),
+  };
+}

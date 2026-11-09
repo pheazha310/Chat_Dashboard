@@ -29,6 +29,7 @@ Node 22, pnpm 10 (pinned in `.mise.toml` and root `package.json`).
 - Frontend layers and import rules: [FSD.md](FSD.md); UI conventions: [docs/DESIGN_PATTERNS.md](docs/DESIGN_PATTERNS.md)
 - Data model and DB rules: [docs/database-schema.md](docs/database-schema.md), `backend/prisma/schema.prisma`
 - Backend behaviour (flows, permissions, protocol gaps): [docs/chat-logic-design.md](docs/chat-logic-design.md)
+- Mobile app integration (customer REST + socket flow): [docs/mobile-integration.md](docs/mobile-integration.md)
 - WebSocket contract: backend [docs/websocket-events.md](docs/websocket-events.md); the frontend's `shared/api/ws/protocol.ts` is its own vocabulary, translated in `shared/api/ws/backend/`
 
 ## Architecture
@@ -39,7 +40,7 @@ Node 22, pnpm 10 (pinned in `.mise.toml` and root `package.json`).
   `<name>.routes.ts → .controller.ts → .service.ts → .repository.ts` (+ `.schema.ts` for zod, `.types.ts`, `.openapi.ts` for every module that exposes routes) and then
   Prisma → PostgreSQL. Cross-cutting code lives in `config/`, `database/`, `websocket/`, `shared/`
   (`errors/`, `middleware/`, `validators/`, `utils/`, `constants/`, `types/`; create a folder when first needed).
-  `src/routes.ts` mounts module routers, served under `/api/v1/admin` (staff namespace; `/api/v1/guest` and `/api/v1/customer` are reserved for other consumers). See [docs/backend-structure.md](docs/backend-structure.md).
+  `src/routes.ts` mounts module routers, served under `/api/v1/admin` (staff namespace; `/api/v1/customer` serves the mobile app and `/api/v1/guest` is reserved). See [docs/backend-structure.md](docs/backend-structure.md).
   Only repositories query Prisma (the one exception is `server.ts` calling `prisma.$disconnect()` on shutdown). Services own business rules and transactions. Controllers only
   validate input (via the `validate()` middleware) and shape the response. WebSocket handlers play the controller role:
   `ws handler → service → repository`. Modules call each other only through services, never repositories.
@@ -51,8 +52,8 @@ Node 22, pnpm 10 (pinned in `.mise.toml` and root `package.json`).
 
 ## Current state (keep docs honest)
 
-- Backend implements `GET /api/health`, the conversations, assignments, messages, notifications, presence and customer-info REST APIs (`docs/api-conversations.md`), the per-agent workspace API for tabs and drafts (`docs/api-workspace.md`), message actions: reply, edit, delete, reactions, forward (`docs/api-message-actions.md`), files, media and voice messages with local-disk storage (`docs/api-attachments.md`), internal notes with mentions and escalation (`docs/api-notes-escalations.md`), tags and conversation priority with inbox filtering and sorting (`docs/api-tags-priority.md`), personal and shared saved reply templates (`docs/api-canned-responses.md`), per-agent chat settings (`docs/api-chat-settings.md`), callbacks with a reminder job (`docs/api-callbacks.md`), call signalling for WebRTC calls (`docs/api-calls.md`; the customer side is service methods only, no customer channel), spam reports, blocked customers and keywords (`docs/api-moderation.md`; enforced in the customer entry points, which the unbuilt customer channel will call), a
-  notification service, the WebSocket gateway (first-frame auth, per-socket audience filtering, Redis/in-memory event bus; contract in `docs/websocket-events.md`), presence and the Prisma schema. The customer channel and the AI worker are **designed in docs but not built**. Do not describe
+- Backend implements `GET /api/health`, the conversations, assignments, messages, notifications, presence and customer-info REST APIs (`docs/api-conversations.md`), the per-agent workspace API for tabs and drafts (`docs/api-workspace.md`), message actions: reply, edit, delete, reactions, forward (`docs/api-message-actions.md`), files, media and voice messages with local-disk storage (`docs/api-attachments.md`), internal notes with mentions and escalation (`docs/api-notes-escalations.md`), tags and conversation priority with inbox filtering and sorting (`docs/api-tags-priority.md`), personal and shared saved reply templates (`docs/api-canned-responses.md`), per-agent chat settings (`docs/api-chat-settings.md`), callbacks with a reminder job (`docs/api-callbacks.md`), call signalling for WebRTC calls (`docs/api-calls.md`; the customer side is service methods only, no customer channel), spam reports, blocked customers and keywords (`docs/api-moderation.md`; enforced in the customer entry points), the customer mobile REST API under `/api/v1/customer`: join room, send text/file/voice, retrieve messages (`docs/api-customer-mobile.md`; dev auth only), customer sockets on `/ws` with `room.join`/`room.leave` and a restricted event set (`docs/websocket-events.md`), a
+  notification service, the WebSocket gateway (first-frame auth, per-socket audience filtering, Redis/in-memory event bus; contract in `docs/websocket-events.md`), presence and the Prisma schema. Push notifications and the AI worker are **designed in docs but not built**. Do not describe
   them as existing.
 - **Authentication is an external service** (separate repo). This backend only consumes it: it must not issue tokens,
   store passwords, or implement login. The service's API contract (token format, verify/introspect endpoint, user/role
