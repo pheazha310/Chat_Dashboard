@@ -28,5 +28,8 @@ logs/
 
 coverage/
 
+# User-uploaded conversation media (runtime artifacts, not source)
+/backend/storage/
+
 # macOS
 .DS_Store

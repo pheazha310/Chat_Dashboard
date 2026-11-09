@@ -15,6 +15,7 @@ export type SocketStatus = "idle" | "connecting" | "open" | "reconnecting";
 
 type Handler<P> = (payload: P) => void;
 
+const CONNECTING = 0;
 const OPEN = 1;
 const MAX_BACKOFF_MS = 10_000;
 const MAX_QUEUED_MESSAGES = 100;
@@ -87,7 +88,14 @@ export class WsClient {
     this.attempts = 0;
     const socket = this.socket;
     this.socket = null;
-    socket?.close();
+    if (socket?.readyState === CONNECTING) {
+      // Closing mid-handshake makes browsers log "closed before the connection is established"
+      // (e.g. React StrictMode's mount/unmount/mount in dev). Close it as soon as it opens instead.
+      socket.onopen = () => socket.close();
+      socket.onmessage = null;
+    } else {
+      socket?.close();
+    }
     this.setStatus("idle");
   }
 

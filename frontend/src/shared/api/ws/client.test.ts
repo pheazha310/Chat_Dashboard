@@ -103,6 +103,24 @@ describe("connection lifecycle", () => {
     expect(sockets).toHaveLength(1);
     expect(client.status).toBe("idle");
   });
+
+  it("defers closing a still-connecting socket until it opens (StrictMode remount)", () => {
+    const client = makeClient();
+    const handler = vi.fn();
+    client.on("notice", handler);
+    client.connect();
+    client.disconnect();
+    expect(sockets[0].readyState).toBe(0);
+
+    client.connect();
+    sockets[0].open();
+    expect(sockets[0].readyState).toBe(3);
+    sockets[0].receive({ type: "notice", payload: { text: "stale" } });
+
+    sockets[1].open();
+    expect(client.status).toBe("open");
+    expect(handler).not.toHaveBeenCalled();
+  });
 });
 
 describe("incoming events", () => {
