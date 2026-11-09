@@ -19,6 +19,7 @@ export default defineConfig({
       exclude: [
         "src/**/*.test.ts",
         "src/server.ts",
+        "src/scripts/**",
         "src/app.ts",
         "src/routes.ts",
         "src/config/**",

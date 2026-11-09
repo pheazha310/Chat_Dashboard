@@ -12,7 +12,8 @@
     "db:validate": "prisma validate",
     "db:migrate": "prisma migrate dev",
     "test": "vitest run",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "user:create-admin": "tsx src/scripts/create-admin.ts"
   },
   "dependencies": {
     "@asteasolutions/zod-to-openapi": "^9.1.0",
@@ -23,6 +24,7 @@
     "express": "^5.3.0",
     "helmet": "^8.3.0",
     "ioredis": "^5.8.2",
+    "jose": "^6.2.15",
     "multer": "^2.5.0",
     "pg": "^8.23.1",
     "pino": "^10.4.0",

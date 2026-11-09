@@ -22,11 +22,20 @@ backend/
     │   ├── presence/        agent availability (Redis live state + Postgres history), REST + used by the socket
     │   ├── realtime/        turns committed changes into audience-targeted events on the event bus (service only)
     │   ├── customers/       customer profile (redacted by role), other conversations, participants (Backend 1 via Directory)
-    │   └── notifications/   list, unread count, mark read, preferences, per-conversation mute; also creates notifications for other modules
+    │   ├── notifications/   list, unread count, mark read, preferences, per-conversation mute; also creates notifications for other modules
+    │   ├── auth/            sign-in, registration, refresh, password change (AuthService); admin account management (UserService);
+    │   │                    access tokens, password hashing, the account check on every token
+    │   ├── roles/           roles and their permissions (admin API)
+    │   ├── chat-identity/   maps a verified token to its chat user and loads the role's permissions (service only)
+    │   ├── profile/         `GET /me` for staff and customers
+    │   ├── customer-channel/ the mobile app's `/api/v1/customer` endpoints (calls other modules' services)
+    │   └── ...              one folder per domain, see the table below
+    ├── scripts/             one-off CLI tasks run with tsx (create-admin.ts: first ADMIN account)
     ├── websocket/           server (transport, heartbeat), auth (first-frame token), handler (event → service),
     │                        events (zod schemas), rooms (per-socket audience filter), bus (Redis / in-memory)
     └── shared/
-        ├── auth/            AuthClient port, DevAuthClient (dev/test only), createAuthClient
+        ├── auth/            AuthClient/AuthContext types, permissions catalog + can(), MappedAuthClient (identity + permission
+        │                    cache), DevAuthClient (dev/test only)
         ├── errors/          AppError.ts (AppError + subclasses)
         ├── middleware/      auth, validate (+ `parsed()`), error-handler, not-found, request-context
         ├── directory/       DevDirectory (dev/test stand-in for Backend 1), CachedDirectory (agent names), createDirectory
@@ -69,7 +78,10 @@ When you add a route, register it in the module's `.openapi.ts` and add it to th
 
 File purposes inside a module: `controller` (HTTP in/out), `service` (business logic, DTO shaping, no `req`/`res`, no
 Prisma), `repository` (Prisma queries and the query builders they need), `routes`, `schema` (zod), `openapi`, `types`.
-Do not add other per-module file kinds (no `mapper`, `query`, `policy`); rules shared by two modules go in `shared/`.
+A module may also hold a helper file for one self-contained concern used only inside it, named
+`<singular>.<concern>.ts` (`attachment.range.ts`, `callback.scheduler.ts`, `auth.tokens.ts`, `auth.password.ts`), or a
+second service when the module owns two clearly separate jobs (`message-action.service.ts`, `user.service.ts`). Do not
+add per-module `query` or `policy` files; rules shared by two modules go in `shared/`.
 
 Rules: no `req`/`res` below controllers; a module never imports another module's repository; add a
 `shared/<folder>` only when a second module needs it.
@@ -93,6 +105,10 @@ Built (each has its API guide, listed in [AGENTS.md](../AGENTS.md)):
 | `callbacks`                                                    | Scheduled callbacks and the reminder job                                                           | api-callbacks.md         |
 | `calls`                                                        | Call records and WebRTC signalling relay                                                           | api-calls.md             |
 | `moderation`                                                   | Blocked customers, blocked keywords, spam reports, audit log                                       | api-moderation.md        |
+| `auth`                                                         | Accounts, sign-in, refresh sessions, password changes, admin account management                    | api-auth.md              |
+| `roles`                                                        | Roles and which permissions each has                                                               | api-roles.md             |
+| `customer-channel`, `profile`                                  | The mobile app's REST API; the signed-in user's own profile                                        | api-customer-mobile.md   |
+| `chat-identity`                                                | Token identity → chat user, role permissions (no routes)                                           | api-auth.md              |
 | `notifications`, `presence`, `customers`, `realtime`, `health` | Notifications, presence and typing, customer info via the `Directory` port, the realtime publisher | api-conversations.md     |
 
 Modules call each other only through services or the ports in `shared/ports/` (`ConversationAccess`,
@@ -101,13 +117,13 @@ Modules call each other only through services or the ports in `shared/ports/` (`
 callback job (`CallbackScheduler`) and the call job (`IntervalJob`); both claim rows in the database, so several instances
 can run them.
 
-Still to build: the customer channel (`/api/v1/customer`, its own authentication; the entry points it will call already
-exist as service methods), the AI worker and handoff (`AiHandoff` models were removed from the schema until designed),
-automations and analytics.
+Still to build: push notifications, the AI worker and handoff (`AiHandoff` models were removed from the schema until
+designed), automations and analytics. Automations and analytics have **no schema or design yet**: propose them and
+update the schema, protocol and docs first.
 
-`auth` is **not** a module that issues tokens (external service, contract unknown); once the contract
-is known it becomes a verifier middleware plus an `AuthClient`. Automations and analytics have **no schema or design
-yet**: propose them and update the schema, protocol and docs first.
+Authentication is owned here (`auth` module): `app-container.ts` chains `AccessTokens` (JWT) → `AccountCheckedAuthClient`
+(disabled or changed-role accounts refused) → `MappedAuthClient` (chat identity + permissions), with `DevAuthClient`
+accepted alongside only when `AUTH_MODE=dev`. REST middleware and the WebSocket gateway share that one `authClient`.
 
 ## Websocket
 

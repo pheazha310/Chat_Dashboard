@@ -1,5 +1,6 @@
 import { ConflictError, ForbiddenError, NotFoundError, BadRequestError } from "@shared/errors/AppError.js";
-import { isSupervisor, type AuthContext } from "@shared/auth/auth.types.js";
+import type { AuthContext } from "@shared/auth/auth.types.js";
+import { can, type Permission } from "@shared/auth/permissions.js";
 import { isOwner } from "@shared/policy/conversation-access.js";
 import type { ConversationAccess, CustomerConversationAccess } from "@shared/ports/conversation-access.js";
 import type { Directory } from "@shared/ports/directory.js";
@@ -79,7 +80,7 @@ export class ModerationService implements CustomerGuard {
   /** The owner of the conversation, or a supervisor, blocks the customer it belongs to. */
   async blockFromConversation(auth: AuthContext, conversationId: string, input: BlockInput): Promise<BlockDto> {
     const state = await this.conversations().requireVisible(auth, conversationId);
-    if (!isSupervisor(auth) && !isOwner(auth, state)) {
+    if (!can(auth, "moderation.block_any") && !isOwner(auth, state)) {
       throw new ForbiddenError("Only the agent who owns the conversation, or a supervisor, can block its customer");
     }
     if (state.customerId === null) throw new ConflictError("This conversation has no customer");
@@ -87,14 +88,14 @@ export class ModerationService implements CustomerGuard {
   }
 
   async blockCustomer(auth: AuthContext, customerId: string, input: BlockInput): Promise<BlockDto> {
-    this.requireSupervisor(auth, "Only a supervisor can block a customer directly");
+    this.require(auth, "moderation.block_any", "You are not allowed to block a customer directly");
     return this.block(auth, customerId, input, null);
   }
 
   /** A supervisor, or the agent who blocked the customer, lifts the block. Anyone else sees nothing to lift. */
   async unblock(auth: AuthContext, customerId: string): Promise<BlockDto> {
     const current = await this.repository.findActiveBlock(customerId);
-    if (!current || (!isSupervisor(auth) && current.blockedBy !== auth.userId)) {
+    if (!current || (!can(auth, "moderation.block_any") && current.blockedBy !== auth.userId)) {
       throw new NotFoundError("This customer is not blocked");
     }
     const lifted = await this.repository.inTransaction(async (tx) => {
@@ -110,7 +111,7 @@ export class ModerationService implements CustomerGuard {
   async listBlocks(auth: AuthContext, query: ListBlocksQuery) {
     const { items, total } = await this.repository.listBlocks(
       query.active,
-      isSupervisor(auth) ? undefined : auth.userId,
+      can(auth, "moderation.block_any") ? undefined : auth.userId,
       (query.page - 1) * query.size,
       query.size,
     );
@@ -126,7 +127,7 @@ export class ModerationService implements CustomerGuard {
   }
 
   async createKeyword(auth: AuthContext, keyword: string): Promise<KeywordDto> {
-    this.requireSupervisor(auth, "Only a supervisor can manage blocked keywords");
+    this.require(auth, "moderation.manage_keywords", "You are not allowed to manage blocked keywords");
     if ((await this.repository.countActiveKeywords()) >= MAX_ACTIVE_KEYWORDS) {
       throw new ConflictError(`At most ${MAX_ACTIVE_KEYWORDS} keywords can be active`);
     }
@@ -147,7 +148,7 @@ export class ModerationService implements CustomerGuard {
   }
 
   async updateKeyword(auth: AuthContext, keywordId: string, input: UpdateKeywordInput): Promise<KeywordDto> {
-    this.requireSupervisor(auth, "Only a supervisor can manage blocked keywords");
+    this.require(auth, "moderation.manage_keywords", "You are not allowed to manage blocked keywords");
     const existing = await this.repository.findKeyword(keywordId);
     if (!existing) throw new NotFoundError("Keyword not found");
     if (input.keyword !== undefined) {
@@ -177,7 +178,7 @@ export class ModerationService implements CustomerGuard {
   }
 
   async deleteKeyword(auth: AuthContext, keywordId: string): Promise<{ id: string }> {
-    this.requireSupervisor(auth, "Only a supervisor can manage blocked keywords");
+    this.require(auth, "moderation.manage_keywords", "You are not allowed to manage blocked keywords");
     const existing = await this.repository.findKeyword(keywordId);
     if (!existing) throw new NotFoundError("Keyword not found");
     await this.repository.inTransaction(async (tx) => {
@@ -234,7 +235,7 @@ export class ModerationService implements CustomerGuard {
   /** Supervisors see every report; an agent sees the ones they filed. */
   async listReports(auth: AuthContext, query: ListReportsQuery) {
     const { items, total } = await this.repository.listReports(
-      { status: query.status, reportedById: isSupervisor(auth) ? undefined : auth.userId },
+      { status: query.status, reportedById: can(auth, "moderation.review_reports") ? undefined : auth.userId },
       (query.page - 1) * query.size,
       query.size,
     );
@@ -253,7 +254,7 @@ export class ModerationService implements CustomerGuard {
 
   /** Supervisors confirm or dismiss a pending report, optionally blocking the customer in the same step. */
   async review(auth: AuthContext, reportId: string, input: ReviewReportInput): Promise<SpamReportDto> {
-    this.requireSupervisor(auth, "Only a supervisor can review spam reports");
+    this.require(auth, "moderation.review_reports", "You are not allowed to review spam reports");
     const existing = await this.repository.findReport(reportId);
     if (!existing) throw new NotFoundError("Spam report not found");
     if (input.blockCustomer && input.status !== "CONFIRMED") {
@@ -304,7 +305,7 @@ export class ModerationService implements CustomerGuard {
   // ─── audit log ─────────────────────────────────────────────────────────────
 
   async listActivities(auth: AuthContext, query: ListActivitiesQuery) {
-    this.requireSupervisor(auth, "Only a supervisor can read the moderation log");
+    this.require(auth, "moderation.view_log", "You are not allowed to read the moderation log");
     const { items, total } = await this.repository.listActivities(
       { targetType: query.targetType, actorId: query.actorId },
       (query.page - 1) * query.size,
@@ -315,8 +316,8 @@ export class ModerationService implements CustomerGuard {
 
   // ─── helpers ───────────────────────────────────────────────────────────────
 
-  private requireSupervisor(auth: AuthContext, message: string) {
-    if (!isSupervisor(auth)) throw new ForbiddenError(message);
+  private require(auth: AuthContext, permission: Permission, message: string) {
+    if (!can(auth, permission)) throw new ForbiddenError(message);
   }
 
   private async block(auth: AuthContext, customerId: string, input: BlockInput, conversationId: string | null) {
@@ -396,7 +397,9 @@ export class ModerationService implements CustomerGuard {
       blockedAt: row.blockedAt.toISOString(),
       unblockedAt: row.unblockedAt === null ? null : row.unblockedAt.toISOString(),
       unblockedBy: row.unblockedBy === null ? null : idToString(row.unblockedBy),
-      permissions: { canUnblock: row.unblockedAt === null && (isSupervisor(auth) || row.blockedBy === auth.userId) },
+      permissions: {
+        canUnblock: row.unblockedAt === null && (can(auth, "moderation.block_any") || row.blockedBy === auth.userId),
+      },
     };
   }
 }

@@ -19,17 +19,27 @@ export function deriveApiUrl(wsUrl: string | undefined): string | undefined {
 
 export const API_URL: string | undefined = (import.meta.env.VITE_API_URL || deriveApiUrl(WS_URL))?.replace(/\/$/, "");
 
-const TOKEN_KEY = "auth.token";
+/** Where the signed-in session (access + refresh token and the user) is kept; written by `shared/api/auth`. */
+export const AUTH_SESSION_KEY = "auth.session";
+/** Older key a host application could set with a bare access token. */
+const LEGACY_TOKEN_KEY = "auth.token";
+
+/** A fixed development token (`VITE_AUTH_TOKEN`). When set, the sign-in screen is skipped. */
+export const DEV_AUTH_TOKEN: string | undefined = import.meta.env.VITE_AUTH_TOKEN || undefined;
 
 /**
- * The access token issued by Backend 1. The sign-in flow belongs to Backend 1's app, so for now the token comes from
- * `VITE_AUTH_TOKEN` (development) or `localStorage["auth.token"]`, which the host application can set after login.
+ * The access token for REST and the WebSocket: `VITE_AUTH_TOKEN` (development), else the signed-in session's token
+ * (kept fresh by `shared/api/auth`), else `localStorage["auth.token"]`.
  */
 export function getAuthToken(): string | undefined {
-  const fromEnv = import.meta.env.VITE_AUTH_TOKEN;
-  if (fromEnv) return fromEnv;
+  if (DEV_AUTH_TOKEN) return DEV_AUTH_TOKEN;
   try {
-    return globalThis.localStorage?.getItem(TOKEN_KEY) || undefined;
+    const stored = globalThis.localStorage?.getItem(AUTH_SESSION_KEY);
+    if (stored) {
+      const token = (JSON.parse(stored) as { accessToken?: unknown }).accessToken;
+      if (typeof token === "string" && token) return token;
+    }
+    return globalThis.localStorage?.getItem(LEGACY_TOKEN_KEY) || undefined;
   } catch {
     return undefined;
   }

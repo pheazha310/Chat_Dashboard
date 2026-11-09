@@ -14,16 +14,39 @@ features) is the same in both, so the mock demo keeps working.
 # 1. backend (needs PostgreSQL with the migration applied, and Redis; see backend/.env.example)
 pnpm dev:backend                      # http://localhost:4000, ws://localhost:4000/ws
 
-# 2. frontend: a Backend 1 token is required; until its contract is known, dev tokens are `dev:<userUuid>:<ROLE>`
+# 2. a staff account to sign in with (the first admin; more are created under /api/v1/admin/users)
+ADMIN_EMAIL=admin@example.com ADMIN_PASSWORD='a long password' pnpm --filter @chat-dashboard/backend user:create-admin
+
+# 3. frontend: shows a sign-in screen, then the dashboard
 cd frontend
+VITE_WS_URL=ws://localhost:4000/ws pnpm dev
+
+# or skip sign-in with a fixed development token (backend AUTH_MODE=dev only)
 VITE_WS_URL=ws://localhost:4000/ws VITE_AUTH_TOKEN=dev:00000000-0000-4000-8000-000000000003:AGENT pnpm dev
 ```
 
-| Variable          | Meaning                                                                                                                                                                                             |
-| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `VITE_WS_URL`     | gateway URL. Setting it switches to the backend mode.                                                                                                                                               |
-| `VITE_API_URL`    | REST base URL. Default: the WebSocket URL's host with `/api/v1/admin` (`ws://h:4000/ws` → `http://h:4000/api/v1/admin`).                                                                            |
-| `VITE_AUTH_TOKEN` | development access token. In production the host app stores the Backend 1 token in `localStorage["auth.token"]` after sign-in; the sign-in flow itself belongs to Backend 1 and is not in this app. |
+| Variable          | Meaning                                                                                                                           |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `VITE_WS_URL`     | gateway URL. Setting it switches to the backend mode.                                                                             |
+| `VITE_API_URL`    | REST base URL. Default: the WebSocket URL's host with `/api/v1/admin` (`ws://h:4000/ws` → `http://h:4000/api/v1/admin`).          |
+| `VITE_AUTH_TOKEN` | fixed development access token; skips the sign-in screen. Without it, staff sign in with email and password (`docs/api-auth.md`). |
+
+### Sign-in and tokens
+
+- **`shared/api/auth`** owns the session: `signIn` (`POST /auth/login`), `signOut` (`POST /auth/logout`, then forgotten
+  locally), and `refreshSession` (`POST /auth/refresh`). The session (access + refresh token and the user) is kept in
+  `localStorage["auth.session"]`; `getAuthToken()` reads its access token, so REST, uploads and the WebSocket use it.
+- **Refresh rotates and reuse ends the sign-in**, so only one refresh runs at a time: per tab, and across tabs with the
+  Web Locks API (a tab that finds the token already rotated by another adopts it). `startSessionKeeper` (started in
+  `App`) refreshes a minute before the access token expires and again when the tab becomes visible, and follows
+  sign-in/out in other tabs through the `storage` event.
+- REST refreshes ahead of expiry and retries a `401` once after a refresh; a WebSocket closed with `4401` triggers a
+  refresh so the next reconnect uses the new token. A refused refresh (session revoked, account disabled, role changed)
+  signs out; the app then reloads to the sign-in screen, so nothing of the previous user's inbox stays in memory.
+- The UI: `pages/login` (`features/auth` `SignInForm`) is shown instead of the dashboard until someone is signed in, and
+  realtime starts only after sign-in. The avatar in the top bar (`ProfileMenu`) shows the account and **Sign out**.
+- Mock mode and `VITE_AUTH_TOKEN` skip all of this. The refresh token sits in `localStorage`, readable by any script on
+  the page: keep the dashboard free of third-party scripts and served with a strict CSP.
 
 Backend `CORS_ORIGIN` must include the frontend origin (default `http://localhost:5173`); the gateway checks it too.
 With no token, or a token the gateway rejects (close code 4401/4403), the socket stops retrying and the app stays

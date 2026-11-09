@@ -1,5 +1,6 @@
 import { prisma, type Db } from "@config/database.js";
-import { isSupervisor, type AuthContext } from "@shared/auth/auth.types.js";
+import type { AuthContext } from "@shared/auth/auth.types.js";
+import { can } from "@shared/auth/permissions.js";
 import { escapeLike } from "@shared/utils/like.js";
 import { pageArgs } from "@shared/utils/pagination.js";
 import type { Prisma } from "../../../prisma/generated/prisma/client.js";
@@ -12,7 +13,10 @@ export const visibleTo = (auth: AuthContext): Prisma.CannedResponseWhereInput =>
 
 /** What the caller may change: their own personal templates, and shared ones if they are a supervisor. */
 export const manageableBy = (auth: AuthContext): Prisma.CannedResponseWhereInput => ({
-  OR: [{ scope: "PERSONAL", createdBy: auth.userId }, ...(isSupervisor(auth) ? [{ scope: "SHARED" }] : [])],
+  OR: [
+    { scope: "PERSONAL", createdBy: auth.userId },
+    ...(can(auth, "canned_responses.manage_shared") ? [{ scope: "SHARED" }] : []),
+  ],
 });
 
 export class CannedResponseRepository {

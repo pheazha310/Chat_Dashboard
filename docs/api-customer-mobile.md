@@ -12,9 +12,11 @@ Envelope: `{ "status": "success", "data": ... }` (errors as in [api-response-con
 token's user**: no request carries a `customerId`, so a customer can only ever reach their own conversations (someone
 else's conversation, file or message is a `404`).
 
-The real auth service contract is still unknown, so only the dev stand-in exists: with `AUTH_MODE=dev` a token is
-`dev:<customerUuid>:CUSTOMER` (refused in production). `AUTH_MODE=external` stays unimplemented until Backend 1
-provides its contract; the customer routes then use the same `AuthClient` port as the staff routes.
+The app gets its token from this backend: `POST /api/v1/customer/auth/register` (new customer) or
+`POST /api/v1/customer/auth/login`, then `POST /api/v1/customer/auth/refresh` before the 15-minute access token expires
+(one refresh at a time; each refresh token works once). Sign out with `POST /api/v1/customer/auth/logout`. Full contract,
+lockout and rate limits: [api-auth.md](api-auth.md). Staff accounts cannot sign in here. With `AUTH_MODE=dev` (refused in
+production) a `dev:<customerUuid>:CUSTOMER` token also works for local testing.
 
 ## Endpoints
 

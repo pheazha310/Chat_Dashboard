@@ -9,6 +9,7 @@ import type {
   ConversationSummaries,
 } from "@shared/ports/conversation-access.js";
 import type { AgentProfile, Directory } from "@shared/ports/directory.js";
+import type { CustomerIdentities } from "@shared/ports/identity.js";
 import type { RealtimeNotifier } from "@shared/ports/realtime.js";
 import type { SystemMessagePort } from "@shared/ports/system-message.js";
 import { bestEffort } from "@shared/utils/best-effort.js";
@@ -40,6 +41,7 @@ export class ConversationService implements ConversationAccess, CustomerConversa
     private readonly directory: Directory,
     private readonly notifications: NotificationService,
     private readonly availableAgents: AvailableAgents,
+    private readonly identities: CustomerIdentities = { ensureCustomer: async () => {} },
   ) {}
 
   async list(auth: AuthContext, query: ListQuery) {
@@ -68,6 +70,8 @@ export class ConversationService implements ConversationAccess, CustomerConversa
    * verified with Backend 1 (its API contract is unknown), so callers are trusted to send real ids.
    */
   async create(auth: AuthContext, input: CreateInput) {
+    // conversations.customer_id references chat_users; a customer who never signed in gets an identity now.
+    await this.identities.ensureCustomer(input.customerId);
     const { id, created } = await this.repository.inTransaction(async (tx) => {
       await tx.lockCustomer(input.customerId);
       if (input.applicationId !== undefined) {

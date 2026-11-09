@@ -1,5 +1,6 @@
 import { ConflictError, ForbiddenError, NotFoundError } from "@shared/errors/AppError.js";
-import { isSupervisor, type AuthContext } from "@shared/auth/auth.types.js";
+import type { AuthContext } from "@shared/auth/auth.types.js";
+import { can } from "@shared/auth/permissions.js";
 import { isOwner } from "@shared/policy/conversation-access.js";
 import type { ConversationAccess } from "@shared/ports/conversation-access.js";
 import type { RealtimeNotifier } from "@shared/ports/realtime.js";
@@ -57,7 +58,8 @@ export class EscalationService {
     await this.conversations().requireVisible(auth, existing.conversationId);
 
     const requester = existing.requestedBy === auth.userId;
-    const allowed = input.status === "RESOLVED" ? isSupervisor(auth) : isSupervisor(auth) || requester;
+    const allowed =
+      input.status === "RESOLVED" ? can(auth, "escalations.resolve") : can(auth, "escalations.manage_all") || requester;
     if (!allowed) {
       throw new ForbiddenError(
         input.status === "RESOLVED"

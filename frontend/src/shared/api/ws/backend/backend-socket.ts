@@ -1,3 +1,4 @@
+import { authRequired, refreshSession } from "@/shared/api/auth";
 import { useSessionStore } from "@/shared/api/session";
 import type { WebSocketLike } from "../client";
 import { BackendTranslator } from "./translator";
@@ -50,7 +51,7 @@ export class BackendSocket implements WebSocketLike {
   ) {
     const token = getToken();
     if (!token || token === rejectedToken) {
-      console.warn(token ? "[ws] the access token was rejected" : "[ws] no access token configured (VITE_AUTH_TOKEN)");
+      console.warn(token ? "[ws] the access token was rejected" : "[ws] not signed in (no access token)");
       // WsClient installs its handlers right after construction, so fail on the next tick.
       setTimeout(() => this.fail(), 0);
       return;
@@ -61,7 +62,11 @@ export class BackendSocket implements WebSocketLike {
     socket.onmessage = (event) => this.receive(event.data, token);
     socket.onerror = (event) => this.onerror?.(event);
     socket.onclose = (event) => {
-      if (event.code !== undefined && AUTH_CLOSE_CODES.has(event.code)) rejectedToken = token;
+      if (event.code !== undefined && AUTH_CLOSE_CODES.has(event.code)) {
+        rejectedToken = token;
+        // Expired or out of date: a refreshed token lets the next reconnect in; a refused refresh signs out.
+        if (event.code === 4401 && authRequired) void refreshSession().catch(() => false);
+      }
       this.finish();
     };
   }

@@ -12,7 +12,7 @@ export const createRegistry = () => {
     type: "http",
     scheme: "bearer",
     description:
-      "Access token issued by Backend 1. Until its contract is provided, AUTH_MODE=dev accepts `dev:<userId>:<ROLE>`.",
+      "Access token from `POST /auth/login` or `POST /auth/refresh` (a 15-minute JWT). AUTH_MODE=dev also accepts `dev:<userId>:<ROLE>`.",
   });
   return registry;
 };
@@ -24,7 +24,7 @@ export const generateDocument = (registry: OpenAPIRegistry) =>
       title: "Chat Dashboard API (Backend 2)",
       version: "1.0.0",
       description:
-        "Chat backend: conversations, assignments and messages. Identity, customers and loan data live in Backend 1.",
+        "Chat backend: sign-in and accounts, conversations, assignments and messages. Loan data lives in Backend 1.",
     },
     servers: [{ url: "/api/v1/admin" }],
   });

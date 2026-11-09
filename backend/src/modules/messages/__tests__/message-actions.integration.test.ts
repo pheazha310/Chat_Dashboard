@@ -23,6 +23,7 @@ describe.skipIf(!url)("message actions on PostgreSQL", () => {
     db = (await import("@config/database.js")).prisma;
     await assertTestDatabase(db);
     c = await createTestContainer();
+    await c.identify(agent1, agent2, supervisor);
   });
   afterAll(async () => {
     await db?.$disconnect();

@@ -8,6 +8,7 @@ import { AttachmentRepository } from "@modules/attachments/attachment.repository
 import { AttachmentService } from "@modules/attachments/attachment.service.js";
 import { ConversationRepository } from "@modules/conversations/conversation.repository.js";
 import { ConversationService } from "@modules/conversations/conversation.service.js";
+import { ChatIdentityRepository, ChatIdentityService } from "@modules/chat-identity/index.js";
 import { MessageRepository } from "@modules/messages/message.repository.js";
 import { MessageActionService } from "@modules/messages/message-action.service.js";
 import { MessageService } from "@modules/messages/message.service.js";
@@ -73,6 +74,7 @@ export function createContainer(
     directory,
     notifications,
     presence,
+    new ChatIdentityService(new ChatIdentityRepository()),
   );
   const assignments = new AssignmentService(new AssignmentRepository(), notifications, messages, realtime);
   const attachments = new AttachmentService(

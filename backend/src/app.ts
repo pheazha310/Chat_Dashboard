@@ -3,6 +3,7 @@ import express from "express";
 import helmet from "helmet";
 import { pinoHttp } from "pino-http";
 import { corsOptions } from "@config/cors.js";
+import { env } from "@config/env.js";
 import { logger } from "@config/logger.js";
 import { errorHandler } from "@shared/middleware/error-handler.middleware.js";
 import { notFound } from "@shared/middleware/not-found.middleware.js";
@@ -11,6 +12,9 @@ import { healthRoutes } from "@modules/health/index.js";
 import { ADMIN_API_PREFIX, CUSTOMER_API_PREFIX, apiRouter, customerApiRouter } from "./routes.js";
 
 export const app = express();
+
+// Behind a load balancer the client IP (sign-in rate limit, session records) comes from X-Forwarded-For.
+app.set("trust proxy", env.TRUST_PROXY);
 
 app.use(helmet());
 app.use(cors(corsOptions));

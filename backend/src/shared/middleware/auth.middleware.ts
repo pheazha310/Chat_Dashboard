@@ -16,7 +16,7 @@ export const bearerToken = (header: string | undefined) => {
   return match?.[1];
 };
 
-/** Verifies the Backend 1 access token and attaches `req.auth`. Rejects non-dashboard roles. */
+/** Verifies the access token and attaches `req.auth`. Rejects non-dashboard roles. */
 export function authenticate(client: AuthClient, allowed: readonly Role[] = DASHBOARD_ROLES): RequestHandler {
   return async (req, _res, next) => {
     const token = bearerToken(req.headers.authorization);

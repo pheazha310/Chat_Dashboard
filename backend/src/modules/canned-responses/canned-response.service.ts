@@ -1,5 +1,6 @@
 import { ConflictError, ForbiddenError, NotFoundError } from "@shared/errors/AppError.js";
-import { isSupervisor, type AuthContext } from "@shared/auth/auth.types.js";
+import type { AuthContext } from "@shared/auth/auth.types.js";
+import { can } from "@shared/auth/permissions.js";
 import { idToString } from "@shared/utils/ids.js";
 import { pageMeta } from "@shared/utils/pagination.js";
 import type { CannedResponse } from "../../../prisma/generated/prisma/client.js";
@@ -26,7 +27,7 @@ export class CannedResponseService {
   }
 
   async create(auth: AuthContext, input: CreateInput): Promise<CannedResponseDto> {
-    if (input.scope === "SHARED" && !isSupervisor(auth)) {
+    if (input.scope === "SHARED" && !can(auth, "canned_responses.manage_shared")) {
       throw new ForbiddenError("Only a supervisor can create a shared template");
     }
     if (input.shortcut !== undefined) await this.requireFreeShortcut(input.scope, auth.userId, input.shortcut);
@@ -87,12 +88,14 @@ export class CannedResponseService {
 const mine = (auth: AuthContext, row: CannedResponse) => row.createdBy === auth.userId;
 
 function canRead(auth: AuthContext, row: CannedResponse) {
-  if (row.scope === "SHARED") return row.isActive || isSupervisor(auth);
+  if (row.scope === "SHARED") return row.isActive || can(auth, "canned_responses.manage_shared");
   return row.scope === "PERSONAL" && mine(auth, row);
 }
 
 function canManage(auth: AuthContext, row: CannedResponse) {
-  return row.scope === "SHARED" ? isSupervisor(auth) : row.scope === "PERSONAL" && mine(auth, row);
+  return row.scope === "SHARED"
+    ? can(auth, "canned_responses.manage_shared")
+    : row.scope === "PERSONAL" && mine(auth, row);
 }
 
 const toDto = (row: CannedResponse, auth: AuthContext): CannedResponseDto => ({

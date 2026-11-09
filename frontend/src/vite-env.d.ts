@@ -5,6 +5,6 @@ interface ImportMetaEnv {
   readonly VITE_WS_URL?: string;
   /** REST base URL, e.g. http://localhost:4000/api/v1/admin. Defaults to the WebSocket URL's host with the /api/v1/admin path. */
   readonly VITE_API_URL?: string;
-  /** Development access token (Backend 1 token). In production the host app stores it in localStorage "auth.token". */
+  /** Development access token (e.g. `dev:<uuid>:AGENT` with backend AUTH_MODE=dev). When set, the sign-in screen is skipped. */
   readonly VITE_AUTH_TOKEN?: string;
 }

@@ -1,3 +1,4 @@
+import type { AuthContext } from "@shared/auth/auth.types.js";
 import type { BusEvent } from "@shared/events/event-bus.js";
 
 /** Integration tests truncate tables: refuse to run unless we are really connected to a test database. */
@@ -42,6 +43,15 @@ export async function createTestContainer() {
     db,
     redis,
     events,
+    /**
+     * Gives hand-made identities a chat identity, as signing in does (messages and attachments reference chat_users).
+     * Tests that call services directly with `{ userId, role }` call this once for the ids they use.
+     */
+    identify: async (...auths: AuthContext[]) => {
+      const { ChatIdentityRepository, ChatIdentityService } = await import("@modules/chat-identity/index.js");
+      const identities = new ChatIdentityService(new ChatIdentityRepository(db));
+      for (const auth of auths) await identities.resolve(auth);
+    },
     /** Events of one type published since the last `events.length = 0`. */
     published: (type: string) => events.filter((event) => event.type === type),
   };

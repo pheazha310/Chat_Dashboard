@@ -1,5 +1,6 @@
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "@shared/errors/AppError.js";
-import { isSupervisor, type AuthContext } from "@shared/auth/auth.types.js";
+import type { AuthContext } from "@shared/auth/auth.types.js";
+import { can } from "@shared/auth/permissions.js";
 import { canView, permissionsFor } from "@shared/policy/conversation-access.js";
 import type { RealtimeNotifier } from "@shared/ports/realtime.js";
 import { bestEffort } from "@shared/utils/best-effort.js";
@@ -76,7 +77,7 @@ export class MessageActionService {
       const { message } = await this.loadVisible(tx, auth, messageId);
       if (message.senderType === "SYSTEM") throw new ForbiddenError("System messages cannot be deleted");
       const own = message.senderType === "AGENT" && message.senderId === auth.userId;
-      if (!own && !isSupervisor(auth)) throw new ForbiddenError("You can only delete your own messages");
+      if (!own && !can(auth, "messages.delete_any")) throw new ForbiddenError("You can only delete your own messages");
 
       const deleted = await tx.softDelete(message.id, auth.userId);
       return { message: deleted, previewChanged: await this.refreshPreview(tx, deleted) };
@@ -97,9 +98,10 @@ export class MessageActionService {
       async (tx) => (await this.loadVisible(tx, auth, messageId, true)).message,
     );
     const own = message.senderType === "AGENT" && message.senderId === auth.userId;
-    if (!own && !isSupervisor(auth))
+    if (!own && !can(auth, "messages.view_history_any"))
       throw new ForbiddenError("Only the author or a supervisor can see the edit history");
-    if (message.deletedAt !== null && !isSupervisor(auth)) throw new NotFoundError("Message not found");
+    if (message.deletedAt !== null && !can(auth, "messages.view_history_any"))
+      throw new NotFoundError("Message not found");
     const edits = await this.repository.listEditHistory(message.id);
     return {
       messageId: idToString(message.id),

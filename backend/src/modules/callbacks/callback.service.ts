@@ -6,7 +6,8 @@ import {
   NotFoundError,
   ServiceUnavailableError,
 } from "@shared/errors/AppError.js";
-import { isSupervisor, type AuthContext } from "@shared/auth/auth.types.js";
+import type { AuthContext } from "@shared/auth/auth.types.js";
+import { can } from "@shared/auth/permissions.js";
 import type { Directory } from "@shared/ports/directory.js";
 import type { ConversationAccess } from "@shared/ports/conversation-access.js";
 import type { RealtimeNotifier } from "@shared/ports/realtime.js";
@@ -61,7 +62,7 @@ export class CallbackService {
 
   /** My callbacks (assigned to me or scheduled by me), soonest first. Supervisors can ask for everyone's. */
   async list(auth: AuthContext, query: ListCallbacksQuery) {
-    if (query.scope === "all" && !isSupervisor(auth)) {
+    if (query.scope === "all" && !can(auth, "callbacks.view_all")) {
       throw new ForbiddenError("Only a supervisor can list everyone's callbacks");
     }
     const { items, total } = await this.repository.list(
@@ -244,7 +245,7 @@ export class CallbackService {
   private async requireAccess(auth: AuthContext, callbackId: string): Promise<CallbackRow> {
     const row = await this.repository.findById(callbackId);
     if (!row) throw new NotFoundError("Callback not found");
-    if (!isSupervisor(auth) && !involved(auth, row)) {
+    if (!can(auth, "callbacks.view_all") && !involved(auth, row)) {
       await this.conversations().requireVisible(auth, row.conversationId);
     }
     return row;
@@ -252,7 +253,7 @@ export class CallbackService {
 
   private async requireManageable(auth: AuthContext, callbackId: string): Promise<CallbackRow> {
     const row = await this.requireAccess(auth, callbackId);
-    if (!isSupervisor(auth) && !involved(auth, row)) {
+    if (!can(auth, "callbacks.manage_all") && !involved(auth, row)) {
       throw new ForbiddenError("Only the assignee, the creator or a supervisor can change a callback");
     }
     if (!OPEN.includes(row.status as CallbackStatus)) throw new ConflictError("This callback is already closed");
@@ -301,6 +302,6 @@ function toPublic(row: CallbackRow): Omit<CallbackDto, "permissions"> {
 
 function toCallback(row: CallbackRow, auth: AuthContext): CallbackDto {
   const open = OPEN.includes(row.status as CallbackStatus);
-  const manages = open && (isSupervisor(auth) || involved(auth, row));
+  const manages = open && (can(auth, "callbacks.manage_all") || involved(auth, row));
   return { ...toPublic(row), permissions: { canEdit: manages, canComplete: manages, canCancel: manages } };
 }

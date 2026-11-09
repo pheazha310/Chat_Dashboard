@@ -2,7 +2,7 @@
   "info": {
     "name": "Chat Dashboard - Backend 2 (staff API)",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "description": "Dev auth only: Bearer dev:<userId>:<ROLE> (AUTH_MODE=dev). Other tokens: dev:00000000-0000-4000-8000-000000000004:AGENT, dev:00000000-0000-4000-8000-000000000009:SUPERVISOR. Run 'Create' first, then 'Take over' before sending messages. FR-14 to FR-27 folders were added in the enhanced-chat work: run Conversations > Create, Assignment > Take over, Messages > Send first; most requests then work with the saved variables. Customer-side calls, moderation enforcement and the file/voice uploads need a customer channel or files, see docs/api-*.md."
+    "description": "Sign in first: Auth and accounts > 'Sign in (staff)' saves {{token}} (create the first admin with `pnpm --filter @chat-dashboard/backend user:create-admin`). With AUTH_MODE=dev you can instead set token to dev:<userId>:<ROLE>, e.g. dev:00000000-0000-4000-8000-000000000004:AGENT. Other tokens: dev:00000000-0000-4000-8000-000000000004:AGENT, dev:00000000-0000-4000-8000-000000000009:SUPERVISOR. Run 'Create' first, then 'Take over' before sending messages. FR-14 to FR-27 folders were added in the enhanced-chat work: run Conversations > Create, Assignment > Take over, Messages > Send first; most requests then work with the saved variables. Customer-side calls, moderation enforcement and the file/voice uploads need a customer channel or files, see docs/api-*.md."
   },
   "auth": {
     "type": "bearer",
@@ -86,6 +86,22 @@
     {
       "key": "customerConvId",
       "value": ""
+    },
+    {
+      "key": "refreshToken",
+      "value": ""
+    },
+    {
+      "key": "customerRefreshToken",
+      "value": ""
+    },
+    {
+      "key": "userId",
+      "value": ""
+    },
+    {
+      "key": "roleId",
+      "value": "3"
     }
   ],
   "item": [
@@ -105,6 +121,520 @@
             },
             "auth": {
               "type": "noauth"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth and accounts",
+      "description": "Sign-in, tokens and account management. See docs/api-auth.md.",
+      "item": [
+        {
+          "name": "Sign in (staff) - saves token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "auth", "login"],
+              "query": []
+            },
+            "description": "Public. Create the first admin with `pnpm --filter @chat-dashboard/backend user:create-admin`. Saves {{token}} and {{refreshToken}}.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@example.com\",\n  \"password\": \"change-me-please\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json().data;",
+                  "if (data && data.accessToken) {",
+                  "  pm.collectionVariables.set('token', data.accessToken);",
+                  "  pm.collectionVariables.set('refreshToken', data.refreshToken);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Refresh tokens (staff)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/auth/refresh",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "auth", "refresh"],
+              "query": []
+            },
+            "description": "Public. Rotates: the old refresh token stops working. Replaying a used one revokes the whole sign-in.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json().data;",
+                  "if (data && data.accessToken) {",
+                  "  pm.collectionVariables.set('token', data.accessToken);",
+                  "  pm.collectionVariables.set('refreshToken', data.refreshToken);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Sign out this device",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/auth/logout",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "auth", "logout"],
+              "query": []
+            },
+            "description": "Public, always 204.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Sign out everywhere",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/auth/logout-all",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "auth", "logout-all"],
+              "query": []
+            },
+            "description": "Revokes every refresh token of the caller."
+          }
+        },
+        {
+          "name": "My account",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/auth/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "auth", "me"],
+              "query": []
+            },
+            "description": "The signed-in account."
+          }
+        },
+        {
+          "name": "Change my password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/auth/me/password",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "auth", "me", "password"],
+              "query": []
+            },
+            "description": "Signs out other devices; returns a new sign-in.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"currentPassword\": \"change-me-please\",\n  \"newPassword\": \"a-new-password\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json().data;",
+                  "if (data && data.accessToken) {",
+                  "  pm.collectionVariables.set('token', data.accessToken);",
+                  "  pm.collectionVariables.set('refreshToken', data.refreshToken);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List accounts",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/users?role=AGENT&page=1&size=25",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "users"],
+              "query": [
+                {
+                  "key": "role",
+                  "value": "AGENT"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "size",
+                  "value": "25"
+                }
+              ]
+            },
+            "description": "Supervisors and admins."
+          }
+        },
+        {
+          "name": "Create staff account",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/users",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "users"],
+              "query": []
+            },
+            "description": "Admins only.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"agent@example.com\",\n  \"displayName\": \"First Agent\",\n  \"role\": \"AGENT\",\n  \"password\": \"agent-password\"\n}"
+            }
+          }
+        },
+        {
+          "name": "One account",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/users/{{userId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "users", "{{userId}}"],
+              "query": []
+            },
+            "description": "Supervisors and admins."
+          }
+        },
+        {
+          "name": "Change account (role, status, name)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/users/{{userId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "users", "{{userId}}"],
+              "query": []
+            },
+            "description": "Needs users.manage (admins by default). DISABLED or a new role signs the user out.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"DISABLED\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Set a new password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/users/{{userId}}/password",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "users", "{{userId}}", "password"],
+              "query": []
+            },
+            "description": "Admins only. Signs the user out everywhere.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"password\": \"a-reset-password\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Roles and their permissions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/roles",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "roles"],
+              "query": []
+            },
+            "description": "Needs roles.read (supervisors and admins by default). See docs/api-roles.md."
+          }
+        },
+        {
+          "name": "Permission catalogue",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/permissions",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "permissions"],
+              "query": []
+            },
+            "description": "Every permission a role can have, as module.action. Needs roles.read."
+          }
+        },
+        {
+          "name": "Set a role's permissions",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/roles/{{roleId}}/permissions",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "roles", "{{roleId}}", "permissions"],
+              "query": []
+            },
+            "description": "Needs roles.manage (admins by default). Replaces the whole set; ADMIN must keep users.manage and roles.manage; customer roles get none. Applies within 60 s.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"permissions\": [\"conversations.view_all\", \"tags.delete\"]\n}"
+            }
+          }
+        },
+        {
+          "name": "Register (customer) - saves customerToken",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/customer/auth/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "customer", "auth", "register"],
+              "query": []
+            },
+            "description": "Public. Creates a CUSTOMER and signs them in.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"customer@example.com\",\n  \"password\": \"customer-password\",\n  \"displayName\": \"Dara\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json().data;",
+                  "if (data && data.accessToken) {",
+                  "  pm.collectionVariables.set('customerToken', data.accessToken);",
+                  "  pm.collectionVariables.set('customerRefreshToken', data.refreshToken);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Sign in (customer) - saves customerToken",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/customer/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "customer", "auth", "login"],
+              "query": []
+            },
+            "description": "Public. Staff accounts are refused here.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"customer@example.com\",\n  \"password\": \"customer-password\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json().data;",
+                  "if (data && data.accessToken) {",
+                  "  pm.collectionVariables.set('customerToken', data.accessToken);",
+                  "  pm.collectionVariables.set('customerRefreshToken', data.refreshToken);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Refresh tokens (customer)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/customer/auth/refresh",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "customer", "auth", "refresh"],
+              "query": []
+            },
+            "description": "Public.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{customerRefreshToken}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json().data;",
+                  "if (data && data.accessToken) {",
+                  "  pm.collectionVariables.set('customerToken', data.accessToken);",
+                  "  pm.collectionVariables.set('customerRefreshToken', data.refreshToken);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Sign out (customer)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/customer/auth/logout",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "customer", "auth", "logout"],
+              "query": []
+            },
+            "description": "Public, always 204.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{customerRefreshToken}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "My account (customer)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/customer/auth/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "customer", "auth", "me"],
+              "query": []
+            },
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerToken}}",
+                  "type": "string"
+                }
+              ]
             }
           }
         }

@@ -21,6 +21,13 @@ describe("MappedAuthClient", () => {
     expect(await client.verifyToken("t")).toEqual({ userId: uid(1), role: "AGENT", chatUserId: uid(900) });
   });
 
+  it("carries the role's permissions, also from the cache", async () => {
+    identities.resolve.mockResolvedValue({ chatUserId: uid(900), permissions: new Set(["tags.delete"]) });
+    expect((await client.verifyToken("t")).permissions).toEqual(new Set(["tags.delete"]));
+    expect((await client.verifyToken("t")).permissions).toEqual(new Set(["tags.delete"]));
+    expect(identities.resolve).toHaveBeenCalledTimes(1);
+  });
+
   it("does not map an identity whose token is invalid", async () => {
     inner.verifyToken.mockRejectedValue(new UnauthorizedError("Invalid token"));
     await expect(client.verifyToken("bad")).rejects.toBeInstanceOf(UnauthorizedError);

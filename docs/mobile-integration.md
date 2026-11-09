@@ -7,16 +7,18 @@ How the customer's mobile app connects to the chat backend. Reference docs: [api
 
 | Concern              | How                                                                                          |
 | -------------------- | -------------------------------------------------------------------------------------------- |
-| Identity             | Backend 1 authenticates the customer. The app sends that bearer token to the chat backend.   |
+| Identity             | The chat backend registers and signs in customers and issues their tokens.                   |
 | Sending              | REST (`POST /api/v1/customer/...`), or `message.send` over the socket for text.              |
 | Receiving            | `/ws` for live events, REST `?after=<seq>` to catch up. The app polls if the socket is down. |
 | Same chat as the web | The dashboard and the app use the same conversations, messages and events.                   |
 
 ## Authentication and identity
 
-1. The customer signs in with Backend 1 and gets a token. **The chat backend never sees a password and issues no
-   tokens.** Today only the dev stand-in exists (`AUTH_MODE=dev`): the token is `dev:<customerUuid>:CUSTOMER`. The real
-   verification contract is pending from Backend 1.
+1. The customer registers (`POST /api/v1/customer/auth/register`) or signs in (`POST /api/v1/customer/auth/login`) and
+   gets an access token (15 minutes) and a refresh token. Before the access token expires, call
+   `POST /api/v1/customer/auth/refresh` (one call at a time; store only the newest refresh token, in the platform's
+   secure storage). See [api-auth.md](api-auth.md). For local testing `AUTH_MODE=dev` also accepts
+   `dev:<customerUuid>:CUSTOMER`.
 2. Send `Authorization: Bearer <token>` on every REST call. Only `CUSTOMER` tokens are accepted under `/api/v1/customer`.
 3. The customer is always the token's user. No request carries a customer id, and someone else's conversation, file or
    message answers `404`.
@@ -80,12 +82,13 @@ The same applies when the app returns from the background, and it is the fallbac
 
 Envelope `{ "status": "error", "error": { "code", "message" } }` ([api-response-contracts.md](api-response-contracts.md)).
 `400` validation or a disallowed file, `401` missing or invalid token, `403` blocked customer or disabled chat user or a
-staff token, `404` not found or not yours, `413` file too large. There is no rate limiting yet.
+staff token, `404` not found or not yours, `413` file too large, `429` too many sign-in attempts. Only sign-in,
+registration and refresh are rate limited.
 
 ## Not available yet
 
-Push notifications (FCM/APNs to `push_devices`), customer-side calls over REST, read receipts for customers, and the real
-Backend 1 token verification (dev tokens only).
+Push notifications (FCM/APNs to `push_devices`), customer-side calls over REST, read receipts for customers, email
+verification and "forgot password" by email.
 
 ## Trying it without the app
 

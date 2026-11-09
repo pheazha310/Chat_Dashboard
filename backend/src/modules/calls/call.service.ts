@@ -1,6 +1,7 @@
 import { createHmac } from "node:crypto";
 import { ConflictError, ForbiddenError, NotFoundError } from "@shared/errors/AppError.js";
-import { isSupervisor, type AuthContext } from "@shared/auth/auth.types.js";
+import type { AuthContext } from "@shared/auth/auth.types.js";
+import { can } from "@shared/auth/permissions.js";
 import { isOwner } from "@shared/policy/conversation-access.js";
 import type {
   AccessibleConversationState,
@@ -272,7 +273,7 @@ export class CallService {
     const { row, state } = await this.load(actor, callId);
     const party = partyOf(actor);
     const joined = row.callParticipants.some((p) => p.joinedAt !== null && isActor(actor, p));
-    if (!joined && !(actor.type === "AGENT" && isSupervisor(actor.auth))) {
+    if (!joined && !(actor.type === "AGENT" && can(actor.auth, "calls.end_any"))) {
       throw new ForbiddenError("Only a participant or a supervisor can end a call");
     }
     if (row.status !== "ACTIVE") {
@@ -360,7 +361,8 @@ export class CallService {
         canEnd:
           agent &&
           row.status === "ACTIVE" &&
-          (isSupervisor(actor.auth) || row.callParticipants.some((p) => p.joinedAt !== null && isActor(actor, p))),
+          (can(actor.auth, "calls.end_any") ||
+            row.callParticipants.some((p) => p.joinedAt !== null && isActor(actor, p))),
       },
     };
   }
@@ -406,7 +408,7 @@ const isActor = (actor: CallActor, participant: { participantType: string; parti
 function canAnswer(actor: CallActor, row: CallRow, state: AccessibleConversationState): boolean {
   if (row.initiatedByType === "AGENT") return actor.type === "CUSTOMER" && actor.id === state.customerId;
   if (actor.type !== "AGENT") return false;
-  return isSupervisor(actor.auth) || isOwner(actor.auth, state) || state.assignedAgentId === null;
+  return can(actor.auth, "calls.answer_any") || isOwner(actor.auth, state) || state.assignedAgentId === null;
 }
 
 const isCaller = (row: CallRow, p: { participantType: string; participantId: string }) =>
