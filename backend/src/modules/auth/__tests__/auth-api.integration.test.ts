@@ -43,7 +43,7 @@ describe.skipIf(!url)("authentication over HTTP", () => {
   });
 
   beforeEach(async () => {
-    await db.$executeRaw`TRUNCATE users, auth_sessions, chat_users CASCADE`;
+    await db.$executeRaw`TRUNCATE users, refresh_tokens, chat_users CASCADE`;
     await users.bootstrapAdmin({ email: "admin@example.com", displayName: "Admin", password: "admin-password" });
   });
 
@@ -133,8 +133,8 @@ describe.skipIf(!url)("authentication over HTTP", () => {
     expect(
       (await call("/api/v1/admin/auth/refresh", { body: { refreshToken: second.body.data.refreshToken } })).status,
     ).toBe(401);
-    expect(await db.authSession.count({ where: { revokedAt: null } })).toBe(0);
-    const chain = await db.authSession.findMany({
+    expect(await db.refreshToken.count({ where: { revokedAt: null } })).toBe(0);
+    const chain = await db.refreshToken.findMany({
       orderBy: { createdAt: "asc" },
       select: { id: true, replacedById: true },
     });
@@ -202,9 +202,30 @@ describe.skipIf(!url)("authentication over HTTP", () => {
     const refreshed = (await call("/api/v1/admin/auth/refresh", { body: { refreshToken: first.refreshToken } })).body
       .data;
     expect(refreshed.refreshTokenExpiresAt).toBe(first.refreshTokenExpiresAt);
-    await db.authSession.updateMany({ data: { expiresAt: new Date(Date.now() - 1000) } });
+    await db.refreshToken.updateMany({ data: { expiresAt: new Date(Date.now() - 1000) } });
     await staffLogin("admin@example.com", "admin-password");
-    expect(await db.authSession.count()).toBe(1);
+    expect(await db.refreshToken.count()).toBe(1);
+  });
+
+  it("deletes every user's expired sessions in batches (the cleanup job's SQL), and only those", async () => {
+    const { authService } = await import("../../../app-container.js");
+    const admin = await db.authUser.findUniqueOrThrow({ where: { email: "admin@example.com" } });
+    const session = (expiresAt: Date, revokedAt: Date | null = null) => ({
+      userId: admin.id,
+      familyId: crypto.randomUUID(),
+      tokenHash: crypto.randomUUID().replace(/-/g, "").padEnd(64, "0"),
+      expiresAt,
+      revokedAt,
+    });
+    const past = new Date(Date.now() - 1000);
+    const future = new Date(Date.now() + 60_000);
+    await db.refreshToken.createMany({
+      data: [session(past), session(past), session(past, past), session(future), session(future, new Date())],
+    });
+    // Batches of 2: three expired rows take two passes; the live and the revoked-but-unexpired rows stay.
+    await expect(authService.pruneExpiredSessions(2)).resolves.toEqual({ deletedSessions: 3 });
+    expect(await db.refreshToken.count()).toBe(2);
+    expect(await db.refreshToken.count({ where: { expiresAt: { lt: new Date() } } })).toBe(0);
   });
 
   it("locks an account after 5 wrong passwords", async () => {

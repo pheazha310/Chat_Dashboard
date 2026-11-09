@@ -23,7 +23,7 @@ const userSelect = {
 export const isUniqueViolation = (error: unknown) =>
   typeof error === "object" && error !== null && (error as { code?: unknown }).code === "P2002";
 
-/** `users` and `auth_sessions`. The only place that queries them. */
+/** `users` and `refresh_tokens`. The only place that queries them. */
 export class AuthRepository {
   constructor(private readonly db: Db = prisma) {}
 
@@ -138,16 +138,16 @@ export class AuthRepository {
     userAgent: string | null;
     ipAddress: string | null;
   }): Promise<{ id: string }> {
-    return this.db.authSession.create({ data, select: { id: true } });
+    return this.db.refreshToken.create({ data, select: { id: true } });
   }
 
   /** Links a rotated (already revoked) session to the session that replaced it. */
   async markReplaced(id: string, replacedById: string): Promise<void> {
-    await this.db.authSession.update({ where: { id }, data: { replacedById } });
+    await this.db.refreshToken.update({ where: { id }, data: { replacedById } });
   }
 
   findSessionByHash(tokenHash: string) {
-    return this.db.authSession.findUnique({
+    return this.db.refreshToken.findUnique({
       where: { tokenHash },
       select: {
         id: true,
@@ -162,7 +162,7 @@ export class AuthRepository {
 
   /** Revokes one session if it is still live. False when another request revoked (rotated) it first. */
   async revokeIfActive(id: string): Promise<boolean> {
-    const { count } = await this.db.authSession.updateMany({
+    const { count } = await this.db.refreshToken.updateMany({
       where: { id, revokedAt: null },
       data: { revokedAt: new Date() },
     });
@@ -170,16 +170,26 @@ export class AuthRepository {
   }
 
   async revokeFamily(familyId: string): Promise<void> {
-    await this.db.authSession.updateMany({ where: { familyId, revokedAt: null }, data: { revokedAt: new Date() } });
+    await this.db.refreshToken.updateMany({ where: { familyId, revokedAt: null }, data: { revokedAt: new Date() } });
   }
 
   /** Deletes the user's sessions that expired (they can no longer be used, so nothing is lost). Returns how many. */
   async deleteExpiredSessions(userId: string, now: Date): Promise<number> {
-    const { count } = await this.db.authSession.deleteMany({ where: { userId, expiresAt: { lt: now } } });
+    const { count } = await this.db.refreshToken.deleteMany({ where: { userId, expiresAt: { lt: now } } });
     return count;
   }
 
+  /**
+   * Deletes up to `limit` expired sessions of any user (the cleanup job). Batched, so a large backlog never holds a
+   * long lock. Returns how many rows went.
+   */
+  deleteExpiredSessionsBatch(now: Date, limit: number): Promise<number> {
+    return this.db.$executeRaw`
+      DELETE FROM refresh_tokens
+      WHERE id IN (SELECT id FROM refresh_tokens WHERE expires_at < ${now} LIMIT ${limit})`;
+  }
+
   async revokeAllForUser(userId: string): Promise<void> {
-    await this.db.authSession.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: new Date() } });
+    await this.db.refreshToken.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: new Date() } });
   }
 }

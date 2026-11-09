@@ -278,6 +278,24 @@ describe("AuthService", () => {
     });
   });
 
+  describe("session cleanup job", () => {
+    it("deletes every user's expired sessions in batches and keeps the live and revoked-but-unexpired ones", async () => {
+      const ann = await addUser("ann@example.com", "AGENT");
+      const bob = await addUser("bob@example.com", "AGENT");
+      for (let i = 0; i < 3; i++) await service.login("staff", { email: ann.email, password: PASSWORD }, client);
+      await service.login("staff", { email: bob.email, password: PASSWORD }, client);
+      now = new Date(now.getTime() + DEFAULT_AUTH_OPTIONS.refreshTtlMs / 2);
+      const live = await service.login("staff", { email: bob.email, password: PASSWORD }, client);
+      await service.logout(live.refreshToken); // revoked, not expired: kept for reuse detection
+      now = new Date(now.getTime() + DEFAULT_AUTH_OPTIONS.refreshTtlMs / 2 + 1000);
+
+      await expect(service.pruneExpiredSessions(2)).resolves.toEqual({ deletedSessions: 4 });
+      expect(repo.sessions).toHaveLength(1);
+      expect(repo.sessions[0]?.userId).toBe(bob.id);
+      await expect(service.pruneExpiredSessions()).resolves.toEqual({ deletedSessions: 0 });
+    });
+  });
+
   describe("sign in with LOS", () => {
     const los = {
       verifyCustomer: vi.fn<(t: string) => Promise<LosIdentity>>(),

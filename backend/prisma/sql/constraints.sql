@@ -253,7 +253,7 @@ ALTER TABLE chat_users ADD CONSTRAINT chat_users_user_type_check CHECK (user_typ
 -- chat_users (role_id, user_type) references roles (id, kind) (the role name CHECK lives on roles).
 ALTER TABLE chat_users ADD CONSTRAINT chat_users_status_check CHECK (status IN ('ACTIVE', 'DISABLED'));
 
--- users / auth_sessions (sign-in accounts; this backend owns authentication)
+-- users / refresh_tokens (sign-in accounts; this backend owns authentication)
 ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('CUSTOMER', 'AGENT', 'SUPERVISOR', 'ADMIN'));
 ALTER TABLE users ADD CONSTRAINT users_status_check CHECK (status IN ('ACTIVE', 'DISABLED'));
 ALTER TABLE users ADD CONSTRAINT users_email_lower_check CHECK (email = lower(email));
@@ -267,8 +267,8 @@ ALTER TABLE users ADD CONSTRAINT users_los_user_type_check CHECK (los_user_type 
 ALTER TABLE users ADD CONSTRAINT users_los_user_type_matches_role CHECK (los_user_type IS NULL OR (los_user_type = 'CUSTOMER') = (role = 'CUSTOMER'));
 ALTER TABLE users ADD CONSTRAINT users_los_user_id_positive CHECK (los_user_id > 0);
 -- A rotated session points at its successor: never itself, and only once revoked.
-ALTER TABLE auth_sessions ADD CONSTRAINT auth_sessions_replaced_by_not_self CHECK (replaced_by_id <> id);
-ALTER TABLE auth_sessions ADD CONSTRAINT auth_sessions_replaced_needs_revoked CHECK (replaced_by_id IS NULL OR revoked_at IS NOT NULL);
+ALTER TABLE refresh_tokens ADD CONSTRAINT refresh_tokens_replaced_by_not_self CHECK (replaced_by_id <> id);
+ALTER TABLE refresh_tokens ADD CONSTRAINT refresh_tokens_replaced_needs_revoked CHECK (replaced_by_id IS NULL OR revoked_at IS NOT NULL);
 
 -- roles / permissions (what each role may do is data; names are fixed because tokens carry them)
 ALTER TABLE roles ADD CONSTRAINT roles_kind_check CHECK (kind IN ('CUSTOMER', 'STAFF'));

@@ -171,6 +171,21 @@ export class AuthService {
     return rotated;
   }
 
+  /**
+   * The cleanup job: deletes every user's expired sessions (a new sign-in only prunes the signing-in user's). Expired
+   * refresh tokens can never be used again, so nothing is lost; revoked ones that have not expired stay, because they
+   * are what detects a reused token.
+   */
+  async pruneExpiredSessions(batchSize = 1000): Promise<{ deletedSessions: number }> {
+    const now = this.now();
+    let deletedSessions = 0;
+    for (;;) {
+      const deleted = await this.repository.deleteExpiredSessionsBatch(now, batchSize);
+      deletedSessions += deleted;
+      if (deleted < batchSize) return { deletedSessions };
+    }
+  }
+
   /** Ends one sign-in (the refresh token's whole family). Unknown or already revoked tokens are accepted silently. */
   async logout(refreshToken: string): Promise<void> {
     const session = await this.repository.findSessionByHash(hashRefreshToken(refreshToken));

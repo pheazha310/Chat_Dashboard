@@ -9,7 +9,7 @@ model ChatUser {
   id            String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   userType      String         @map("user_type") @db.VarChar(20) /// CUSTOMER or STAFF; always the role's `kind` (composite FK to roles)
   externalId    String         @unique @map("external_id") @db.Uuid /// users.id. Unique on its own: one identity per person
-  losUserId     Int?           @map("los_user_id") /// The person's id in the loan system (LOS), when known. Not set yet: the LOS contract is pending
+  losUserId     Int?           @map("los_user_id") /// The person's id in the loan system (LOS): users.los_user_id, copied on LOS sign-in; null for password-only accounts
   username      String?        @db.VarChar(100) /// Display name, copied from users.display_name on sign-in and account changes
   roleId        Int            @map("role_id")
   status        String         @default("ACTIVE") @db.VarChar(20) /// ACTIVE or DISABLED; a disabled user is refused everywhere
@@ -90,7 +90,7 @@ model AuthUser {
   createdBy         String?       @map("created_by") @db.Uuid /// The admin who created a staff account; null for self-registration
   createdAt         DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt         DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
-  sessions          AuthSession[]
+  refreshTokens     RefreshToken[]
   roleRef           Role          @relation(fields: [role], references: [name], onDelete: Restrict, onUpdate: Cascade)
 
   @@unique([losUserType, losUserId])
@@ -98,9 +98,9 @@ model AuthUser {
   @@map("users")
 }
 
-/// One signed-in device. Only the SHA-256 of the refresh token is stored. Each refresh rotates the token: the old row is
+/// One signed-in device (a refresh token). Only the SHA-256 of the refresh token is stored. Each refresh rotates the token: the old row is
 /// revoked and a new one created in the same `family_id`; presenting a revoked token revokes the whole family.
-model AuthSession {
+model RefreshToken {
   id           String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   userId       String       @map("user_id") @db.Uuid
   familyId     String       @map("family_id") @db.Uuid /// All rotations of one sign-in
@@ -112,10 +112,11 @@ model AuthSession {
   ipAddress    String?      @map("ip_address") @db.VarChar(45)
   createdAt    DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
   user         AuthUser     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  replacedBy   AuthSession? @relation("AuthSessionRotation", fields: [replacedById], references: [id], onDelete: SetNull)
-  replaces     AuthSession? @relation("AuthSessionRotation")
+  replacedBy   RefreshToken? @relation("RefreshTokenRotation", fields: [replacedById], references: [id], onDelete: SetNull)
+  replaces     RefreshToken? @relation("RefreshTokenRotation")
 
   @@index([userId])
   @@index([familyId])
-  @@map("auth_sessions")
+  @@index([expiresAt]) /// For the cleanup job that deletes expired sessions
+  @@map("refresh_tokens")
 }

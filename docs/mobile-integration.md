@@ -97,6 +97,11 @@ verification and "forgot password" by email.
 
 ## Trying it without the app
 
-Import `docs/postman/chat-dashboard.postman_collection.json`: the "Mobile (customer) API" folder uses the
+Import `docs/postman/chat-dashboard.postman_collection.json`: folder "10 Mobile app (customer)" uses the
 `customerToken` variable (`dev:00000000-0000-4000-8000-000000000101:CUSTOMER`) and saves nothing automatically, so copy
 the conversation id from "Join room" into `customerConvId`.
+
+The whole customer-agent round trip is covered by `backend/src/__tests__/live-chat.integration.test.ts`: a registered
+customer and a signed-in agent (real JWTs) exchange messages both ways over REST and `/ws`, see each other's typing,
+catch up after a reconnect (`room.join` then `?after=`), and nobody else receives anything. It runs with
+`TEST_DATABASE_URL` and `TEST_REDIS_URL` set (see AGENTS.md).

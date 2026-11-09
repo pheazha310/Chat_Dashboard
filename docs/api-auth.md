@@ -8,10 +8,10 @@ Interactive reference for the staff routes: `GET /api/v1/admin/openapi.json` (ta
 
 ## Tokens
 
-| Token   | What it is                                                         | Lifetime                                                                                                          | Stored on the server                 |
-| ------- | ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
-| Access  | HS256 JWT: `sub` = user id, `role`, `iss`/`aud` = `chat-dashboard` | Staff `STAFF_ACCESS_TOKEN_TTL_SECONDS` (900 = 15 min), customers `CUSTOMER_ACCESS_TOKEN_TTL_SECONDS` (3600 = 1 h) | No (signed with `JWT_SECRET`)        |
-| Refresh | 256 random bits, base64url, opaque                                 | `REFRESH_TOKEN_TTL_DAYS` (30) from sign-in; refreshing does not extend it                                         | Only its SHA-256, in `auth_sessions` |
+| Token   | What it is                                                         | Lifetime                                                                                                          | Stored on the server                  |
+| ------- | ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------- |
+| Access  | HS256 JWT: `sub` = user id, `role`, `iss`/`aud` = `chat-dashboard` | Staff `STAFF_ACCESS_TOKEN_TTL_SECONDS` (900 = 15 min), customers `CUSTOMER_ACCESS_TOKEN_TTL_SECONDS` (3600 = 1 h) | No (signed with `JWT_SECRET`)         |
+| Refresh | 256 random bits, base64url, opaque                                 | `REFRESH_TOKEN_TTL_DAYS` (30) from sign-in; refreshing does not extend it                                         | Only its SHA-256, in `refresh_tokens` |
 
 - Send the access token as `Authorization: Bearer <accessToken>` on REST, and in the first `auth` frame on `/ws`
   (`docs/websocket-events.md`). The user id in the token is `users.id`; it is the id every other table stores.
@@ -23,7 +23,8 @@ Interactive reference for the staff routes: `GET /api/v1/admin/openapi.json` (ta
 - **A sign-in has a fixed end.** Every refresh token of one sign-in expires at the same time
   (`refreshTokenExpiresAt` stays the same across refreshes), `REFRESH_TOKEN_TTL_DAYS` after the sign-in. After that the
   user signs in again, so a stolen refresh token cannot be kept alive by refreshing it.
-- Each new sign-in deletes the user's expired `auth_sessions` rows.
+- Expired `refresh_tokens` rows are deleted: the user's own at each new sign-in, and everyone's by a background job every
+  `AUTH_SESSION_CLEANUP_INTERVAL_MINUTES` (60). Revoked rows that have not expired yet stay; they detect a reused token.
 - An access token stays valid until it expires even after sign-out or a password change. It is, however, checked
   against its account on every request (the account is re-read at most once a minute, `IDENTITY_CACHE_MS`): once the
   account is **disabled** (`403`) or its **role changes** (`401`, and since its sessions were revoked the user signs in
@@ -92,15 +93,21 @@ on the client only uses this backend's tokens (refresh as usual); the LOS token 
 
 - **Checked:** RS256 signature with the LOS key (`LOS_JWKS_URL`, or one PEM in `LOS_PUBLIC_KEY`), `iss` =
   `LOS_ISSUER`, the audience above, expiry, and the claims: `userId` a positive 32-bit integer, `username` a non-empty
-  string. For staff, `role` must name a staff role (`agent`, `supervisor` or `admin`, any case). Any failure is the same
+  string. For staff, `role` must name a staff role (`agent`, `supervisor` or `admin`, any case) or an LOS role name mapped
+  in `LOS_STAFF_ROLE_MAP` (e.g. `loan_officer:AGENT,branch_manager:SUPERVISOR`); other roles are refused. Any failure is the same
   `401 Invalid LOS token` (the reason is logged at debug level). A customer token is refused at the staff endpoint and the
   other way round.
 - **Accounts:** found by (`los_user_type`, `los_user_id`); LOS numbers customers and staff separately, so customer 2 and
   staff member 2 are two accounts. The first sign-in creates an account **without email or password** (`email: null`);
   it cannot use `/auth/login`, change a password (`409`) or be given one by an admin (`409`). `display_name` follows the
   LOS `username` on every sign-in. For staff the **role follows LOS** on every sign-in; a changed role ends the account's
-  other sign-ins, as an admin role change does. A `DISABLED` account is refused (`403`) even with a valid LOS token.
+  other sign-ins, as an admin role change does. Admins cannot change an LOS account's role (`409`); change it in LOS. A `DISABLED` account is refused (`403`) even with a valid LOS token.
 - The LOS userId is also copied to `chat_users.los_user_id`.
+- **Refreshing does not ask LOS.** Someone removed, disabled or demoted in LOS keeps chat access, with the role of their
+  last LOS sign-in, until that sign-in ends (`REFRESH_TOKEN_TTL_DAYS`, 30 by default). To cut access at once, an admin
+  sets the account to `DISABLED` (`PATCH /users/:userId`); for LOS staff, consider a shorter `REFRESH_TOKEN_TTL_DAYS`.
+- LOS tokens are accepted up to 30 seconds past `exp` (clock difference between LOS and this server). If the LOS keys
+  cannot be loaded (`LOS_JWKS_URL` unreachable), every LOS sign-in answers `401` and a warning is logged.
 - An existing email/password account is not merged with an LOS account (the LOS token carries no email).
 - Not configured (`LOS_ISSUER` unset): both endpoints answer `503 LOS_SIGN_IN_DISABLED`.
 
@@ -177,28 +184,30 @@ occupation, blacklist) is `null`. `dev` keeps the synthetic profiles; production
 
 ## Data
 
-`users` and `auth_sessions` (migrations `20261111000000_auth_users` and `20261114000000_los_sign_in`; see
+`users` and `refresh_tokens` (migrations `20261111000000_auth_users` and `20261114000000_los_sign_in`; see
 `docs/database-schema.md`). Access tokens are
 checked against `users.role` and `users.status` (`AccountCheckedAuthClient`). Disabling also sets `chat_users.status`
 (which covers `dev:` tokens); if that second write fails it is logged and the account stays disabled.
 
 ## Configuration
 
-| Variable                            | Default        | Meaning                                                                                                      |
-| ----------------------------------- | -------------- | ------------------------------------------------------------------------------------------------------------ |
-| `AUTH_MODE`                         | `jwt`          | `dev` (local only, refused in production) also accepts `dev:` tokens                                         |
-| `JWT_SECRET`                        | —              | At least 32 characters (`openssl rand -base64 48`). Required in production; elsewhere a random key per start |
-| `STAFF_ACCESS_TOKEN_TTL_SECONDS`    | `900`          | Access-token lifetime for agents, supervisors and admins; 60 to 86400                                        |
-| `CUSTOMER_ACCESS_TOKEN_TTL_SECONDS` | `3600`         | Access-token lifetime for customers (mobile); 60 to 86400                                                    |
-| `REFRESH_TOKEN_TTL_DAYS`            | `30`           | How long one sign-in lasts (fixed at sign-in); 1 to 365                                                      |
-| `LOS_ISSUER`                        | —              | `iss` of LOS tokens. Unset = sign in with LOS is off (`503`)                                                 |
-| `LOS_JWKS_URL`                      | —              | LOS public keys (JWKS); keys may rotate. Either this or `LOS_PUBLIC_KEY` when `LOS_ISSUER` is set            |
-| `LOS_PUBLIC_KEY`                    | —              | One LOS RS256 public key (PEM, `\n` allowed for newlines)                                                    |
-| `LOS_CUSTOMER_AUDIENCE`             | `luyleun`      | `aud` of the LOS customer access token                                                                       |
-| `LOS_HANDOFF_AUDIENCE`              | `chat`         | `aud` of the LOS staff hand-off token                                                                        |
-| `LOS_HANDOFF_TOKEN_TYPE`            | `chat-handoff` | `tokenType` claim of the hand-off token                                                                      |
-| `AUTH_RATE_LIMIT_PER_MINUTE`        | `20`           | Per IP and endpoint (per user for password change); `0` turns it off                                         |
-| `TRUST_PROXY`                       | `0`            | Proxies in front of the API (Express `trust proxy`)                                                          |
+| Variable                                | Default        | Meaning                                                                                                      |
+| --------------------------------------- | -------------- | ------------------------------------------------------------------------------------------------------------ |
+| `AUTH_MODE`                             | `jwt`          | `dev` (local only, refused in production) also accepts `dev:` tokens                                         |
+| `JWT_SECRET`                            | —              | At least 32 characters (`openssl rand -base64 48`). Required in production; elsewhere a random key per start |
+| `STAFF_ACCESS_TOKEN_TTL_SECONDS`        | `900`          | Access-token lifetime for agents, supervisors and admins; 60 to 86400                                        |
+| `CUSTOMER_ACCESS_TOKEN_TTL_SECONDS`     | `3600`         | Access-token lifetime for customers (mobile); 60 to 86400                                                    |
+| `REFRESH_TOKEN_TTL_DAYS`                | `30`           | How long one sign-in lasts (fixed at sign-in); 1 to 365                                                      |
+| `LOS_ISSUER`                            | —              | `iss` of LOS tokens. Unset = sign in with LOS is off (`503`)                                                 |
+| `LOS_JWKS_URL`                          | —              | LOS public keys (JWKS); keys may rotate. Either this or `LOS_PUBLIC_KEY` when `LOS_ISSUER` is set            |
+| `LOS_PUBLIC_KEY`                        | —              | One LOS RS256 public key (PEM, `\n` allowed for newlines)                                                    |
+| `LOS_CUSTOMER_AUDIENCE`                 | `luyleun`      | `aud` of the LOS customer access token                                                                       |
+| `LOS_HANDOFF_AUDIENCE`                  | `chat`         | `aud` of the LOS staff hand-off token                                                                        |
+| `LOS_HANDOFF_TOKEN_TYPE`                | `chat-handoff` | `tokenType` claim of the hand-off token                                                                      |
+| `AUTH_RATE_LIMIT_PER_MINUTE`            | `20`           | Per IP and endpoint (per user for password change); `0` turns it off                                         |
+| `AUTH_SESSION_CLEANUP_INTERVAL_MINUTES` | `60`           | How often expired sessions of every user are deleted; `0` turns the job off                                  |
+| `LOS_STAFF_ROLE_MAP`                    | —              | LOS staff role names that differ from the chat's, as `losName:ROLE` pairs. A bad pair stops start-up         |
+| `TRUST_PROXY`                           | `0`            | Proxies in front of the API (Express `trust proxy`)                                                          |
 
 Rotating `JWT_SECRET` invalidates every access token at once; clients recover with their refresh token.
 
@@ -206,8 +215,6 @@ Rotating `JWT_SECRET` invalidates every access token at once; clients recover wi
 
 - Email verification, "forgot password" by email, and multi-factor sign-in (no mail service exists here). Until then an
   admin resets a password with `POST /users/:userId/password`.
-- Revoked `auth_sessions` rows stay until they expire (they are needed to detect a reused refresh token); expired rows
-  are deleted at the user's next sign-in, not by a background job.
 - The dashboard has no LOS hand-off screen yet: it still signs staff in with email and password.
 - The dashboard signs staff in with these endpoints (sign-in screen, refresh, sign-out; `docs/frontend-integration.md`).
   It has no screens yet for password change or account management.

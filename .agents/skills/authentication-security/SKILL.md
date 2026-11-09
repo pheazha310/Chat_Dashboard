@@ -12,7 +12,7 @@ Sign-in, tokens, sessions, accounts, role/permission checks, password handling, 
 ## Required knowledge
 
 `docs/api-auth.md` (the contract), `docs/chat-logic-design.md` §3 and §6 (visibility and permission matrix), and the
-`users`, `auth_sessions` and `chat_users` models. **This backend owns authentication** (since 2026-11-07): it stores
+`users`, `refresh_tokens` and `chat_users` models. **This backend owns authentication** (since 2026-11-07): it stores
 accounts, hashes passwords and issues tokens. Roles: `CUSTOMER`, `AGENT`, `SUPERVISOR`, `ADMIN`.
 
 ## How it fits together
@@ -21,7 +21,7 @@ accounts, hashes passwords and issues tokens. Roles: `CUSTOMER`, `AGENT`, `SUPER
   refresh-token generation and hashing), `auth.service.ts` (register, login, refresh with rotation and reuse detection,
   logout, password change, LOS sign-in), `auth.los.ts` (`LosTokenVerifier`: RS256 LOS tokens, one 401 for every
   failure), `user.service.ts` (admin account management, `UserDirectory`), `auth.repository.ts` (the
-  only code touching `users`/`auth_sessions`).
+  only code touching `users`/`refresh_tokens`).
 - `app-container.ts` builds `AccessTokens` and wraps it in `MappedAuthClient` (maps to `chat_users`, refuses disabled
   users). REST (`authenticate()` middleware) and the WebSocket gateway (`auth` frame) both use that one `authClient`.
 - Staff sign in at `/api/v1/admin/auth`, customers at `/api/v1/customer/auth`; the service refuses the other kind

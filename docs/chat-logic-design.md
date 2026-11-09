@@ -36,7 +36,7 @@ WebSocket gateway --> event handlers --> services (chat, handoff, ai) --> Prisma
 
 1. The client signs in at `/api/v1/admin/auth/login` (staff) or `/api/v1/customer/auth/login` (customers) and
    connects with the access token. The server verifies the JWT locally (`JWT_SECRET`) and takes the user id (`sub`)
-   and role from it. Refresh tokens live hashed in `auth_sessions` ([api-auth.md](api-auth.md)).
+   and role from it. Refresh tokens live hashed in `refresh_tokens` ([api-auth.md](api-auth.md)).
 2. Only users with role `AGENT`, `SUPERVISOR` or `ADMIN` can open the dashboard socket.
    Customers get a restricted event set on the same socket. Roles come from `users.role`.
 3. On `sync.request` the server sends:

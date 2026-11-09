@@ -114,25 +114,28 @@ Send (201; a retry with the same `clientId` returns 200 with the original messag
 | GET    | `/api/v1/admin/conversations/{id}/customer/conversations` |
 | GET    | `/api/v1/admin/conversations/{id}/participants`           |
 
-## FR-14 to FR-27 (enhanced and advanced chat)
+## How the collection is organised
 
-The collection has one folder per feature, generated from the OpenAPI document (`/api/v1/admin/openapi.json`); each
-request carries its description. Run **Conversations > Create**, **Assignment > Take over**, then **Messages > Send**
-first: the requests below reuse `convId` and `msgId`, and the create requests save their ids (`noteId`, `tagId`,
-`templateId`, `escalationId`, `callbackId`, `callId`, `keywordId`, `reportId`, `reactionId`) for the next ones.
+Ten numbered folders, in the order to run them: each builds on the ones before (a signed-in token, a conversation you
+own, a sent message), and each request that creates something saves its id (`convId`, `msgId`, `noteId`, `tagId`,
+`templateId`, `escalationId`, `callbackId`, `callId`, `keywordId`, `reportId`, `reactionId`, ...) for the next ones.
+Every folder and request carries a description.
 
-| Folder                         | Guide                                                   | Needs                                                                                                                                                                   |
-| ------------------------------ | ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Workspace                      | [api-workspace.md](../api-workspace.md)                 | -                                                                                                                                                                       |
-| Message actions                | [api-message-actions.md](../api-message-actions.md)     | a sent message                                                                                                                                                          |
-| Attachments                    | [api-attachments.md](../api-attachments.md)             | the upload requests point at `fixtures/sample.pdf` and `fixtures/sample.wav` (Postman: pick them, or any file, in form-data)                                            |
-| Internal notes, Escalations    | [api-notes-escalations.md](../api-notes-escalations.md) | resolving an escalation needs the supervisor token                                                                                                                      |
-| Tags, Conversations (priority) | [api-tags-priority.md](../api-tags-priority.md)         | -                                                                                                                                                                       |
-| Canned responses               | [api-canned-responses.md](../api-canned-responses.md)   | creating a SHARED one needs the supervisor token                                                                                                                        |
-| Chat settings                  | [api-chat-settings.md](../api-chat-settings.md)         | -                                                                                                                                                                       |
-| Callbacks                      | [api-callbacks.md](../api-callbacks.md)                 | `scheduledAt` (at most 365 days ahead) is set by a pre-request script to two and three days from now                                                                    |
-| Calls                          | [api-calls.md](../api-calls.md)                         | Accept/Decline of a customer's call need a call the customer started; there is no customer channel yet, so only an agent-started call can be driven here (it rings out) |
-| Moderation                     | [api-moderation.md](../api-moderation.md)               | keywords, reviews and the log need the supervisor token                                                                                                                 |
+| Folder                       | Sub-folders                                                      | Guide                                                                                                          | Needs                                                                                                      |
+| ---------------------------- | ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| **01 Start here**            | health, OpenAPI spec                                             | -                                                                                                              | no token                                                                                                   |
+| **02 Staff sign-in**         | -                                                                | [api-auth.md](../api-auth.md)                                                                                  | the admin from `user:create-admin`; the LOS request needs a real LOS token (`503` until LOS is configured) |
+| **03 Accounts and roles**    | Accounts, Roles and permissions                                  | [api-auth.md](../api-auth.md), [api-roles.md](../api-roles.md)                                                 | an admin token                                                                                             |
+| **04 Conversations**         | Inbox and lifecycle, Assignment, Customer info                   | [api-conversations.md](../api-conversations.md), [api-tags-priority.md](../api-tags-priority.md)               | Create, then Take over: most later folders need a conversation you own                                     |
+| **05 Messages**              | Send and read, Message actions, Files and voice                  | [api-message-actions.md](../api-message-actions.md), [api-attachments.md](../api-attachments.md)               | uploads use `fixtures/sample.pdf` and `fixtures/sample.wav`                                                |
+| **06 Team tools**            | Internal notes, Tags, Canned responses, Escalations              | [api-notes-escalations.md](../api-notes-escalations.md), [api-canned-responses.md](../api-canned-responses.md) | SHARED templates and resolving escalations need the supervisor token                                       |
+| **07 My workspace**          | Notifications, Presence, Tabs and drafts, Chat settings, Profile | [api-workspace.md](../api-workspace.md), [api-chat-settings.md](../api-chat-settings.md)                       | -                                                                                                          |
+| **08 Callbacks and calls**   | Callbacks, Calls                                                 | [api-callbacks.md](../api-callbacks.md), [api-calls.md](../api-calls.md)                                       | `scheduledAt` is set by a pre-request script; customer-started calls cannot be driven here                 |
+| **09 Moderation**            | -                                                                | [api-moderation.md](../api-moderation.md)                                                                      | keywords, reviews and the log need the supervisor token                                                    |
+| **10 Mobile app (customer)** | Customer sign-in, Chat                                           | [api-customer-mobile.md](../api-customer-mobile.md)                                                            | `customerToken` (saved by sign-in)                                                                         |
+
+A new endpoint goes into the folder of its feature, next to its siblings; a new feature gets its own sub-folder (or a
+new numbered folder before 10, keeping the mobile folder last).
 
 ### Running the whole collection
 
@@ -144,9 +147,10 @@ npx newman run docs/postman/chat-dashboard.postman_collection.json --working-dir
   --env-var baseUrl=http://localhost:4000
 ```
 
-All requests succeed except four that cannot from the staff side alone, and answer with the expected refusal: **Mark
-delivered** (receipts exist only for customer messages), **Answer** and **Decline a customer's call** (the call was
-started by the agent), and **Hang up** (that call was cancelled). It changes data (the admin's password becomes
+All requests succeed except six that cannot here, and answer with the expected refusal: **Mark delivered** (`400`,
+receipts exist only for customer messages), **Answer** and **Decline a customer's call** (`403`, the call was started by
+the agent), **Hang up** (`409`, that call was cancelled), and the two **Sign in with LOS** requests (`503` while LOS is not
+configured; `401` until a real LOS token replaces the placeholder in `losHandoffToken` / `losCustomerToken`). It changes data (the admin's password becomes
 `a-new-password`), so use a throwaway database.
 
 New WebSocket frames (besides the list above): `call.offer`, `call.answer`, `call.ice_candidate`; see

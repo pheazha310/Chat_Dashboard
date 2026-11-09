@@ -57,7 +57,7 @@ Node 22, pnpm 10 (pinned in `.mise.toml` and root `package.json`).
   them as existing.
 - **This backend owns authentication** (since 2026-11-07; it used to be an external service). It stores accounts in
   `users` with scrypt hashes, issues HS256 access tokens and rotating refresh tokens (only their SHA-256 is stored, in
-  `auth_sessions`), and admins manage accounts. It also accepts RS256 tokens signed by LOS (Backend 1) as a sign-in
+  `refresh_tokens`), and admins manage accounts. It also accepts RS256 tokens signed by LOS (Backend 1) as a sign-in
   (`docs/api-auth.md`, "Sign in with LOS"; LOS-only accounts have no email or password). Never store or log plaintext
   passwords or tokens. Loan data (national id, salary, ...) still belongs to Backend 1, whose loan-data API is **not yet
   known**; do not invent it. See

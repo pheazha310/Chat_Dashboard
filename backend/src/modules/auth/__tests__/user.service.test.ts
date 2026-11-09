@@ -144,6 +144,16 @@ describe("UserService", () => {
     expect(repo.users.get(los.id)?.passwordHash).toBeNull();
   });
 
+  it("refuses a new role for an LOS account (LOS sets it at every sign-in), but allows a rename or disabling", async () => {
+    const los = await repo.createLosUser({ losUserType: "STAFF", losUserId: 8, role: "AGENT", displayName: "Dara" });
+    await expect(service.update(admin, los.id, { role: "SUPERVISOR" })).rejects.toBeInstanceOf(ConflictError);
+    expect(repo.users.get(los.id)?.role).toBe("AGENT");
+    await expect(service.update(admin, los.id, { role: "AGENT", displayName: "Dara K" })).resolves.toMatchObject({
+      displayName: "Dara K",
+    });
+    await expect(service.update(admin, los.id, { status: "DISABLED" })).resolves.toMatchObject({ status: "DISABLED" });
+  });
+
   it("resets a password: the new one works and every session ends", async () => {
     const user = await service.create(admin, staff);
     await repo.createSession({

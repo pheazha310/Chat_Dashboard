@@ -163,6 +163,12 @@ export class FakeAuthRepository {
     return before - this.sessions.length;
   }
 
+  async deleteExpiredSessionsBatch(now: Date, limit: number) {
+    const expired = this.sessions.filter((s) => s.expiresAt < now).slice(0, limit);
+    this.sessions = this.sessions.filter((s) => !expired.includes(s));
+    return expired.length;
+  }
+
   async revokeAllForUser(userId: string) {
     for (const s of this.sessions) if (s.userId === userId && !s.revokedAt) s.revokedAt = new Date();
   }

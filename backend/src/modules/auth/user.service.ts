@@ -69,6 +69,10 @@ export class UserService {
     if (input.role !== undefined && !isStaffRole(user.role)) {
       throw new BadRequestError("A customer account cannot be given a staff role");
     }
+    // LOS sets an LOS account's role on every sign-in, so a role set here would be undone at the next one.
+    if (input.role !== undefined && input.role !== user.role && user.losUserId !== null) {
+      throw new ConflictError("This account's role is managed in LOS");
+    }
     const roleChanged = input.role !== undefined && input.role !== user.role;
     const statusChanged = input.status !== undefined && input.status !== user.status;
 

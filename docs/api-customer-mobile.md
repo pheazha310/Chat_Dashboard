@@ -81,5 +81,5 @@ unknown), as for the staff API.
   [websocket-events.md](websocket-events.md#customer-connections); REST `?after=` remains the catch-up path after a reconnect.
 - Calls from the customer side and per-message read/delivery receipts for customers (service methods exist for calls;
   no mobile route).
-- Customer routes are not in the OpenAPI document (`/api/v1/admin/openapi.json`); the Postman collection has a "Mobile
-  (customer) API" folder.
+- Customer routes are not in the OpenAPI document (`/api/v1/admin/openapi.json`); the Postman collection has them in folder
+  "10 Mobile app (customer)".

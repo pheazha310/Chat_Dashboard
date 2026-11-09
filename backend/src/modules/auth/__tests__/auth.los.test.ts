@@ -1,7 +1,8 @@
-import { exportSPKI, generateKeyPair, SignJWT, type JWTPayload } from "jose";
-import { beforeAll, describe, expect, it } from "vitest";
+import { createRemoteJWKSet, exportSPKI, generateKeyPair, SignJWT, type JWTPayload } from "jose";
+import { beforeAll, describe, expect, it, vi } from "vitest";
+import { logger } from "@config/logger.js";
 import { UnauthorizedError } from "@shared/errors/AppError.js";
-import { losVerifierFrom, LosTokenVerifier } from "../auth.los.js";
+import { losVerifierFrom, LosTokenVerifier, parseStaffRoleMap } from "../auth.los.js";
 
 const config = {
   issuer: "https://los.example.test",
@@ -82,6 +83,15 @@ describe("LosTokenVerifier", () => {
     );
   });
 
+  it("accepts a few seconds of clock difference with LOS, but not more than 30", async () => {
+    await expect(verifier.verifyCustomer(await sign(customer, { exp: "-10s" }))).resolves.toMatchObject({
+      losUserId: 2,
+    });
+    await expect(verifier.verifyCustomer(await sign(customer, { exp: "-31s" }))).rejects.toBeInstanceOf(
+      UnauthorizedError,
+    );
+  });
+
   it("refuses a token signed with another key, or with HS256", async () => {
     const other = await generateKeyPair("RS256");
     await expect(verifier.verifyCustomer(await sign(customer, { key: other.privateKey }))).rejects.toBeInstanceOf(
@@ -95,6 +105,59 @@ describe("LosTokenVerifier", () => {
       .sign(new TextEncoder().encode("k".repeat(40)));
     await expect(verifier.verifyCustomer(hs)).rejects.toBeInstanceOf(UnauthorizedError);
     await expect(verifier.verifyCustomer("not-a-jwt")).rejects.toBeInstanceOf(UnauthorizedError);
+  });
+});
+
+describe("LOS staff role names (LOS_STAFF_ROLE_MAP)", () => {
+  it("maps LOS names to chat roles in any case, and still accepts the chat's own names", async () => {
+    const mapped = new LosTokenVerifier(
+      { ...config, staffRoleMap: parseStaffRoleMap("loan_officer:AGENT, Branch_Manager:supervisor") },
+      publicKey,
+    );
+    const handoff = (role: string) => sign({ ...staff, role }, { aud: "chat" });
+    await expect(mapped.verifyStaffHandoff(await handoff("LOAN_OFFICER"))).resolves.toMatchObject({ role: "AGENT" });
+    await expect(mapped.verifyStaffHandoff(await handoff("branch_manager"))).resolves.toMatchObject({
+      role: "SUPERVISOR",
+    });
+    await expect(mapped.verifyStaffHandoff(await handoff("admin"))).resolves.toMatchObject({ role: "ADMIN" });
+    await expect(mapped.verifyStaffHandoff(await handoff("teller"))).rejects.toBeInstanceOf(UnauthorizedError);
+  });
+
+  it("does not mistake built-in object properties for mapped roles", async () => {
+    const mapped = new LosTokenVerifier(
+      { ...config, staffRoleMap: parseStaffRoleMap("loan_officer:AGENT") },
+      publicKey,
+    );
+    for (const role of ["constructor", "__proto__", "toString", "hasOwnProperty"]) {
+      await expect(mapped.verifyStaffHandoff(await sign({ ...staff, role }, { aud: "chat" }))).rejects.toBeInstanceOf(
+        UnauthorizedError,
+      );
+    }
+    expect(parseStaffRoleMap("__proto__:AGENT").get("__proto__")).toBe("AGENT");
+  });
+
+  it("refuses a malformed setting or a target that is not a staff role", () => {
+    expect(parseStaffRoleMap("").size).toBe(0);
+    expect(() => parseStaffRoleMap("loan_officer")).toThrow(/not "losName:ROLE"/);
+    expect(() => parseStaffRoleMap("a:b:c")).toThrow(/not "losName:ROLE"/);
+    expect(() => parseStaffRoleMap("vip:CUSTOMER")).toThrow(/not a staff role/);
+    expect(() => parseStaffRoleMap("manager:BOSS")).toThrow(/not a staff role/);
+  });
+});
+
+describe("LOS key problems", () => {
+  it("answers 401 and logs a warning when the LOS key endpoint cannot be reached", async () => {
+    const warn = vi.spyOn(logger, "warn").mockImplementation(() => logger);
+    const offline = new LosTokenVerifier(config, createRemoteJWKSet(new URL("http://127.0.0.1:9/jwks")));
+    await expect(offline.verifyCustomer(await sign(customer))).rejects.toThrow(
+      new UnauthorizedError("Invalid LOS token"),
+    );
+    expect(warn).toHaveBeenCalledWith(expect.anything(), "could not load the LOS signing keys");
+    warn.mockClear();
+    // A token that is merely wrong is the caller's problem: no warning.
+    await expect(verifier.verifyCustomer("not-a-jwt")).rejects.toBeInstanceOf(UnauthorizedError);
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
   });
 });
 

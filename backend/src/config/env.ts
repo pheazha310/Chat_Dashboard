@@ -24,6 +24,8 @@ const schema = z.object({
   CUSTOMER_ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().int().min(60).max(86400).default(3600),
   // How long one sign-in lasts. Fixed at sign-in: refreshing does not extend it.
   REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().min(1).max(365).default(30),
+  // How often the API deletes expired sign-in sessions of every user; 0 turns the job off.
+  AUTH_SESSION_CLEANUP_INTERVAL_MINUTES: z.coerce.number().int().min(0).max(1440).default(60),
   // Sign in with LOS (POST /auth/los). Off unless LOS_ISSUER is set; then LOS_JWKS_URL or LOS_PUBLIC_KEY (PEM, "\n"
   // allowed for newlines) gives the key LOS signs its RS256 tokens with.
   LOS_ISSUER: z.string().min(1).optional(),
@@ -34,6 +36,9 @@ const schema = z.object({
   LOS_HANDOFF_AUDIENCE: z.string().min(1).default("chat"),
   // `tokenType` claim of the staff hand-off token.
   LOS_HANDOFF_TOKEN_TYPE: z.string().min(1).default("chat-handoff"),
+  // LOS staff role names that differ from the chat's, as "losName:ROLE" pairs, e.g. "loan_officer:AGENT,manager:SUPERVISOR".
+  // Names not listed are accepted when they are a chat staff role (agent, supervisor, admin; any case).
+  LOS_STAFF_ROLE_MAP: z.string().default(""),
   // Sign-in, registration and refresh requests per client IP per minute; 0 turns the limit off.
   AUTH_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(0).default(20),
   // Express `trust proxy` hop count, so the client IP is read from X-Forwarded-For behind a load balancer. 0 = direct.

@@ -28,7 +28,7 @@ start in them.
 
 | #                                                 | Domain                     | Tables                                                                                                                      |
 | ------------------------------------------------- | -------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| [01](database/01-identity-and-access.dbml)        | Identity and access        | `users`, `auth_sessions`, `roles`, `permissions`, `role_permissions`, `chat_users`                                          |
+| [01](database/01-identity-and-access.dbml)        | Identity and access        | `users`, `refresh_tokens`, `roles`, `permissions`, `role_permissions`, `chat_users`                                         |
 | [02](database/02-conversations.dbml)              | Conversations (the hub)    | `conversations`, `conversation_participants`, `conversation_assignments`, `conversation_activities`                         |
 | [03](database/03-messages.dbml)                   | Messages                   | `messages`, `message_receipts`, `conversation_reads`, `message_edit_history`, `message_reactions`                           |
 | [04](database/04-attachments.dbml)                | Attachments                | `attachments`, `message_attachments`                                                                                        |
@@ -49,7 +49,7 @@ it.
 Two backends, each with its own PostgreSQL database:
 
 - **Backend 2 (chat, this repo):** sections 01-11. Since 2026-11-07 it also owns authentication (`users`,
-  `auth_sessions`, see `docs/api-auth.md`) and since 2026-11-09 roles and permissions (`docs/api-roles.md`).
+  `refresh_tokens`, see `docs/api-auth.md`) and since 2026-11-09 roles and permissions (`docs/api-roles.md`).
 - **Backend 1 (loan system):** customer profiles, agent profiles and loan applications (section 12). Its API is not
   known yet; the chat database never has a foreign key to it.
 
@@ -138,12 +138,12 @@ sorted in SQL.
 | `spam_reports`, `customer_blocks`, `blocked_keywords`, `moderation_activities`                       | Spam reports (optionally of a message), customer blocks (one active per customer), keyword rules (unique ignoring case) and a moderation audit log.                                                                                                                                                        |
 | `push_devices`                                                                                       | FCM/APNs tokens for a `user_id` (external `users.id`, customer or agent): `platform`, `device_token`, `is_active`; unique `(platform, device_token)`.                                                                                                                                                      |
 | `workspace_preferences`, `workspace_open_conversations`, `conversation_drafts`, `user_chat_settings` | Per-agent layout JSON (and tab preferences), restorable open tabs, unsent composer drafts per agent and conversation; per-user chat switches (typing and notification sounds, AI suggestions and summaries, auto-assign opt-in).                                                                           |
-| `chat_users`                                                                                         | Chat identity per person: `external_id` (= `users.id`, unique), `user_type` (`CUSTOMER`/`STAFF`, always the role's `kind`), `role_id`, `username`, `status`, `los_user_id` (not set yet). Referenced by conversations, messages and attachments.                                                           |
+| `chat_users`                                                                                         | Chat identity per person: `external_id` (= `users.id`, unique), `user_type` (`CUSTOMER`/`STAFF`, always the role's `kind`), `role_id`, `username`, `status`, `los_user_id` (copied from `users` on LOS sign-in). Referenced by conversations, messages and attachments.                                    |
 | `roles`                                                                                              | Fixed role names (`CUSTOMER`, `AGENT`, `SUPERVISOR`, `ADMIN`) with `kind`; `users.role` references `name`, `chat_users (role_id, user_type)` references `(id, kind)`.                                                                                                                                      |
 | `permissions`                                                                                        | Permission catalogue: unique `(module, action)`, e.g. `tags` + `delete`. Seeded from code.                                                                                                                                                                                                                 |
 | `role_permissions`                                                                                   | Which role has which permission; unique `(role_id, permission_id)`. Edited by admins.                                                                                                                                                                                                                      |
 | `users`                                                                                              | Sign-in accounts (this backend owns auth): lower-case unique `email` and scrypt `password_hash` (both null for an LOS-only account), the LOS link `los_user_type` + `los_user_id` (unique), `role`, `display_name`, `status`, lockout (`failed_login_count`, `locked_until`). Its `id` is the token `sub`. |
-| `auth_sessions`                                                                                      | One row per refresh token: `token_hash` (SHA-256, unique), `family_id` (one sign-in and its rotations), `expires_at`, `revoked_at`, `replaced_by_id` (the session it rotated into), user agent and IP. FK to `users`, cascade.                                                                             |
+| `refresh_tokens`                                                                                     | One row per refresh token: `token_hash` (SHA-256, unique), `family_id` (one sign-in and its rotations), `expires_at` (indexed for the cleanup job), `revoked_at`, `replaced_by_id` (the session it rotated into), user agent and IP. FK to `users`, cascade.                                               |
 
 ## Chat identity (`chat_users`) and roles
 
@@ -162,7 +162,7 @@ account (`PATCH /users/:userId`) sets it here too.
 `can(auth, "module.action")`. The seeded grants reproduce the earlier rules (supervisors and admins everything, only
 admins `users.manage` and `roles.manage`). Role and permission ids are `int` (small seeded lookup tables), unlike the
 UUIDs used elsewhere. Since migration `20261113000000_role_kind_and_token_rotation`, `chat_users (role_id, user_type)`
-references `roles (id, kind)`: the kind follows the role and cannot disagree with it. `chat_users.los_user_id` (the person's id in the loan system) exists but is not filled yet.
+references `roles (id, kind)`: the kind follows the role and cannot disagree with it. `chat_users.los_user_id` (the person's id in the loan system) is copied from `users.los_user_id` on LOS sign-in.
 
 ## Value sets (proposed)
 

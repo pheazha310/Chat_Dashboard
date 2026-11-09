@@ -35,7 +35,7 @@ Project Chat_Dashboard {
 
 TableGroup "01 Identity and access" [color: #2563EB] {
   users
-  auth_sessions
+  refresh_tokens
   roles
   permissions
   role_permissions
@@ -67,7 +67,7 @@ Table users [headercolor: #2563EB] {
   Note: 'Sign-in accounts. Email and password, an LOS link, or both (docs/api-auth.md)'
 }
 
-Table auth_sessions [headercolor: #2563EB] {
+Table refresh_tokens [headercolor: #2563EB] {
   id uuid [pk, default: `gen_random_uuid()`]
   user_id uuid [not null]
   family_id uuid [not null, note: 'All rotations of one sign-in; a reused token revokes the family']
@@ -82,6 +82,7 @@ Table auth_sessions [headercolor: #2563EB] {
   indexes {
     user_id
     family_id
+    expires_at [note: 'The cleanup job (AUTH_SESSION_CLEANUP_INTERVAL_MINUTES) deletes expired rows']
   }
 }
 
@@ -129,7 +130,7 @@ Table chat_users [headercolor: #2563EB] {
   id uuid [pk, default: `gen_random_uuid()`]
   user_type varchar(20) [not null, note: 'CUSTOMER or STAFF: always roles.kind of role_id (composite FK)']
   external_id uuid [not null, unique, note: 'users.id (token sub; or the id in a dev: token). Never the email']
-  los_user_id int [note: 'Id in the loan system (LOS) when known; not set yet (contract pending)']
+  los_user_id int [note: 'Id in the loan system (LOS): users.los_user_id, copied on LOS sign-in; null for password-only accounts']
   username varchar(100) [note: 'users.display_name, copied on sign-in and account changes']
   role_id int [not null]
   status varchar(20) [not null, default: 'ACTIVE', note: 'ACTIVE or DISABLED']
@@ -149,8 +150,8 @@ Ref: roles.(id, kind) < chat_users.(role_id, user_type) [delete: restrict]
 Ref: roles.id < role_permissions.role_id [delete: cascade]
 Ref: permissions.id < role_permissions.permission_id [delete: cascade]
 Ref: roles.name < users.role [delete: restrict]
-Ref: users.id < auth_sessions.user_id [delete: cascade]
-Ref: auth_sessions.id - auth_sessions.replaced_by_id [delete: set null]
+Ref: users.id < refresh_tokens.user_id [delete: cascade]
+Ref: refresh_tokens.id - refresh_tokens.replaced_by_id [delete: set null]
 
 // ==============================================================================================================
 // 02. CONVERSATIONS

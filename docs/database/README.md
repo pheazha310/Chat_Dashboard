@@ -6,7 +6,7 @@ and relations; [../database-schema.md](../database-schema.md) explains the rules
 | File                                                                     | Tables                                                                                                                      |
 | ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------- |
 | [00-overview.dbml](00-overview.dbml)                                     | Project settings, how to read the files, how to add a table                                                                 |
-| [01-identity-and-access.dbml](01-identity-and-access.dbml)               | `users`, `auth_sessions`, `roles`, `permissions`, `role_permissions`, `chat_users`                                          |
+| [01-identity-and-access.dbml](01-identity-and-access.dbml)               | `users`, `refresh_tokens`, `roles`, `permissions`, `role_permissions`, `chat_users`                                         |
 | [02-conversations.dbml](02-conversations.dbml)                           | `conversations` (the hub), `conversation_participants`, `conversation_assignments`, `conversation_activities`               |
 | [03-messages.dbml](03-messages.dbml)                                     | `messages`, `message_receipts`, `conversation_reads`, `message_edit_history`, `message_reactions`                           |
 | [04-attachments.dbml](04-attachments.dbml)                               | `attachments`, `message_attachments`                                                                                        |

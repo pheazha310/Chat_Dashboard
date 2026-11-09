@@ -184,7 +184,7 @@ export function registerAuthOpenApi(registry: OpenAPIRegistry) {
     security,
     summary: "Change an account",
     description:
-      "Admins only. `displayName`, `role` (staff roles, staff accounts only) and `status`. Admins cannot change their own role or status. A new role or DISABLED signs the user out everywhere; re-enabling clears a sign-in lock.",
+      "Admins only. `displayName`, `role` (staff roles, staff accounts only) and `status`. Admins cannot change their own role or status. A new role or DISABLED signs the user out everywhere; re-enabling clears a sign-in lock. 409 for a new role on an LOS account: LOS sets its role at every sign-in.",
     request: { params: userParams, body: jsonBody(updateUserBody) },
     responses: {
       200: ok("Account", successOf(user)),
@@ -192,6 +192,7 @@ export function registerAuthOpenApi(registry: OpenAPIRegistry) {
       401: errors[401],
       403: errors[403],
       404: errors[404],
+      409: errors[409],
     },
   });
   registry.registerPath({
