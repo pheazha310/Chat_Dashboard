@@ -35,6 +35,8 @@ export interface MessageDto {
   /** Files sent with the message. Fetch the bytes from `downloadPath`. */
   attachments: AttachmentDto[];
   createdAt: string;
+  /** Set on a deleted message: it stays in history as a placeholder with no content, metadata, files or reactions. */
+  deletedAt: string | null;
 }
 
 export interface AttachmentDto {

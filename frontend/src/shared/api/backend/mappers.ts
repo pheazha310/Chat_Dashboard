@@ -95,6 +95,7 @@ export function toMessage(source: BackendMessage): ChatMessageDto {
     ...(source.replyToMessageId ? { replyToId: source.replyToMessageId } : {}),
     ...(source.forwardedFromMessageId ? { forwarded: true } : {}),
     ...(source.isEdited ? { edited: true } : {}),
+    ...(source.deletedAt ? { deleted: true } : {}),
     ...(source.reactions?.length ? { reactions: source.reactions.map(toReaction) } : {}),
     ...(source.attachments?.length ? { attachments: source.attachments.map(toAttachment) } : {}),
   };

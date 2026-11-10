@@ -24,13 +24,13 @@ const isStored = (message: ChatMessage) => message.status !== "sending" && messa
 
 export function availableActions(message: ChatMessage) {
   const mine = message.side === "agent" && message.senderId === useSessionStore.getState().userId;
-  const stored = isStored(message) && message.side !== "system";
+  const stored = isStored(message) && message.side !== "system" && !message.deleted;
   return {
     reply: stored,
     react: stored,
     // The server forwards text only (files arrive with FR-17); anything else is a 400.
     forward: stored && !message.attachments?.length && message.text.trim() !== "",
-    copy: message.side !== "system",
+    copy: message.side !== "system" && !message.deleted,
     edit: stored && mine,
     remove: stored && (mine || (isSupervisor() && message.side !== "system")),
   };
@@ -65,7 +65,7 @@ export async function saveEdit(message: ChatMessage, text: string) {
 export async function deleteMessage(message: ChatMessage) {
   try {
     await deleteMessageRequest(message.id);
-    useMessageStore.getState().remove(message.conversationId, message.id);
+    useMessageStore.getState().markDeleted(message.conversationId, message.id);
   } catch (error) {
     failure(error, "Could not delete the message");
   }

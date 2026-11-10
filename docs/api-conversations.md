@@ -41,7 +41,8 @@ carries `forwardedFromMessageId`, `isEdited`, `editedAt`, `reactions` and `attac
 
 **Cursors.** `sequenceNumber` is strictly increasing per conversation. No cursor returns the newest page; `before=N`
 returns the page of older messages; `after=N` returns what was missed since N (reconnect sync). `meta` has `hasMore`,
-`direction`, `oldestSequence` and `newestSequence`. Soft-deleted messages are excluded.
+`direction`, `oldestSequence` and `newestSequence`. Soft-deleted messages stay in place as placeholders: `deletedAt` is
+set and `content`, `metadata`, `reactions` and `attachments` are empty (show "This message was deleted").
 
 **Message `status`** (sender-facing): `SENT` → `DELIVERED` → `READ`, never backwards. `SENDING` and `FAILED` exist in
 the schema but nothing sets them yet (they belong to the client and the unbuilt customer channel).

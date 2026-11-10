@@ -220,10 +220,13 @@ describe.skipIf(!url)("messaging on PostgreSQL", () => {
       ).toEqual([]);
     });
 
-    it("excludes soft-deleted messages and hides the thread from agents who cannot see it", async () => {
+    it("keeps soft-deleted messages as placeholders and hides the thread from agents who cannot see it", async () => {
       await seed(2);
       await db.message.updateMany({ where: { content: "t1" }, data: { deletedAt: new Date(), deletedBy: uid(1) } });
-      expect(texts((await messages.history(agent1, cid, { limit: 50 })).items)).not.toContain("t1");
+      const { items } = await messages.history(agent1, cid, { limit: 50 });
+      expect(texts(items)).not.toContain("t1");
+      expect(items.filter((m) => m.deletedAt !== null)).toHaveLength(1);
+      expect(items.find((m) => m.deletedAt !== null)?.content).toBeNull();
       await expect(messages.history(agent2, cid, { limit: 50 })).rejects.toBeInstanceOf(NotFoundError);
     });
   });

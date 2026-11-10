@@ -24,8 +24,8 @@ type MessageState = {
   setStatus: (conversationId: string, messageId: string, status: DeliveryStatus) => void;
   setTyping: (conversationId: string, side: MessageSide, active: boolean) => void;
   setHistory: (conversationId: string, patch: Partial<HistoryState>) => void;
-  /** A message was deleted (it is gone from history too). */
-  remove: (conversationId: string, messageId: string) => void;
+  /** A message was deleted: it stays in place as a "message deleted" placeholder, as it does in history. */
+  markDeleted: (conversationId: string, messageId: string) => void;
   setReactions: (conversationId: string, messageId: string, reactions: ReactionDto[]) => void;
   /** A file was deleted from a message. */
   removeAttachment: (conversationId: string, attachmentId: string) => void;
@@ -97,11 +97,15 @@ export const useMessageStore = create<MessageState>((set) => ({
         ),
       },
     })),
-  remove: (conversationId, messageId) =>
+  markDeleted: (conversationId, messageId) =>
     set((state) => ({
       byConversation: {
         ...state.byConversation,
-        [conversationId]: (state.byConversation[conversationId] ?? EMPTY).filter((m) => m.id !== messageId),
+        [conversationId]: (state.byConversation[conversationId] ?? EMPTY).map((m) => {
+          if (m.id !== messageId) return m;
+          const { reactions: _reactions, attachments: _attachments, ...rest } = m;
+          return { ...rest, text: "", deleted: true };
+        }),
       },
       replyTarget:
         state.replyTarget[conversationId] === messageId

@@ -256,6 +256,33 @@ describe("history", () => {
     expect(sync.meta.direction).toBe("newer");
   });
 
+  it("keeps a deleted message in place as a placeholder without its text, files or reactions", async () => {
+    const deletedAt = new Date("2026-01-02T00:00:00Z");
+    const deleted = msg({ content: "secret", metadata: { x: 1 } as never, deletedAt, deletedBy: uid(1) });
+    repo.history.mockResolvedValue({ items: [deleted], hasMore: false });
+    repo.reactionsFor.mockResolvedValue(
+      new Map([[uid(50), [{ id: uid(60), userType: "AGENT", userId: uid(1), emoji: "👍", createdAt: at }]]]),
+    );
+
+    const [item] = (await service.history(owner, uid(10), { limit: 5 })).items;
+
+    expect(item).toMatchObject({
+      id: uid(50),
+      sequenceNumber: "5",
+      content: null,
+      metadata: null,
+      reactions: [],
+      attachments: [],
+      deletedAt: "2026-01-02T00:00:00.000Z",
+    });
+  });
+
+  it("marks live messages as not deleted", async () => {
+    repo.history.mockResolvedValue({ items: [msg({ deletedAt: null })], hasMore: false });
+    const [item] = (await service.history(owner, uid(10), { limit: 5 })).items;
+    expect(item).toMatchObject({ content: "hello", deletedAt: null });
+  });
+
   it("hides inaccessible conversations", async () => {
     await expect(service.history(other, uid(10), { limit: 5 })).rejects.toBeInstanceOf(NotFoundError);
     expect(repo.history).not.toHaveBeenCalled();

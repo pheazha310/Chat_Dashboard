@@ -55,7 +55,17 @@ export const toMessage = (
   row: MessageRow,
   reactions: ReactionRow[] = [],
   attachments: AttachmentDto[] = [],
-): MessageDto => ({
+): MessageDto => (row.deletedAt ? toPlaceholder(row, row.deletedAt) : toLiveMessage(row, reactions, attachments));
+
+/** A deleted message keeps its place in the thread but nothing it said. */
+const toPlaceholder = (row: MessageRow, deletedAt: Date): MessageDto => ({
+  ...toLiveMessage(row, [], []),
+  content: null,
+  metadata: null,
+  deletedAt: deletedAt.toISOString(),
+});
+
+const toLiveMessage = (row: MessageRow, reactions: ReactionRow[], attachments: AttachmentDto[]): MessageDto => ({
   id: idToString(row.id),
   conversationId: idToString(row.conversationId),
   clientId: row.clientId,
@@ -73,4 +83,5 @@ export const toMessage = (
   reactions: reactions.map(toReaction),
   attachments,
   createdAt: row.createdAt.toISOString(),
+  deletedAt: null,
 });

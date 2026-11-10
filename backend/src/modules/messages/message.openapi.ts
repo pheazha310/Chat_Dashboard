@@ -51,6 +51,9 @@ export const message = z
     reactions: z.array(reaction),
     attachments: z.array(attachment),
     createdAt: z.string(),
+    deletedAt: nullableString.openapi({
+      description: "Set on a deleted message, kept in history as a placeholder with no content, files or reactions",
+    }),
   })
   .openapi("Message") satisfies z.ZodType<MessageDto>;
 

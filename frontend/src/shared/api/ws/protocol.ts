@@ -38,6 +38,8 @@ export type ChatMessageDto = {
   /** A copy made by "forward". */
   forwarded?: boolean;
   edited?: boolean;
+  /** Soft-deleted: shown as "This message was deleted", with no text, files or reactions. */
+  deleted?: boolean;
   reactions?: ReactionDto[];
   /** Files sent with the message. The bytes come from `downloadPath` with the bearer token. */
   attachments?: AttachmentDto[];

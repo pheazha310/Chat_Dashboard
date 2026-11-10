@@ -18,6 +18,7 @@ Copying a message is done by the browser (no API).
 | `forwardedFromMessageId` | The original, on a copy made by forward, or `null`. `metadata.forwardedFrom` has `{conversationId, messageId, senderType, senderId}`. |
 | `isEdited`, `editedAt`   | Set by an edit. `createdAt` never changes.                                                                                            |
 | `reactions[]`            | `{ id, userType, userId, emoji, createdAt }`, oldest first. Group by `emoji` for counts.                                              |
+| `deletedAt`              | Set on a deleted message, which then has `content: null`, `metadata: null` and no reactions or attachments. Otherwise `null`.         |
 
 Sender information is `senderType` and `senderId` (a Backend 1 id); names and avatars come from Backend 1, as for
 `assignedAgent`. A reply quote is resolved by the client from `replyToMessageId` among the messages it holds.
@@ -38,9 +39,11 @@ Sender information is `senderType` and `senderId` (a Backend 1 id); names and av
 
 - **Edit** saves the previous text in `message_edit_history` (editor, text, time) in the same transaction as the
   update, then sets `isEdited`/`editedAt`. If it was the newest message, the inbox `lastMessagePreview` follows.
-- **Delete** is a soft delete (`deleted_at`, `deleted_by`); the row and its edit history stay for audit. Deleted
-  messages disappear from history, sync and unread counts. If it was the newest message the preview falls back to the
-  newest remaining one (or empty).
+- **Delete** is a soft delete (`deleted_at`, `deleted_by`); the row, its text and its edit history stay for audit, and
+  its files are soft-deleted with it. In history and sync (staff and customer) a deleted message stays in its place as
+  a placeholder (`deletedAt` set, no content, metadata, files or reactions) so clients show "This message was deleted".
+  It no longer counts as unread. If it was the newest message the preview falls back to the newest remaining one (or
+  empty).
 - **Reactions** are unique per user, message and emoji (database key), so two simultaneous identical requests keep
   one. `emoji` must be an emoji or emoji sequence (skin tones, flags, keycaps, ZWJ), at most 50 characters.
 - **Forward** copies a `TEXT` message (attachments arrive with FR-17) as a new agent message in the target and keeps
@@ -71,7 +74,7 @@ clients re-read history on reconnect (`sync`).
 | Event                      | Target                          | Payload                                                      | Server-side logic                                                                                                              |
 | -------------------------- | ------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
 | `message.updated`          | who can see the chat            | `{ message }` (full Message)                                 | After an edit. Replace the held copy. Followed by `conversation.updated` if the preview changed.                               |
-| `message.deleted`          | who can see the chat            | `{ id, conversationId, deletedAt, deletedBy }`               | After a soft delete. Remove it from the view. Followed by `conversation.updated` if the preview changed.                       |
+| `message.deleted`          | who can see the chat            | `{ id, conversationId, deletedAt, deletedBy }`               | After a soft delete. Show it as deleted. Followed by `conversation.updated` if the preview changed.                            |
 | `message.reaction_updated` | who can see the chat            | `{ conversationId, messageId, reactions[] }` (the full list) | After a reaction was added or removed. Replace the list, do not add to it.                                                     |
 | `message.forwarded`        | who can see the **target** chat | `{ message, forwardedFrom: { conversationId, messageId } }`  | After a forward, together with the normal `message.new` and `conversation.updated` for the copy. The source chat gets nothing. |
 

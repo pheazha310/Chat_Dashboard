@@ -32,8 +32,14 @@ describe("toMessage with message actions", () => {
     });
   });
 
+  it("marks a deleted message", () => {
+    const message = toMessage({ ...source, content: null, deletedAt: "2026-01-01T10:00:00Z" });
+    expect(message).toMatchObject({ id: "m1", text: "", deleted: true });
+  });
+
   it("leaves the optional fields out of a plain message", () => {
-    const message = toMessage({ ...source, replyToMessageId: null, isEdited: false, reactions: [] });
+    const message = toMessage({ ...source, replyToMessageId: null, isEdited: false, reactions: [], deletedAt: null });
+    expect(message).not.toHaveProperty("deleted");
     expect(message).not.toHaveProperty("replyToId");
     expect(message).not.toHaveProperty("edited");
     expect(message).not.toHaveProperty("reactions");

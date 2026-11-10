@@ -138,7 +138,7 @@ export function startRealtime() {
     wsClient.on("message.ack", ({ message }) => messages.getState().upsert(message)),
     wsClient.on("message.updated", ({ message }) => messages.getState().upsert(message)),
     wsClient.on("message.deleted", ({ conversationId, messageId }) =>
-      messages.getState().remove(conversationId, messageId),
+      messages.getState().markDeleted(conversationId, messageId),
     ),
     wsClient.on("note.created", ({ note }) => useNotesStore.getState().upsert(note)),
     wsClient.on("note.updated", ({ note }) => useNotesStore.getState().upsert(note)),

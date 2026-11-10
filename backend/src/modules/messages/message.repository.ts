@@ -111,7 +111,10 @@ export class MessageRepository {
     return this.db.conversationActivity.create({ data });
   }
 
-  /** Oldest-to-newest page. `before` pages back in time, `after` forward (reconnect sync); default is the latest. */
+  /**
+   * Oldest-to-newest page. `before` pages back in time, `after` forward (reconnect sync); default is the latest.
+   * Deleted messages are included (the mapper turns them into placeholders).
+   */
   async history(
     conversationId: string,
     query: CursorQuery,
@@ -119,7 +122,6 @@ export class MessageRepository {
   ): Promise<MessagePage> {
     const base = {
       conversationId,
-      deletedAt: null,
       ...(options.excludeSystem ? { senderType: { not: "SYSTEM" } } : {}),
     };
     if (query.after !== undefined) {

@@ -50,6 +50,19 @@ export default function MessageBubble({
     );
   }
 
+  if (message.deleted) {
+    return (
+      <div className={`message-block ${side}`}>
+        <div className="message-line">
+          <div className="message-bubble">
+            <p className="message-deleted">This message was deleted</p>
+          </div>
+        </div>
+        <time>{formatClock(message.createdAt)}</time>
+      </div>
+    );
+  }
+
   return (
     <div className={`message-block ${side} ${status === "failed" ? "failed" : ""}`}>
       <div className="message-line">
@@ -57,7 +70,9 @@ export default function MessageBubble({
           {side !== "customer" && <strong>{side === "assistant" ? "AI ASSISTANT" : "SUPPORT AGENT"}</strong>}
           {message.forwarded && <small className="message-forwarded">Forwarded</small>}
           {message.replyToId && (
-            <blockquote className="message-quote">{replyTo ? replyTo.text : "Original message unavailable"}</blockquote>
+            <blockquote className="message-quote">
+              {replyTo?.deleted ? "Original message deleted" : replyTo ? replyTo.text : "Original message unavailable"}
+            </blockquote>
           )}
           {message.attachments?.map((attachment) => (
             <AttachmentView key={attachment.id} attachment={attachment} />

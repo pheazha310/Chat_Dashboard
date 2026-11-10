@@ -74,18 +74,23 @@ describe.skipIf(!url)("message actions on PostgreSQL", () => {
     expect((await db.message.findUniqueOrThrow({ where: { id: m.id } })).content).toBe("mine");
   });
 
-  it("soft-deletes: gone from history and unread counts, kept in the table, preview falls back", async () => {
+  it("soft-deletes: a placeholder in history, kept in the table, preview falls back", async () => {
     const a = await send("keep");
     const b = await send("remove me");
+    await c.messageActions.react(agent1, b.id, { emoji: "👍" });
     const result = await c.messageActions.remove(agent1, b.id);
 
     expect(result.deletedBy).toBe(uid(1));
     const row = await db.message.findUniqueOrThrow({ where: { id: b.id } });
     expect(row.deletedAt).not.toBeNull();
     expect(row.deletedBy).toBe(uid(1));
+    expect(row.content).toBe("remove me"); // kept for audit
     const page = await c.messages.history(agent1, cid, { limit: 50 });
-    expect(page.items.map((m) => m.id)).toContain(a.id);
-    expect(page.items.map((m) => m.id)).not.toContain(b.id);
+    expect(page.items.find((m) => m.id === a.id)).toMatchObject({ content: "keep", deletedAt: null });
+    expect(page.items.find((m) => m.id === b.id)).toMatchObject({ content: null, reactions: [], attachments: [] });
+    expect(page.items.find((m) => m.id === b.id)?.deletedAt).not.toBeNull();
+    const customerPage = await c.messages.historyForCustomer(cid, { limit: 50 });
+    expect(customerPage.items.find((m) => m.id === b.id)).toMatchObject({ content: null });
     expect((await db.conversation.findUniqueOrThrow({ where: { id: cid } })).lastMessagePreview).toBe("keep");
     await expect(c.messageActions.remove(agent1, b.id)).rejects.toBeInstanceOf(NotFoundError); // already gone
   });

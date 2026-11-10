@@ -152,18 +152,27 @@ describe("history state and cursors", () => {
 describe("message actions in the store", () => {
   const base = { conversationId: "a", side: "agent" as const, text: "t", createdAt: "2026-01-01T09:00:00Z" };
 
-  it("removes a message and clears a reply aimed at it", () => {
+  it("keeps a deleted message in place without its text, files or reactions, and clears a reply aimed at it", () => {
     useMessageStore.setState({
       byConversation: {
         a: [
-          { ...base, id: "m1" },
+          {
+            ...base,
+            id: "m1",
+            reactions: [{ id: "r", userId: "u", emoji: "👍" }],
+            attachments: [{ id: "f", kind: "DOCUMENT", fileName: "a.pdf", mimeType: "x", size: 1, downloadPath: "/" }],
+          },
           { ...base, id: "m2" },
         ],
       },
       replyTarget: { a: "m1" },
     });
-    useMessageStore.getState().remove("a", "m1");
-    expect(useMessageStore.getState().byConversation.a?.map((m) => m.id)).toEqual(["m2"]);
+    useMessageStore.getState().markDeleted("a", "m1");
+    const [deleted, other] = useMessageStore.getState().byConversation.a ?? [];
+    expect(deleted).toMatchObject({ id: "m1", text: "", deleted: true });
+    expect(deleted?.reactions).toBeUndefined();
+    expect(deleted?.attachments).toBeUndefined();
+    expect(other).toMatchObject({ id: "m2", text: "t" });
     expect(useMessageStore.getState().replyTarget.a).toBeUndefined();
   });
 

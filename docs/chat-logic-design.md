@@ -196,7 +196,7 @@ Implemented in `shared/policy/conversation-access.ts`; the API returns the calle
   register and sign in at `/api/v1/customer/auth`.
 - **Side effects after commit** (notifications, SYSTEM messages) are best effort: a failure is logged, never undoes the
   committed change.
-- **Retention (FR-10):** only soft delete exists (deleted messages are excluded from history). No policy or job is
+- **Retention (FR-10):** only soft delete exists (deleted messages stay in history as empty "message deleted" placeholders). No policy or job is
   defined anywhere, so none is built.
 - **Realtime (built):** services report committed changes through `RealtimeNotifier`; the gateway authenticates sockets
   with a first-frame token and delivers each event only to sockets that pass `canView`. See

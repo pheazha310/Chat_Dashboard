@@ -45,6 +45,8 @@ export type BackendMessage = {
   reactions?: BackendReaction[];
   attachments?: BackendAttachment[];
   createdAt: string;
+  /** Set on a deleted message (a placeholder with no content). */
+  deletedAt?: string | null;
 };
 
 export type BackendAttachment = {

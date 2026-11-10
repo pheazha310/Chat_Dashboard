@@ -57,6 +57,18 @@ describe("availableActions", () => {
     expect(availableActions(message({ status: "sending" }))).toMatchObject({ edit: false, reply: false, copy: true });
   });
 
+  it("offers nothing on a deleted message", () => {
+    useSessionStore.setState({ userId: "me", role: "SUPERVISOR" });
+    expect(availableActions(message({ deleted: true, text: "" }))).toEqual({
+      reply: false,
+      react: false,
+      forward: false,
+      copy: false,
+      edit: false,
+      remove: false,
+    });
+  });
+
   it("lets supervisors delete others' messages but nothing on system notes", () => {
     useSessionStore.setState({ userId: "boss", role: "SUPERVISOR" });
     expect(availableActions(message({ side: "customer", senderId: "c" }))).toMatchObject({ remove: true, edit: false });
@@ -102,13 +114,13 @@ describe("actions", () => {
     expect(useEditingStore.getState().editingId).toBe("m1");
   });
 
-  it("removes a deleted message only after the server confirms", async () => {
+  it("marks a message deleted only after the server confirms", async () => {
     rest.deleteMessageRequest.mockRejectedValueOnce(new Error("no"));
     await deleteMessage(message());
-    expect(useMessageStore.getState().byConversation.a).toHaveLength(1);
+    expect(useMessageStore.getState().byConversation.a?.[0]).toMatchObject({ text: "hello" });
     rest.deleteMessageRequest.mockResolvedValueOnce({});
     await deleteMessage(message());
-    expect(useMessageStore.getState().byConversation.a).toHaveLength(0);
+    expect(useMessageStore.getState().byConversation.a?.[0]).toMatchObject({ id: "m1", text: "", deleted: true });
   });
 
   it("adds a reaction, and removes it when the caller already reacted with that emoji", async () => {

@@ -79,7 +79,8 @@ unknown), as for the staff API.
 
 `data` is an array of messages (`id`, `sequenceNumber`, `senderType` `CUSTOMER`/`AGENT`/`ASSISTANT`, `type`, `content`,
 `attachments`, `createdAt`, ...); `meta` holds `hasMore`, `oldestSequence`, `newestSequence`. Internal `SYSTEM` messages
-(takeover, transfer, status changes) are left out and `metadata` is always `null`. To stay up to date, call
+(takeover, transfer, status changes) are left out and `metadata` is always `null`. A deleted message stays in place
+with `deletedAt` set and no `content` or `attachments`: show "This message was deleted". To stay up to date, call
 `?after=<newestSequence you hold>`; to scroll back, `?before=<oldestSequence you hold>`.
 
 ## Not built
