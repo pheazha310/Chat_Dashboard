@@ -5,12 +5,12 @@
 // ==============================================================================================================
 
 TableGroup "12 Backend 1 (external)" [color: #94A3B8] {
-  customers
-  agents
+  los_customers
+  los_agents
   loan_applications
 }
 
-Table customers [headercolor: #94A3B8] {
+Table los_customers [headercolor: #94A3B8] {
   id uuid [pk, default: `gen_random_uuid()`]
   user_id uuid [not null]
   customer_code varchar(100)
@@ -22,7 +22,7 @@ Table customers [headercolor: #94A3B8] {
   Note: 'EXTERNAL TABLE — customer profiles owned by Backend 1'
 }
 
-Table agents [headercolor: #94A3B8] {
+Table los_agents [headercolor: #94A3B8] {
   id uuid [pk, default: `gen_random_uuid()`]
   user_id uuid [not null]
   employee_code varchar(100)
@@ -49,6 +49,6 @@ Table loan_applications [headercolor: #94A3B8] {
 }
 
 // Relations of backend 1
-Ref: users.id - customers.user_id [color: #9CA3AF]
-Ref: users.id - agents.user_id [color: #9CA3AF]
-Ref: customers.id < loan_applications.customer_id [color: #9CA3AF]
+Ref: users.id - los_customers.user_id [color: #9CA3AF]
+Ref: users.id - los_agents.user_id [color: #9CA3AF]
+Ref: los_customers.id < loan_applications.customer_id [color: #9CA3AF]

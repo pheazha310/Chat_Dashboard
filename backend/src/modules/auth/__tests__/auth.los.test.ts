@@ -1,8 +1,9 @@
 import { createRemoteJWKSet, exportSPKI, generateKeyPair, SignJWT, type JWTPayload } from "jose";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { logger } from "@config/logger.js";
-import { UnauthorizedError } from "@shared/errors/AppError.js";
-import { losVerifierFrom, LosTokenVerifier, parseStaffRoleMap } from "../auth.los.js";
+import { AppError, UnauthorizedError } from "@shared/errors/AppError.js";
+
+import { losVerifierFrom, LosTokenVerifier, MemoryUsedTokenIds, parseStaffRoleMap } from "../auth.los.js";
 
 const config = {
   issuer: "https://los.example.test",
@@ -15,14 +16,20 @@ let privateKey: CryptoKey;
 let publicKey: CryptoKey;
 let verifier: LosTokenVerifier;
 
-const sign = (claims: JWTPayload, options: { aud?: string; iss?: string; exp?: string; key?: CryptoKey } = {}) =>
-  new SignJWT(claims)
+/** A signed LOS token; every token gets a fresh `jti` unless `jti` is given (`null` leaves it out). */
+const sign = (
+  claims: JWTPayload,
+  options: { aud?: string; iss?: string; exp?: string | null; key?: CryptoKey; jti?: string | null } = {},
+) => {
+  const jwt = new SignJWT(claims)
     .setProtectedHeader({ alg: "RS256" })
     .setIssuer(options.iss ?? config.issuer)
     .setAudience(options.aud ?? config.customerAudience)
-    .setIssuedAt()
-    .setExpirationTime(options.exp ?? "5m")
-    .sign(options.key ?? privateKey);
+    .setIssuedAt();
+  if (options.exp !== null) jwt.setExpirationTime(options.exp ?? "5m");
+  if (options.jti !== null) jwt.setJti(options.jti ?? crypto.randomUUID());
+  return jwt.sign(options.key ?? privateKey);
+};
 
 const customer = { userId: 2, username: "dara", type: "customer", tokenType: "access" };
 const staff = { userId: 7, username: "sophea", type: "staff", tokenType: "chat-handoff", role: "agent" };
@@ -62,6 +69,7 @@ describe("LosTokenVerifier", () => {
     ["a non-integer userId", () => sign({ ...customer, userId: "2" })],
     ["a userId out of INT range", () => sign({ ...customer, userId: 2 ** 31 })],
     ["a missing username", () => sign({ ...customer, username: " " })],
+    ["no expiry", () => sign(customer, { exp: null })],
   ])("refuses a customer token with %s", async (_, token) => {
     await expect(verifier.verifyCustomer(await token())).rejects.toThrow(new UnauthorizedError("Invalid LOS token"));
   });
@@ -72,6 +80,8 @@ describe("LosTokenVerifier", () => {
       { ...staff, role: "CUSTOMER" },
       { ...staff, role: "loan_officer" },
       { ...staff, role: undefined },
+      // ADMIN only through LOS_STAFF_ROLE_MAP (none is configured here).
+      { ...staff, role: "admin" },
     ]) {
       await expect(verifier.verifyStaffHandoff(await sign(claims, { aud: "chat" }))).rejects.toBeInstanceOf(
         UnauthorizedError,
@@ -81,6 +91,49 @@ describe("LosTokenVerifier", () => {
     await expect(verifier.verifyStaffHandoff(await sign(customer, { aud: "chat" }))).rejects.toBeInstanceOf(
       UnauthorizedError,
     );
+  });
+
+  it("signs in with a hand-off token once: the same jti again is refused", async () => {
+    const token = await sign(staff, { aud: "chat" });
+    await expect(verifier.verifyStaffHandoff(token)).resolves.toMatchObject({ losUserId: 7 });
+    await expect(verifier.verifyStaffHandoff(token)).rejects.toThrow(new UnauthorizedError("Invalid LOS token"));
+    // Another token with the same jti is a replay too.
+    const jti = crypto.randomUUID();
+    await expect(verifier.verifyStaffHandoff(await sign(staff, { aud: "chat", jti }))).resolves.toBeDefined();
+    await expect(verifier.verifyStaffHandoff(await sign(staff, { aud: "chat", jti }))).rejects.toBeInstanceOf(
+      UnauthorizedError,
+    );
+  });
+
+  it("refuses a hand-off token without a jti", async () => {
+    await expect(verifier.verifyStaffHandoff(await sign(staff, { aud: "chat", jti: null }))).rejects.toBeInstanceOf(
+      UnauthorizedError,
+    );
+  });
+
+  it("does not use up a jti on a token refused for another reason", async () => {
+    const jti = crypto.randomUUID();
+    await expect(
+      verifier.verifyStaffHandoff(await sign({ ...staff, role: "teller" }, { aud: "chat", jti })),
+    ).rejects.toBeInstanceOf(UnauthorizedError);
+    await expect(verifier.verifyStaffHandoff(await sign(staff, { aud: "chat", jti }))).resolves.toBeDefined();
+  });
+
+  it("answers 503 when the used-token store fails, rather than allowing a possible replay", async () => {
+    const warn = vi.spyOn(logger, "warn").mockImplementation(() => logger);
+    const broken = new LosTokenVerifier(config, publicKey, {
+      claim: () => Promise.reject(new Error("redis down")),
+    });
+    const error = await broken.verifyStaffHandoff(await sign(staff, { aud: "chat" })).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(AppError);
+    expect(error).toMatchObject({ status: 503, code: "LOS_SIGN_IN_UNAVAILABLE" });
+    warn.mockRestore();
+  });
+
+  it("customer tokens are not single-use (the app keeps its LOS access token)", async () => {
+    const token = await sign(customer);
+    await verifier.verifyCustomer(token);
+    await expect(verifier.verifyCustomer(token)).resolves.toMatchObject({ losUserId: 2 });
   });
 
   it("accepts a few seconds of clock difference with LOS, but not more than 30", async () => {
@@ -119,7 +172,13 @@ describe("LOS staff role names (LOS_STAFF_ROLE_MAP)", () => {
     await expect(mapped.verifyStaffHandoff(await handoff("branch_manager"))).resolves.toMatchObject({
       role: "SUPERVISOR",
     });
-    await expect(mapped.verifyStaffHandoff(await handoff("admin"))).resolves.toMatchObject({ role: "ADMIN" });
+    // "admin" is not mapped here, so it is refused: ADMIN is never taken from the LOS role name alone.
+    await expect(mapped.verifyStaffHandoff(await handoff("admin"))).rejects.toBeInstanceOf(UnauthorizedError);
+    const withAdmin = new LosTokenVerifier(
+      { ...config, staffRoleMap: parseStaffRoleMap("chat_admin:ADMIN") },
+      publicKey,
+    );
+    await expect(withAdmin.verifyStaffHandoff(await handoff("Chat_Admin"))).resolves.toMatchObject({ role: "ADMIN" });
     await expect(mapped.verifyStaffHandoff(await handoff("teller"))).rejects.toBeInstanceOf(UnauthorizedError);
   });
 
@@ -158,6 +217,17 @@ describe("LOS key problems", () => {
     await expect(verifier.verifyCustomer("not-a-jwt")).rejects.toBeInstanceOf(UnauthorizedError);
     expect(warn).not.toHaveBeenCalled();
     warn.mockRestore();
+  });
+});
+
+describe("MemoryUsedTokenIds", () => {
+  it("forgets an id once its time has passed", async () => {
+    let now = 1_000;
+    const ids = new MemoryUsedTokenIds(() => now);
+    expect(await ids.claim("a", 500)).toBe(true);
+    expect(await ids.claim("a", 500)).toBe(false);
+    now = 1_501;
+    expect(await ids.claim("a", 500)).toBe(true);
   });
 });
 

@@ -18,7 +18,9 @@
     "db:generate": "pnpm --filter @chat-dashboard/backend db:generate",
     "db:validate": "pnpm --filter @chat-dashboard/backend db:validate",
     "db:migrate": "pnpm --filter @chat-dashboard/backend db:migrate",
-    "db:dbml": "pnpm --filter @chat-dashboard/backend db:dbml"
+    "db:dbml": "pnpm --filter @chat-dashboard/backend db:dbml",
+    "los:token": "pnpm --silent --filter @chat-dashboard/backend los:token",
+    "los:mock": "pnpm --silent --filter @chat-dashboard/backend los:mock"
   },
   "devDependencies": {
     "prettier": "3"

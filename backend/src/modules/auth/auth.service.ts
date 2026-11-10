@@ -4,8 +4,8 @@ import type { AuthContext, Role } from "@shared/auth/auth.types.js";
 import { AppError, ConflictError, ForbiddenError, NotFoundError, UnauthorizedError } from "@shared/errors/AppError.js";
 import { burnPasswordCheck, hashPassword, needsRehash, verifyPassword } from "./auth.password.js";
 import { isUniqueViolation, type AuthRepository } from "./auth.repository.js";
-import type { LosTokenVerifier } from "./auth.los.js";
-import type { ChangePasswordInput, LoginInput, RegisterInput } from "./auth.schema.js";
+import type { LosIdentity, LosTokenVerifier } from "./auth.los.js";
+import type { ChangePasswordInput, DevLoginInput, LoginInput, RegisterInput } from "./auth.schema.js";
 import { hashRefreshToken, newRefreshToken, type AccessTokens } from "./auth.tokens.js";
 import {
   DEFAULT_AUTH_OPTIONS,
@@ -108,7 +108,25 @@ export class AuthService {
     if (!this.los) throw new AppError(503, "LOS_SIGN_IN_DISABLED", "Sign in with LOS is not configured");
     const los =
       audience === "customer" ? await this.los.verifyCustomer(token) : await this.los.verifyStaffHandoff(token);
+    return this.signInWithLos(los, client);
+  }
 
+  /**
+   * Development sign-in, the LOS way without LOS: the caller sends the identity an LOS token would carry (`type`,
+   * `userId`, `username`, staff `role`) and is signed into the same LOS account `POST /auth/los` would use, found or
+   * created by its LOS id. Only reachable when AUTH_MODE=dev (the route is not mounted otherwise, and env.ts refuses
+   * AUTH_MODE=dev in production).
+   */
+  async devLogin(input: DevLoginInput, client: ClientInfo): Promise<AuthTokensDto> {
+    const identity: LosIdentity =
+      input.type === "customer"
+        ? { losUserType: "CUSTOMER", losUserId: input.userId, username: input.username, role: "CUSTOMER" }
+        : { losUserType: "STAFF", losUserId: input.userId, username: input.username, role: input.role };
+    return this.signInWithLos(identity, client);
+  }
+
+  /** Finds or creates the LOS account of `los`, keeps its role and name in step with LOS, and starts a session. */
+  private async signInWithLos(los: LosIdentity, client: ClientInfo): Promise<AuthTokensDto> {
     let user = await this.repository.findUserByLos(los.losUserType, los.losUserId);
     if (!user) {
       try {
@@ -129,8 +147,12 @@ export class AuthService {
 
     const roleChanged = user.role !== los.role;
     if (roleChanged || user.displayName !== los.username) {
-      user = await this.repository.updateUser(user.id, { role: los.role, displayName: los.username });
-      if (roleChanged) await this.repository.revokeAllForUser(user.id);
+      const id = user.id;
+      user = await this.repository.inTransaction(async (tx) => {
+        const updated = await tx.updateUser(id, { role: los.role, displayName: los.username });
+        if (roleChanged) await tx.revokeAllForUser(id);
+        return updated;
+      });
     }
     await this.repository.recordSuccessfulLogin(user.id);
     await this.syncIdentity(user);

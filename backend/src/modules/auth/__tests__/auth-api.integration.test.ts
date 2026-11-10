@@ -66,6 +66,10 @@ describe.skipIf(!url)("authentication over HTTP", () => {
   const staffLogin = (email: string, password: string) =>
     call("/api/v1/admin/auth/login", { body: { email, password } });
 
+  it("has no development sign-in with AUTH_MODE=jwt", async () => {
+    expect((await call("/api/v1/dev/login", { body: { type: "staff", role: "admin" } })).status).toBe(404);
+  });
+
   it("signs an admin in, serves protected routes with the token and refuses without it", async () => {
     const login = await staffLogin("Admin@Example.com", "admin-password");
     expect(login.status).toBe(200);
@@ -159,6 +163,7 @@ describe.skipIf(!url)("authentication over HTTP", () => {
         .setIssuer(LOS_ISSUER)
         .setAudience(audience)
         .setExpirationTime("2m")
+        .setJti(crypto.randomUUID())
         .sign(losKey);
     const customerToken = await losToken(
       { userId: 2, username: "dara", type: "customer", tokenType: "access" },
@@ -184,6 +189,8 @@ describe.skipIf(!url)("authentication over HTTP", () => {
     expect(staff.status).toBe(200);
     expect(staff.body.data.user).toMatchObject({ role: "AGENT", losUserId: 2 });
     expect(staff.body.data.user.id).not.toBe(first.body.data.user.id);
+    // A hand-off token signs in once.
+    expect((await call("/api/v1/admin/auth/los", { body: { handoffToken: handoff } })).status).toBe(401);
 
     // The database keeps the account shapes honest.
     await expect(
@@ -195,6 +202,65 @@ describe.skipIf(!url)("authentication over HTTP", () => {
     await expect(
       db.$executeRaw`UPDATE users SET los_user_type = 'CUSTOMER' WHERE id = ${staff.body.data.user.id}::uuid`,
     ).rejects.toThrow(/users_los_user_type_matches_role/);
+  });
+
+  it("keeps a staff or customer profile row with every account, editable by admins", async () => {
+    const { accessToken } = (await staffLogin("admin@example.com", "admin-password")).body.data;
+    const created = await call("/api/v1/admin/users", {
+      token: accessToken,
+      body: {
+        email: "agent@example.com",
+        displayName: "Agent",
+        role: "AGENT",
+        password: "agent-password",
+        staff: { employeeCode: "E-1", department: "Loans" },
+      },
+    });
+    expect(created.status).toBe(201);
+    expect(created.body.data).toMatchObject({ staff: { employeeCode: "E-1", department: "Loans" }, customer: null });
+    const taken = await call("/api/v1/admin/users", {
+      token: accessToken,
+      body: {
+        email: "b@example.com",
+        displayName: "B",
+        role: "AGENT",
+        password: "agent-password",
+        staff: { employeeCode: "E-1" },
+      },
+    });
+    expect(taken.status).toBe(409);
+    expect(taken.body.error.message).toMatch(/employee code/);
+
+    const registered = await call("/api/v1/customer/auth/register", {
+      body: { email: "cust@example.com", password: "customer-pass", displayName: "Cust" },
+    });
+    const customerId = registered.body.data.user.id;
+    expect(registered.body.data.user.customer).toEqual({ phone: null, customerCode: null, preferredLanguage: null });
+    const patched = await call(`/api/v1/admin/users/${customerId}`, {
+      method: "PATCH",
+      token: accessToken,
+      body: { customer: { phone: "+85512345678", preferredLanguage: "km" } },
+    });
+    expect(patched.status).toBe(200);
+    expect(patched.body.data.customer).toMatchObject({ phone: "+85512345678", preferredLanguage: "km" });
+    const wrongKind = await call(`/api/v1/admin/users/${customerId}`, {
+      method: "PATCH",
+      token: accessToken,
+      body: { staff: { department: "Loans" } },
+    });
+    expect(wrongKind.status).toBe(400);
+
+    // Every account has exactly its own kind of row; the database checks the values and deletes rows with the account.
+    expect(await db.staff.count()).toBe(2);
+    expect(await db.customer.count()).toBe(1);
+    await expect(
+      db.$executeRaw`UPDATE customers SET phone = '012345678' WHERE user_id = ${customerId}::uuid`,
+    ).rejects.toThrow(/customers_phone_e164/);
+    await expect(db.$executeRaw`UPDATE staff SET max_concurrent_chats = 0`).rejects.toThrow(
+      /staff_max_concurrent_chats_positive/,
+    );
+    await db.$executeRaw`DELETE FROM users WHERE id = ${customerId}::uuid`;
+    expect(await db.customer.count()).toBe(0);
   });
 
   it("keeps a refreshed sign-in's end and prunes expired sessions at the next sign-in", async () => {

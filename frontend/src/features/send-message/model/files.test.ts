@@ -19,17 +19,25 @@ vi.mock("@/shared/config", async (importOriginal) => ({
 import { useMessageStore } from "@/entities/message";
 import {
   chooseFile,
+  chooseFiles,
   clearChosenFile,
+  fileKind,
+  formatFileSize,
   hasChosenFile,
+  MAX_CHOSEN_FILES,
   MAX_FILE_BYTES,
+  MAX_IMAGE_BYTES,
+  removeChosenFile,
   retryUpload,
-  sendChosenFile,
+  sendChosenFiles,
   sendVoice,
+  useChosenFilesStore,
   useUploadStore,
 } from "./files";
 import { retryMessage, useComposerStore } from "./store";
 
-const file = (name = "scan.png", size = 10) => new File([new Uint8Array(size)], name, { type: "image/png" });
+const file = (name = "scan.png", size = 10, type = "image/png") => new File([new Uint8Array(size)], name, { type });
+const chosen = () => useChosenFilesStore.getState().files.a ?? [];
 const stored = (patch = {}) => ({
   id: "srv-1",
   conversationId: "a",
@@ -68,16 +76,60 @@ beforeEach(() => {
   clearChosenFile("a");
 });
 
-describe("choosing a file", () => {
+describe("choosing files", () => {
   it("shows the file name as the attachment and refuses empty or oversized files", () => {
     expect(chooseFile("a", file("scan.png"))).toBeNull();
     expect(useComposerStore.getState().attachments.a).toBe("scan.png");
     expect(hasChosenFile("a")).toBe(true);
-    expect(chooseFile("a", file("big.png", MAX_FILE_BYTES + 1))).toMatch(/25 MB/);
+    expect(chooseFile("a", file("big.pdf", MAX_FILE_BYTES + 1, "application/pdf"))).toMatch(/too large.*25\.0 MB/);
     expect(chooseFile("a", new File([], "empty.png"))).toMatch(/empty/);
     clearChosenFile("a");
     expect(hasChosenFile("a")).toBe(false);
     expect(useComposerStore.getState().attachments.a).toBe("");
+  });
+
+  it("takes several files of every supported type, once each, and says why the others are refused", () => {
+    const problems = chooseFiles("a", [
+      file("contract.pdf", 10, "application/pdf"),
+      file("statement.xlsx", 10),
+      file("note.docx", 10),
+      file("voice.m4a", 10),
+      file("clip.mp4", 10),
+      file("contract.pdf", 10, "application/pdf"), // the same file again
+      file("setup.exe", 10),
+      file("huge.png", MAX_IMAGE_BYTES + 1),
+    ]);
+    expect(chosen().map((c) => [c.file.name, c.kind])).toEqual([
+      ["contract.pdf", "pdf"],
+      ["statement.xlsx", "sheet"],
+      ["note.docx", "word"],
+      ["voice.m4a", "audio"],
+      ["clip.mp4", "video"],
+    ]);
+    expect(problems).toHaveLength(2);
+    expect(problems[0]).toMatch(/setup\.exe: this file type is not supported/);
+    expect(problems[1]).toMatch(/huge\.png is too large.*10\.0 MB/); // images have a smaller limit
+  });
+
+  it("stops at the maximum number of files", () => {
+    const many = Array.from({ length: MAX_CHOSEN_FILES + 2 }, (_, i) => file(`p${i}.png`, i + 1));
+    expect(chooseFiles("a", many)).toEqual([`At most ${MAX_CHOSEN_FILES} files at a time`]);
+    expect(chosen()).toHaveLength(MAX_CHOSEN_FILES);
+  });
+
+  it("removes one file and keeps the others", () => {
+    chooseFiles("a", [file("a.png"), file("b.pdf", 10, "application/pdf")]);
+    removeChosenFile("a", chosen()[0]!.id);
+    expect(chosen().map((c) => c.file.name)).toEqual(["b.pdf"]);
+    expect(useComposerStore.getState().attachments.a).toBe("b.pdf");
+  });
+
+  it("knows the kind and size of a file", () => {
+    expect(fileKind("Scan.JPEG")).toBe("image");
+    expect(fileKind("notes")).toBeNull();
+    expect(formatFileSize(512)).toBe("512 B");
+    expect(formatFileSize(1536)).toBe("1.5 KB");
+    expect(formatFileSize(3 * 1024 * 1024)).toBe("3.0 MB");
   });
 });
 
@@ -93,7 +145,7 @@ describe("sending a file", () => {
       },
     );
 
-    expect(sendChosenFile("a")).toBe(true);
+    expect(sendChosenFiles("a")).toBe(1);
     expect(messages()).toMatchObject([{ side: "agent", text: "ID photo", status: "sending" }]);
     expect(useComposerStore.getState().drafts.a).toBe("");
     expect(hasChosenFile("a")).toBe(false);
@@ -116,15 +168,29 @@ describe("sending a file", () => {
     expect(useUploadStore.getState().progress).toEqual({});
   });
 
+  it("sends each file as its own message, with the draft as the caption of the first", async () => {
+    chooseFiles("a", [file("a.png"), file("b.pdf", 10, "application/pdf")]);
+    useComposerStore.getState().setDraft("a", "Both pages");
+    rest.uploadFileRequest.mockImplementation((_c: string, f: File, o: { clientId: string }) =>
+      Promise.resolve(stored({ id: `srv-${f.name}`, clientId: o.clientId })),
+    );
+    expect(sendChosenFiles("a")).toBe(2);
+    expect(chosen()).toEqual([]);
+    expect(messages().map((m) => m.text)).toEqual(["Both pages", "b.pdf"]);
+    await vi.waitFor(() => expect(rest.uploadFileRequest).toHaveBeenCalledTimes(2));
+    expect(rest.uploadFileRequest.mock.calls[0]![2]).toMatchObject({ text: "Both pages" });
+    expect(rest.uploadFileRequest.mock.calls[1]![2]).not.toHaveProperty("text");
+  });
+
   it("does nothing without a chosen file", () => {
-    expect(sendChosenFile("a")).toBe(false);
+    expect(sendChosenFiles("a")).toBe(0);
     expect(rest.uploadFileRequest).not.toHaveBeenCalled();
   });
 
   it("marks the message failed, tells the agent why, and retries with the same client id", async () => {
     chooseFile("a", file());
     rest.uploadFileRequest.mockRejectedValueOnce(new Error("The file is too large"));
-    sendChosenFile("a");
+    sendChosenFiles("a");
     const clientId = messages()[0]!.id;
     await vi.waitFor(() => expect(messages()[0]?.status).toBe("failed"));
     expect(notify).toHaveBeenCalledWith("The file is too large");

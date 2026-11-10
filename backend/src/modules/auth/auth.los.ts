@@ -6,8 +6,9 @@ import {
   type JWTPayload,
   type JWTVerifyGetKey,
 } from "jose";
+import type { Redis } from "ioredis";
 import { logger } from "@config/logger.js";
-import { UnauthorizedError } from "@shared/errors/AppError.js";
+import { AppError, UnauthorizedError } from "@shared/errors/AppError.js";
 import type { Role } from "@shared/auth/auth.types.js";
 import { STAFF_ROLES } from "./auth.types.js";
 
@@ -47,8 +48,9 @@ const isLosUserId = (value: unknown): value is number =>
 const isStaffRole = (value: string): value is Role => (STAFF_ROLES as readonly string[]).includes(value);
 
 /**
- * The chat role for an LOS staff role: a mapped LOS name (`loan_officer` → AGENT), else the name itself when it is a
- * chat staff role in any case (`agent`, `Agent`). Anything else is refused.
+ * The chat role for an LOS staff role: a mapped LOS name (`loan_officer` → AGENT), else the name itself when it is
+ * `agent` or `supervisor` in any case. ADMIN is only ever granted through LOS_STAFF_ROLE_MAP: an LOS role that happens
+ * to be called "admin" may mean something else in LOS. Anything else is refused.
  */
 const staffRoleOf = (value: unknown, map: ReadonlyMap<string, Role>): Role | null => {
   if (typeof value !== "string") return null;
@@ -57,7 +59,7 @@ const staffRoleOf = (value: unknown, map: ReadonlyMap<string, Role>): Role | nul
   const mapped = map.get(name.toLowerCase());
   if (mapped) return mapped;
   const role = name.toUpperCase();
-  return isStaffRole(role) ? role : null;
+  return isStaffRole(role) && role !== "ADMIN" ? role : null;
 };
 
 /**
@@ -82,6 +84,41 @@ export function parseStaffRoleMap(value: string): Map<string, Role> {
 }
 
 /**
+ * The `jti` of staff hand-off tokens already used, so each one signs in once. `claim` records an id until `ttlMs` has
+ * passed (when the token has expired anyway) and answers false if it was already recorded.
+ */
+export interface UsedTokenIds {
+  claim(id: string, ttlMs: number): Promise<boolean>;
+}
+
+/** Shared by every API instance. */
+export class RedisUsedTokenIds implements UsedTokenIds {
+  constructor(private readonly redis: Redis) {}
+
+  async claim(id: string, ttlMs: number): Promise<boolean> {
+    return (await this.redis.set(`los:handoff-jti:${id}`, "1", "PX", Math.max(1, Math.ceil(ttlMs)), "NX")) === "OK";
+  }
+}
+
+/** One process only (EVENT_BUS=memory, tests). */
+export class MemoryUsedTokenIds implements UsedTokenIds {
+  private readonly ids = new Map<string, number>();
+
+  constructor(private readonly now: () => number = Date.now) {}
+
+  async claim(id: string, ttlMs: number): Promise<boolean> {
+    const now = this.now();
+    const until = this.ids.get(id);
+    if (until !== undefined && until > now) return false;
+    if (this.ids.size > 10_000) {
+      for (const [key, expires] of this.ids) if (expires <= now) this.ids.delete(key);
+    }
+    this.ids.set(id, now + ttlMs);
+    return true;
+  }
+}
+
+/**
  * Checks tokens signed by LOS (RS256 only, with the configured issuer and audience) and reads who they are for. Every
  * failure is the same 401, so a caller learns nothing about which check failed; the reason is logged at debug level.
  */
@@ -89,6 +126,7 @@ export class LosTokenVerifier {
   constructor(
     private readonly config: LosConfig,
     private readonly key: LosKey,
+    private readonly usedIds: UsedTokenIds = new MemoryUsedTokenIds(),
   ) {}
 
   /** The LOS access token of a mobile customer: `type = customer`, `tokenType = access`. */
@@ -98,7 +136,10 @@ export class LosTokenVerifier {
     return { losUserType: "CUSTOMER", ...this.identity(claims), role: "CUSTOMER" };
   }
 
-  /** The staff hand-off token: `type = staff`, `tokenType` = the configured hand-off type, a known staff `role`. */
+  /**
+   * The staff hand-off token: `type = staff`, `tokenType` = the configured hand-off type, a known staff `role` and a
+   * `jti`. It signs in once: the same `jti` again is refused, so a leaked hand-off token cannot be replayed.
+   */
   async verifyStaffHandoff(token: string): Promise<LosIdentity> {
     const claims = await this.verify(token, this.config.handoffAudience);
     if (claims.type !== "staff" || claims.tokenType !== this.config.handoffTokenType) {
@@ -106,7 +147,26 @@ export class LosTokenVerifier {
     }
     const role = staffRoleOf(claims.role, this.config.staffRoleMap ?? new Map());
     if (!role) this.reject("unknown staff role");
-    return { losUserType: "STAFF", ...this.identity(claims), role };
+    const identity = this.identity(claims);
+    await this.claimOnce(claims);
+    return { losUserType: "STAFF", ...identity, role };
+  }
+
+  /** Records the hand-off token's `jti` until the token expires; refuses one already used. */
+  private async claimOnce(claims: JWTPayload) {
+    const { jti, exp } = claims;
+    if (typeof jti !== "string" || jti === "" || jti.length > 200) this.reject("missing jti");
+    // `exp` is required by verify(); keep the id for as long as the token would still be accepted.
+    const ttlMs = ((exp ?? 0) + CLOCK_TOLERANCE_SECONDS) * 1000 - Date.now();
+    let fresh: boolean;
+    try {
+      fresh = await this.usedIds.claim(jti, ttlMs);
+    } catch (error) {
+      // Refuse rather than allow: without the store a replayed hand-off token could not be told apart.
+      logger.warn({ err: error }, "could not record the LOS hand-off token id");
+      throw new AppError(503, "LOS_SIGN_IN_UNAVAILABLE", "Sign in with LOS is unavailable; try again later");
+    }
+    if (!fresh) this.reject("hand-off token already used");
   }
 
   private async verify(token: string, audience: string): Promise<JWTPayload & Record<string, unknown>> {
@@ -116,6 +176,8 @@ export class LosTokenVerifier {
         issuer: this.config.issuer,
         audience,
         clockTolerance: CLOCK_TOLERANCE_SECONDS,
+        // A token without `exp` would never expire.
+        requiredClaims: ["exp"],
       };
       const { payload } =
         typeof this.key === "function"
@@ -153,16 +215,22 @@ const isKeyProblem = (error: unknown) =>
   error instanceof joseErrors.JWKSInvalid ||
   !(error instanceof joseErrors.JOSEError);
 
-/** The LOS verifier for the configured key: a JWKS endpoint (keys can rotate) or one PEM public key. */
-export async function losVerifierFrom(env: {
-  LOS_ISSUER?: string | undefined;
-  LOS_JWKS_URL?: string | undefined;
-  LOS_PUBLIC_KEY?: string | undefined;
-  LOS_CUSTOMER_AUDIENCE: string;
-  LOS_HANDOFF_AUDIENCE: string;
-  LOS_HANDOFF_TOKEN_TYPE: string;
-  LOS_STAFF_ROLE_MAP?: string | undefined;
-}): Promise<LosTokenVerifier | null> {
+/**
+ * The LOS verifier for the configured key: a JWKS endpoint (keys can rotate) or one PEM public key. `usedIds` records
+ * used hand-off tokens (Redis when several instances run).
+ */
+export async function losVerifierFrom(
+  env: {
+    LOS_ISSUER?: string | undefined;
+    LOS_JWKS_URL?: string | undefined;
+    LOS_PUBLIC_KEY?: string | undefined;
+    LOS_CUSTOMER_AUDIENCE: string;
+    LOS_HANDOFF_AUDIENCE: string;
+    LOS_HANDOFF_TOKEN_TYPE: string;
+    LOS_STAFF_ROLE_MAP?: string | undefined;
+  },
+  usedIds: UsedTokenIds = new MemoryUsedTokenIds(),
+): Promise<LosTokenVerifier | null> {
   if (!env.LOS_ISSUER) return null;
   const key: LosKey = env.LOS_JWKS_URL
     ? createRemoteJWKSet(new URL(env.LOS_JWKS_URL))
@@ -176,5 +244,6 @@ export async function losVerifierFrom(env: {
       staffRoleMap: parseStaffRoleMap(env.LOS_STAFF_ROLE_MAP ?? ""),
     },
     key,
+    usedIds,
   );
 }

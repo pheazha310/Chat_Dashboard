@@ -9,7 +9,7 @@ const FORMATS = [
   { mime: "audio/ogg;codecs=opus", extension: "ogg" },
   { mime: "audio/mp4", extension: "m4a" },
 ];
-const MAX_RECORDING_MS = 5 * 60_000;
+export const MAX_RECORDING_MS = 5 * 60_000;
 
 type Session = {
   recorder: MediaRecorder;
@@ -43,7 +43,7 @@ export async function startVoiceRecording(conversationId: string) {
     session = null;
     window.clearTimeout(finished?.timer);
     stream.getTracks().forEach((track) => track.stop());
-    useComposerStore.setState({ recording: false });
+    useComposerStore.setState({ recording: false, recordingSince: null });
     if (!finished?.send || chunks.length === 0) return;
     const type = (recorder.mimeType || format?.mime || "audio/webm").split(";")[0] ?? "audio/webm";
     const extension = FORMATS.find((f) => f.mime.startsWith(type))?.extension ?? "webm";
@@ -54,7 +54,7 @@ export async function startVoiceRecording(conversationId: string) {
   const timer = window.setTimeout(() => stopVoiceRecording(true), MAX_RECORDING_MS);
   session = { recorder, stream, chunks, startedAt: Date.now(), timer, send: true, conversationId };
   recorder.start();
-  useComposerStore.setState({ recording: true });
+  useComposerStore.setState({ recording: true, recordingSince: Date.now() });
 }
 
 /** Ends the recording; `send` false throws it away. */

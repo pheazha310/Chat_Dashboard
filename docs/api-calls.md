@@ -7,15 +7,18 @@ flows directly between the two browsers (WebRTC) and never touches this server; 
 Call control is REST under `/api/v1/admin` (dashboard bearer token; customers get 403). Signalling is WebSocket. Interactive
 reference: `GET /api/v1/admin/openapi.json`. Envelope: `{ "status": "success", "data": ... }`.
 
-## Important limit: there is no customer channel yet
+## The customer's side
 
-Customers cannot use the dashboard API or socket (the socket refuses customer tokens). The customer side of a call is
-therefore a set of **service methods**, exactly like `MessageService.receiveFromCustomer` for customer messages:
-`initiateFromCustomer`, `acceptByCustomer`, `declineByCustomer`, `cancelByCustomer`, `endByCustomer`, and `relay` with a
-customer actor. The future customer channel (its own authentication, `/api/v1/customer`, not built) will call them.
-Events for the customer are published to the user id `customerId` (`audience: users`), so a customer socket
-authenticated as that id will receive them. **Until then, a real call cannot complete end to end**: an agent's call to a
-customer rings out and becomes `MISSED`. The customer's half is covered by tests that play the customer through the
+The mobile app controls its half of a call over REST under `/api/v1/customer` (customer token,
+[api-customer-mobile.md](api-customer-mobile.md)): `POST /conversations/:conversationId/calls` to call staff, and
+`POST /calls/:callId/accept`, `/decline`, `/cancel`, `/end`. They call the service methods `initiateFromCustomer`,
+`acceptByCustomer`, `declineByCustomer`, `cancelByCustomer` and `endByCustomer`, with the same rules as below.
+
+**Still missing: real-time call events and signalling for customers.** Call events for the customer are published to the
+user id `customerId` (`audience: users`), but customer sockets only receive a whitelist of message events of joined
+rooms, and may not send `call.offer` / `call.answer` / `call.ice_candidate`. So the app does not learn about an incoming
+call in real time, and WebRTC media cannot be set up with a customer yet: a call can be rung, answered and ended through
+REST, but no audio flows. The customer's half is covered by tests that play the customer through the
 service methods; the browser half is covered by tests with a fake `RTCPeerConnection`. Neither has run against a real
 second browser.
 

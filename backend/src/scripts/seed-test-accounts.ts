@@ -1,5 +1,6 @@
 /**
- * Creates fake accounts for trying the chat locally: one admin, one supervisor, two agents and two customers.
+ * Creates fake accounts for trying the chat locally: one admin, one supervisor, two agents and two customers. The
+ * Postman collection signs in with them (docs/postman/README.md).
  *
  *   pnpm --filter @chat-dashboard/backend user:seed-test
  *   SEED_PASSWORD='another-pass' pnpm --filter @chat-dashboard/backend user:seed-test
@@ -17,12 +18,12 @@ import type { Role } from "@shared/auth/auth.types.js";
 import { ConflictError } from "@shared/errors/AppError.js";
 
 export const TEST_ACCOUNTS: ReadonlyArray<{ email: string; displayName: string; role: Role }> = [
-  { email: "admin@test.local", displayName: "Test Admin", role: "ADMIN" },
-  { email: "supervisor@test.local", displayName: "Test Supervisor", role: "SUPERVISOR" },
-  { email: "agent1@test.local", displayName: "Test Agent One", role: "AGENT" },
-  { email: "agent2@test.local", displayName: "Test Agent Two", role: "AGENT" },
-  { email: "customer1@test.local", displayName: "Test Customer One", role: "CUSTOMER" },
-  { email: "customer2@test.local", displayName: "Test Customer Two", role: "CUSTOMER" },
+  { email: "admin@test.local", displayName: "Chat Admin", role: "ADMIN" },
+  { email: "supervisor@test.local", displayName: "Supervisor Srey", role: "SUPERVISOR" },
+  { email: "agent1@test.local", displayName: "Agent Sophea", role: "AGENT" },
+  { email: "agent2@test.local", displayName: "Agent Rithy", role: "AGENT" },
+  { email: "customer1@test.local", displayName: "Dara", role: "CUSTOMER" },
+  { email: "customer2@test.local", displayName: "Bopha", role: "CUSTOMER" },
 ];
 
 async function main() {

@@ -9,7 +9,7 @@ import { MemoryRateLimitStore, RedisRateLimitStore } from "@shared/middleware/ra
 import { AccountCheckedAuthClient } from "@modules/auth/auth.account-check.js";
 import { AuthRepository } from "@modules/auth/auth.repository.js";
 import { AuthService } from "@modules/auth/auth.service.js";
-import { losVerifierFrom } from "@modules/auth/auth.los.js";
+import { losVerifierFrom, MemoryUsedTokenIds, RedisUsedTokenIds } from "@modules/auth/auth.los.js";
 import { AccessTokens, DevOrJwtAuthClient } from "@modules/auth/auth.tokens.js";
 import { DEFAULT_AUTH_OPTIONS } from "@modules/auth/auth.types.js";
 import { UserDirectory, UserService } from "@modules/auth/user.service.js";
@@ -43,7 +43,10 @@ const accessTokens = new AccessTokens(accessTokenSecret(), {
 });
 
 /** Checks LOS tokens for "sign in with LOS"; null (the endpoints answer 503) when LOS_ISSUER is not set. */
-const losVerifier = await losVerifierFrom(env);
+const losVerifier = await losVerifierFrom(
+  env,
+  env.EVENT_BUS === "redis" ? new RedisUsedTokenIds(redis) : new MemoryUsedTokenIds(),
+);
 
 /** Sign-in, registration, refresh and password changes. */
 export const authService = new AuthService(

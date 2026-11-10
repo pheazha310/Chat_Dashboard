@@ -76,6 +76,52 @@ describe.skipIf(!url)("/api/v1/customer over HTTP", () => {
     expect(staff.status).toBe(403);
   });
 
+  it("calls staff and answers their calls (the customer's half of docs/api-calls.md)", async () => {
+    const conversationId = (await join()).body.data.id as string;
+    const staff = async (path: string, method = "POST", body: unknown = {}) => {
+      const response = await fetch(`${host}/admin${path}`, {
+        method,
+        headers: { "content-type": "application/json", authorization: `Bearer ${agent}` },
+        ...(method === "GET" ? {} : { body: JSON.stringify(body) }),
+      });
+      return { status: response.status, body: (await response.json()) as Record<string, any> };
+    };
+    expect((await staff(`/conversations/${conversationId}/assign`)).status).toBe(200);
+
+    // The customer calls, the agent answers, the customer hangs up.
+    const started = await call(`/conversations/${conversationId}/calls`, maya, { method: "POST", body: {} });
+    expect(started.status).toBe(201);
+    expect(started.body.data).toMatchObject({ status: "RINGING", callType: "AUDIO" });
+    const callId = started.body.data.id as string;
+    expect((await staff(`/calls/${callId}/accept`)).body.data).toMatchObject({ status: "ACTIVE" });
+    expect((await call(`/calls/${callId}/end`, maya, { method: "POST" })).body.data).toMatchObject({ status: "ENDED" });
+
+    // The agent calls, the customer answers; the agent calls again, the customer declines.
+    const agentCall = (await staff(`/conversations/${conversationId}/calls`, "POST", { callType: "AUDIO" })).body.data
+      .id;
+    expect((await call(`/calls/${agentCall}/accept`, maya, { method: "POST" })).body.data).toMatchObject({
+      status: "ACTIVE",
+    });
+    expect((await staff(`/calls/${agentCall}/end`)).status).toBe(200);
+    const declined = (await staff(`/conversations/${conversationId}/calls`, "POST", {})).body.data.id;
+    expect((await call(`/calls/${declined}/decline`, maya, { method: "POST" })).body.data).toMatchObject({
+      status: "DECLINED",
+    });
+
+    // The customer calls and gives up before anyone answers.
+    const ringing = (await call(`/conversations/${conversationId}/calls`, maya, { method: "POST", body: {} })).body.data
+      .id;
+    expect((await call(`/calls/${ringing}/cancel`, maya, { method: "POST" })).body.data).toMatchObject({
+      status: "CANCELLED",
+    });
+
+    // Someone else's call or conversation is not found; a customer cannot answer its own call.
+    expect((await call(`/conversations/${conversationId}/calls`, noah, { method: "POST", body: {} })).status).toBe(404);
+    const own = (await call(`/conversations/${conversationId}/calls`, maya, { method: "POST", body: {} })).body.data.id;
+    expect((await call(`/calls/${own}/accept`, maya, { method: "POST" })).status).toBe(403);
+    expect((await call(`/calls/${own}/end`, noah, { method: "POST" })).status).toBe(404);
+  });
+
   it("joins: creates once, then returns the same conversation without agent details", async () => {
     const first = await join();
     expect(first.status).toBe(201);

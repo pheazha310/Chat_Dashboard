@@ -9,6 +9,8 @@ type ComposerState = {
   drafts: Record<string, string>;
   attachments: Record<string, string>;
   recording: boolean;
+  /** When the current voice recording started (ms since epoch), for the timer; null when not recording. */
+  recordingSince: number | null;
   setDraft: (conversationId: string, text: string) => void;
   setAttachment: (conversationId: string, name: string) => void;
   toggleRecording: () => void;
@@ -18,6 +20,7 @@ export const useComposerStore = create<ComposerState>((set) => ({
   drafts: {},
   attachments: {},
   recording: false,
+  recordingSince: null,
   setDraft: (conversationId, text) => set((state) => ({ drafts: { ...state.drafts, [conversationId]: text } })),
   setAttachment: (conversationId, name) =>
     set((state) => ({ attachments: { ...state.attachments, [conversationId]: name } })),

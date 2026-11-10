@@ -296,6 +296,50 @@ describe("AuthService", () => {
     });
   });
 
+  describe("development sign-in, the LOS way (AUTH_MODE=dev)", () => {
+    const staff = (userId: number, role: "AGENT" | "SUPERVISOR" | "ADMIN", username = "Sophea") =>
+      ({ type: "staff", userId, username, role }) as const;
+
+    it("creates an LOS-only staff account on first use and signs into the same one after", async () => {
+      const first = await service.devLogin(staff(7, "AGENT"), client);
+      expect(first.user).toMatchObject({ email: null, losUserId: 7, role: "AGENT", displayName: "Sophea" });
+      expect(first.user.staff).not.toBeNull();
+      await expect(tokens.verifyToken(first.accessToken)).resolves.toEqual({ userId: first.user.id, role: "AGENT" });
+      const again = await service.devLogin(staff(7, "AGENT"), client);
+      expect(again.user.id).toBe(first.user.id);
+      expect(repo.users.size).toBe(1);
+    });
+
+    it("numbers customers and staff separately, as LOS does", async () => {
+      const agent = await service.devLogin(staff(2, "AGENT"), client);
+      const customer = await service.devLogin({ type: "customer", userId: 2, username: "Dara" }, client);
+      expect(customer.user).toMatchObject({ losUserId: 2, role: "CUSTOMER", displayName: "Dara" });
+      expect(customer.user.customer).not.toBeNull();
+      expect(customer.user.id).not.toBe(agent.user.id);
+    });
+
+    it("follows the role and name it is given, signing out other devices on a role change, like LOS", async () => {
+      const first = await service.devLogin(staff(9, "AGENT"), client);
+      const promoted = await service.devLogin(staff(9, "SUPERVISOR", "Sophea Chan"), client);
+      expect(promoted.user).toMatchObject({ id: first.user.id, role: "SUPERVISOR", displayName: "Sophea Chan" });
+      expect(repo.sessions.find((s) => s.tokenHash === hashRefreshToken(first.refreshToken))?.revokedAt).not.toBeNull();
+    });
+
+    it("is the same account a real LOS token for that user would reach", async () => {
+      const dev = await service.devLogin({ type: "customer", userId: 4, username: "Dara" }, client);
+      const los = new AuthService(repo.asRepository(), tokens, DEFAULT_AUTH_OPTIONS, () => now, undefined, {
+        verifyCustomer: async () => ({ losUserType: "CUSTOMER", losUserId: 4, username: "Dara", role: "CUSTOMER" }),
+      } as unknown as LosTokenVerifier);
+      expect((await los.losSignIn("customer", "an-los-token", client)).user.id).toBe(dev.user.id);
+    });
+
+    it("refuses an account an admin disabled", async () => {
+      const { user } = await service.devLogin(staff(3, "ADMIN"), client);
+      await repo.updateUser(user.id, { status: "DISABLED" });
+      await expect(service.devLogin(staff(3, "ADMIN"), client)).rejects.toBeInstanceOf(ForbiddenError);
+    });
+  });
+
   describe("sign in with LOS", () => {
     const los = {
       verifyCustomer: vi.fn<(t: string) => Promise<LosIdentity>>(),

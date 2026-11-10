@@ -28,7 +28,7 @@ start in them.
 
 | #                                                 | Domain                     | Tables                                                                                                                      |
 | ------------------------------------------------- | -------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| [01](database/01-identity-and-access.dbml)        | Identity and access        | `users`, `refresh_tokens`, `roles`, `permissions`, `role_permissions`, `chat_users`                                         |
+| [01](database/01-identity-and-access.dbml)        | Identity and access        | `users`, `staff`, `customers`, `refresh_tokens`, `roles`, `permissions`, `role_permissions`, `chat_users`                   |
 | [02](database/02-conversations.dbml)              | Conversations (the hub)    | `conversations`, `conversation_participants`, `conversation_assignments`, `conversation_activities`                         |
 | [03](database/03-messages.dbml)                   | Messages                   | `messages`, `message_receipts`, `conversation_reads`, `message_edit_history`, `message_reactions`                           |
 | [04](database/04-attachments.dbml)                | Attachments                | `attachments`, `message_attachments`                                                                                        |
@@ -39,7 +39,7 @@ start in them.
 | [09](database/09-replies-and-automation.dbml)     | Replies and automation     | `canned_responses`, `automation_rules`, `automation_logs`                                                                   |
 | [10](database/10-callbacks-and-calls.dbml)        | Callbacks and calls        | `callback_requests`, `calls`, `call_participants`                                                                           |
 | [11](database/11-moderation.dbml)                 | Moderation                 | `spam_reports`, `customer_blocks`, `blocked_keywords`, `moderation_activities`                                              |
-| [12](database/12-backend-1-external.dbml)         | Backend 1 (external)       | `customers`, `agents`, `loan_applications`: context only, not created here                                                  |
+| [12](database/12-backend-1-external.dbml)         | Backend 1 (external)       | `los_customers`, `los_agents`, `loan_applications`: context only, not created here                                          |
 
 A new table goes into the file of its domain (or a new numbered file, keeping Backend 1 last), with its relations next to
 it.
@@ -143,6 +143,8 @@ sorted in SQL.
 | `permissions`                                                                                        | Permission catalogue: unique `(module, action)`, e.g. `tags` + `delete`. Seeded from code.                                                                                                                                                                                                                 |
 | `role_permissions`                                                                                   | Which role has which permission; unique `(role_id, permission_id)`. Edited by admins.                                                                                                                                                                                                                      |
 | `users`                                                                                              | Sign-in accounts (this backend owns auth): lower-case unique `email` and scrypt `password_hash` (both null for an LOS-only account), the LOS link `los_user_type` + `los_user_id` (unique), `role`, `display_name`, `status`, lockout (`failed_login_count`, `locked_until`). Its `id` is the token `sub`. |
+| `staff`                                                                                              | Staff side of an account, 1:1 with `users` (`user_id` is the primary key, cascade on delete): `employee_code` (unique), `department`, `max_concurrent_chats` (> 0; stored, not yet enforced). Created with every staff account.                                                                            |
+| `customers`                                                                                          | Customer side of an account, 1:1 with `users`: `phone` (E.164, CHECK), `customer_code` (the LOS customer code, unique), `preferred_language`. Created with every customer account. Loan data stays in Backend 1.                                                                                           |
 | `refresh_tokens`                                                                                     | One row per refresh token: `token_hash` (SHA-256, unique), `family_id` (one sign-in and its rotations), `expires_at` (indexed for the cleanup job), `revoked_at`, `replaced_by_id` (the session it rotated into), user agent and IP. FK to `users`, cascade.                                               |
 
 ## Chat identity (`chat_users`) and roles
@@ -232,7 +234,7 @@ These were run against a scratch PostgreSQL (48 insert/update/delete cases) and 
 | Tag names and blocked keywords unique ignoring case                                                           | UNIQUE index on `lower(...)`                                                   |
 
 Not enforced by the database (do it in the application): that every person id (`users.id`) exists, that a `*_type` matches the
-role in `users`, permissions, attachment type and size limits, and retention.
+role in `users`, that a `staff` row belongs to a staff account and a `customers` row to a customer (and that each account has one), permissions, attachment type and size limits, and retention.
 
 ## Workflows
 

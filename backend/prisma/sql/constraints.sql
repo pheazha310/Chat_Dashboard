@@ -275,3 +275,8 @@ ALTER TABLE roles ADD CONSTRAINT roles_kind_check CHECK (kind IN ('CUSTOMER', 'S
 ALTER TABLE roles ADD CONSTRAINT roles_name_check CHECK (name IN ('CUSTOMER', 'AGENT', 'SUPERVISOR', 'ADMIN'));
 ALTER TABLE permissions ADD CONSTRAINT permissions_module_check CHECK (module ~ '^[a-z_]+$');
 ALTER TABLE permissions ADD CONSTRAINT permissions_action_check CHECK (action ~ '^[a-z_]+$');
+
+-- Staff and customer profiles (migration 20261117000000_staff_and_customers). That a staff row belongs to a staff
+-- account and a customer row to a CUSTOMER account is checked by the application.
+ALTER TABLE staff ADD CONSTRAINT staff_max_concurrent_chats_positive CHECK (max_concurrent_chats > 0);
+ALTER TABLE customers ADD CONSTRAINT customers_phone_e164 CHECK (phone ~ '^\+[1-9][0-9]{6,14}$');

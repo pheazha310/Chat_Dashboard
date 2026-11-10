@@ -21,6 +21,9 @@ logs/
 /.opencode-skills/
 .DS_Store
 
+# Dev-only LOS key pair (pnpm los:token)
+/backend/.los-dev/
+
 # Generated Prisma client (prisma generate)
 /backend/prisma/generated/
 

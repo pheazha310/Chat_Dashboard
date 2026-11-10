@@ -19,7 +19,7 @@ import { chatSettingsRoutes } from "@modules/chat-settings/index.js";
 import { agentProfileRoutes, customerProfileRoutes } from "@modules/profile/index.js";
 import { customerChannelRoutes } from "@modules/customer-channel/index.js";
 import { workspaceRoutes } from "@modules/workspace/index.js";
-import { customerAuthRoutes, staffAuthRoutes, userRoutes } from "@modules/auth/index.js";
+import { customerAuthRoutes, devAuthRoutes, staffAuthRoutes, userRoutes } from "@modules/auth/index.js";
 import { permissionRoutes, roleRoutes } from "@modules/roles/index.js";
 import { buildOpenApiDocument } from "./openapi.js";
 
@@ -28,6 +28,13 @@ export const ADMIN_API_PREFIX = "/api/v1/admin";
 
 /** Namespace of the customer's mobile app. Only `CUSTOMER` tokens are accepted here (and no staff role is). */
 export const CUSTOMER_API_PREFIX = "/api/v1/customer";
+
+/** Development helpers, served only with AUTH_MODE=dev (app.ts). */
+export const DEV_API_PREFIX = "/api/v1/dev";
+
+/** `POST /login { role }`: password-less sign-in as a test account. See docs/api-auth.md, "Development sign-in". */
+export const devApiRouter = Router();
+devApiRouter.use(devAuthRoutes);
 
 /** Mobile customer API: join the conversation, send text/files/voice, read messages. See docs/api-customer-mobile.md. */
 export const customerApiRouter = Router();

@@ -4,6 +4,7 @@ import { parsed } from "@shared/middleware/validate.middleware.js";
 import {
   changePasswordBody,
   createUserBody,
+  devLoginBody,
   listUsersQuery,
   loginBody,
   losCustomerBody,
@@ -76,6 +77,19 @@ export class AuthController {
     noStore(res);
     const input = parsed(req, "body", changePasswordBody);
     res.json({ status: "success", data: await this.service.changePassword(getAuth(req), input, clientOf(req)) });
+  };
+}
+
+/** `POST /api/v1/dev/login`: password-less test sign-in, mounted only with AUTH_MODE=dev. */
+export class DevAuthController {
+  constructor(private readonly service: AuthService) {}
+
+  login = async (req: Request, res: Response) => {
+    noStore(res);
+    res.json({
+      status: "success",
+      data: await this.service.devLogin(parsed(req, "body", devLoginBody), clientOf(req)),
+    });
   };
 }
 

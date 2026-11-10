@@ -16,13 +16,14 @@ Node 22, pnpm 10 (pinned in `.mise.toml` and root `package.json`).
 
 ## Commands (run from repo root)
 
-| Command                                                   | Purpose                                                            |
-| --------------------------------------------------------- | ------------------------------------------------------------------ |
-| `pnpm dev` / `pnpm dev:backend`                           | Frontend dev server / backend API (`tsx watch`)                    |
-| `pnpm check`                                              | typecheck + lint + FSD check + format check + tests (what CI runs) |
-| `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm format` | Individual checks (all workspaces)                                 |
-| `pnpm check:fsd`                                          | Frontend layer-boundary check                                      |
-| `pnpm db:validate` / `db:generate` / `db:migrate`         | Prisma (runs in `backend/`, reads `backend/.env`)                  |
+| Command                                                   | Purpose                                                             |
+| --------------------------------------------------------- | ------------------------------------------------------------------- |
+| `pnpm dev` / `pnpm dev:backend`                           | Frontend dev server / backend API (`tsx watch`)                     |
+| `pnpm check`                                              | typecheck + lint + FSD check + format check + tests (what CI runs)  |
+| `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm format` | Individual checks (all workspaces)                                  |
+| `pnpm check:fsd`                                          | Frontend layer-boundary check                                       |
+| `pnpm db:validate` / `db:generate` / `db:migrate`         | Prisma (runs in `backend/`, reads `backend/.env`)                   |
+| `pnpm los:mock`                                           | Stand-in LOS on :4500 for "sign in with LOS" until LOS is connected |
 
 ## Source of truth (read these, do not restate them)
 
@@ -40,7 +41,7 @@ Node 22, pnpm 10 (pinned in `.mise.toml` and root `package.json`).
   `<name>.routes.ts → .controller.ts → .service.ts → .repository.ts` (+ `.schema.ts` for zod, `.types.ts`, `.openapi.ts` for every module that exposes routes) and then
   Prisma → PostgreSQL. Cross-cutting code lives in `config/`, `database/`, `websocket/`, `shared/`
   (`errors/`, `middleware/`, `validators/`, `utils/`, `constants/`, `types/`; create a folder when first needed).
-  `src/routes.ts` mounts module routers, served under `/api/v1/admin` (staff namespace; `/api/v1/customer` serves the mobile app and `/api/v1/guest` is reserved). See [docs/backend-structure.md](docs/backend-structure.md).
+  `src/routes.ts` mounts module routers, served under `/api/v1/admin` (staff namespace; `/api/v1/customer` serves the mobile app, `/api/v1/dev` exists only with `AUTH_MODE=dev` for test sign-in with an LOS-style identity and no LOS, and `/api/v1/guest` is reserved). See [docs/backend-structure.md](docs/backend-structure.md).
   Only repositories query Prisma (the only exceptions are `server.ts` and `scripts/*.ts` calling `prisma.$disconnect()` on exit). Services own business rules and transactions. Controllers only
   validate input (via the `validate()` middleware) and shape the response. WebSocket handlers play the controller role:
   `ws handler → service → repository`. Modules call each other only through services, never repositories.
@@ -52,7 +53,7 @@ Node 22, pnpm 10 (pinned in `.mise.toml` and root `package.json`).
 
 ## Current state (keep docs honest)
 
-- Backend implements `GET /api/health`, authentication and accounts: staff and customer sign-in (email and password, or an LOS token exchanged at `POST /auth/los`), registration for customers, JWT access + rotating refresh tokens, admin account management (`docs/api-auth.md`), roles and permissions as data with an admin API to edit them (`docs/api-roles.md`), the conversations, assignments, messages, notifications, presence and customer-info REST APIs (`docs/api-conversations.md`), the per-agent workspace API for tabs and drafts (`docs/api-workspace.md`), message actions: reply, edit, delete, reactions, forward (`docs/api-message-actions.md`), files, media and voice messages with local-disk storage (`docs/api-attachments.md`), internal notes with mentions and escalation (`docs/api-notes-escalations.md`), tags and conversation priority with inbox filtering and sorting (`docs/api-tags-priority.md`), personal and shared saved reply templates (`docs/api-canned-responses.md`), per-agent chat settings (`docs/api-chat-settings.md`), callbacks with a reminder job (`docs/api-callbacks.md`), call signalling for WebRTC calls (`docs/api-calls.md`; the customer side is service methods only, no customer channel), spam reports, blocked customers and keywords (`docs/api-moderation.md`; enforced in the customer entry points), the customer mobile REST API under `/api/v1/customer`: join room, send text/file/voice, retrieve messages (`docs/api-customer-mobile.md`), customer sockets on `/ws` with `room.join`/`room.leave` and a restricted event set (`docs/websocket-events.md`), a
+- Backend implements `GET /api/health`, authentication and accounts: staff and customer sign-in (email and password, or an LOS token exchanged at `POST /auth/los`), registration for customers, JWT access + rotating refresh tokens, admin account management (`docs/api-auth.md`), roles and permissions as data with an admin API to edit them (`docs/api-roles.md`), the conversations, assignments, messages, notifications, presence and customer-info REST APIs (`docs/api-conversations.md`), the per-agent workspace API for tabs and drafts (`docs/api-workspace.md`), message actions: reply, edit, delete, reactions, forward (`docs/api-message-actions.md`), files, media and voice messages with local-disk storage (`docs/api-attachments.md`), internal notes with mentions and escalation (`docs/api-notes-escalations.md`), tags and conversation priority with inbox filtering and sorting (`docs/api-tags-priority.md`), personal and shared saved reply templates (`docs/api-canned-responses.md`), per-agent chat settings (`docs/api-chat-settings.md`), callbacks with a reminder job (`docs/api-callbacks.md`), call signalling for WebRTC calls (`docs/api-calls.md`; customers ring, answer, decline, cancel and end calls over `/api/v1/customer` REST, but customer sockets get no call events or signalling yet), spam reports, blocked customers and keywords (`docs/api-moderation.md`; enforced in the customer entry points), the customer mobile REST API under `/api/v1/customer`: join room, send text/file/voice, retrieve messages (`docs/api-customer-mobile.md`), customer sockets on `/ws` with `room.join`/`room.leave` and a restricted event set (`docs/websocket-events.md`), a
   notification service, the WebSocket gateway (first-frame auth, per-socket audience filtering, Redis/in-memory event bus; contract in `docs/websocket-events.md`), presence and the Prisma schema. Push notifications and the AI worker are **designed in docs but not built**. Do not describe
   them as existing.
 - **This backend owns authentication** (since 2026-11-07; it used to be an external service). It stores accounts in

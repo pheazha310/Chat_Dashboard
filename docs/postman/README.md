@@ -121,37 +121,76 @@ own, a sent message), and each request that creates something saves its id (`con
 `templateId`, `escalationId`, `callbackId`, `callId`, `keywordId`, `reportId`, `reactionId`, ...) for the next ones.
 Every folder and request carries a description.
 
-| Folder                       | Sub-folders                                                      | Guide                                                                                                          | Needs                                                                                                      |
-| ---------------------------- | ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| **01 Start here**            | health, OpenAPI spec                                             | -                                                                                                              | no token                                                                                                   |
-| **02 Staff sign-in**         | -                                                                | [api-auth.md](../api-auth.md)                                                                                  | the admin from `user:create-admin`; the LOS request needs a real LOS token (`503` until LOS is configured) |
-| **03 Accounts and roles**    | Accounts, Roles and permissions                                  | [api-auth.md](../api-auth.md), [api-roles.md](../api-roles.md)                                                 | an admin token                                                                                             |
-| **04 Conversations**         | Inbox and lifecycle, Assignment, Customer info                   | [api-conversations.md](../api-conversations.md), [api-tags-priority.md](../api-tags-priority.md)               | Create, then Take over: most later folders need a conversation you own                                     |
-| **05 Messages**              | Send and read, Message actions, Files and voice                  | [api-message-actions.md](../api-message-actions.md), [api-attachments.md](../api-attachments.md)               | uploads use `fixtures/sample.pdf` and `fixtures/sample.wav`                                                |
-| **06 Team tools**            | Internal notes, Tags, Canned responses, Escalations              | [api-notes-escalations.md](../api-notes-escalations.md), [api-canned-responses.md](../api-canned-responses.md) | SHARED templates and resolving escalations need the supervisor token                                       |
-| **07 My workspace**          | Notifications, Presence, Tabs and drafts, Chat settings, Profile | [api-workspace.md](../api-workspace.md), [api-chat-settings.md](../api-chat-settings.md)                       | -                                                                                                          |
-| **08 Callbacks and calls**   | Callbacks, Calls                                                 | [api-callbacks.md](../api-callbacks.md), [api-calls.md](../api-calls.md)                                       | `scheduledAt` is set by a pre-request script; customer-started calls cannot be driven here                 |
-| **09 Moderation**            | -                                                                | [api-moderation.md](../api-moderation.md)                                                                      | keywords, reviews and the log need the supervisor token                                                    |
-| **10 Mobile app (customer)** | Customer sign-in, Chat                                           | [api-customer-mobile.md](../api-customer-mobile.md)                                                            | `customerToken` (saved by sign-in)                                                                         |
+| Folder                              | Sub-folders                                                      | Guide                                                                                                          | Needs                                                                                                                                                                                 |
+| ----------------------------------- | ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **01 Start here**                   | health, OpenAPI spec                                             | -                                                                                                              | no token                                                                                                                                                                              |
+| **02 Staff sign-in**                | -                                                                | [api-auth.md](../api-auth.md)                                                                                  | the seed accounts from `user:seed-test` (admin@test.local / password123); the LOS request needs an LOS token: `pnpm los:token staff` makes a test one (`503` until LOS is configured) |
+| **03 Accounts and roles**           | Accounts, Roles and permissions                                  | [api-auth.md](../api-auth.md), [api-roles.md](../api-roles.md)                                                 | an admin token                                                                                                                                                                        |
+| **04 Conversations**                | Inbox and lifecycle, Assignment, Customer info                   | [api-conversations.md](../api-conversations.md), [api-tags-priority.md](../api-tags-priority.md)               | Create, then Take over: most later folders need a conversation you own                                                                                                                |
+| **05 Messages**                     | Send and read, Message actions, Files and voice                  | [api-message-actions.md](../api-message-actions.md), [api-attachments.md](../api-attachments.md)               | uploads use `fixtures/sample.pdf` and `fixtures/sample.wav`                                                                                                                           |
+| **06 Team tools**                   | Internal notes, Tags, Canned responses, Escalations              | [api-notes-escalations.md](../api-notes-escalations.md), [api-canned-responses.md](../api-canned-responses.md) | SHARED templates and resolving escalations need the supervisor token                                                                                                                  |
+| **07 My workspace**                 | Notifications, Presence, Tabs and drafts, Chat settings, Profile | [api-workspace.md](../api-workspace.md), [api-chat-settings.md](../api-chat-settings.md)                       | -                                                                                                                                                                                     |
+| **08 Callbacks, calls and closing** | Callbacks, Calls, Close the conversation                         | [api-callbacks.md](../api-callbacks.md), [api-calls.md](../api-calls.md)                                       | `scheduledAt` is set by a pre-request script; customer-started calls cannot be driven here                                                                                            |
+| **09 Moderation**                   | -                                                                | [api-moderation.md](../api-moderation.md)                                                                      | keywords, reviews and the log need the supervisor token                                                                                                                               |
+| **10 Mobile app (customer)**        | Customer sign-in, Chat                                           | [api-customer-mobile.md](../api-customer-mobile.md)                                                            | `customerToken` (saved by sign-in)                                                                                                                                                    |
 
 A new endpoint goes into the folder of its feature, next to its siblings; a new feature gets its own sub-folder (or a
 new numbered folder before 10, keeping the mobile folder last).
 
 ### Running the whole collection
 
-Against a fresh database with `AUTH_MODE=dev` and the admin `admin@example.com` / `change-me-please`
-(`user:create-admin`), the collection runs top to bottom, each request saving the ids the later ones need:
+Everyone signs in with **email and password**; no LOS and no dev mode are needed (`AUTH_MODE=jwt` works). Create the
+test accounts once:
+
+```sh
+pnpm --filter @chat-dashboard/backend user:seed-test   # password: password123
+```
+
+| Account                 | Role       | Name in the story                                   |
+| ----------------------- | ---------- | --------------------------------------------------- |
+| `admin@test.local`      | ADMIN      | Chat Admin. Every staff request runs as this admin. |
+| `supervisor@test.local` | SUPERVISOR | Supervisor Srey                                     |
+| `agent1@test.local`     | AGENT      | Agent Sophea                                        |
+| `agent2@test.local`     | AGENT      | Agent Rithy                                         |
+| `customer1@test.local`  | CUSTOMER   | Dara                                                |
+| `customer2@test.local`  | CUSTOMER   | Bopha                                               |
+
+The collection then tells one conversation, top to bottom, each request saving the ids and tokens the later ones need:
+
+1. **01 Start here:** Sophea, Rithy, Srey, Dara and Bopha sign in (`password` is the `testPassword` variable).
+2. **02 Staff sign-in:** the admin signs in, refreshes, signs out, and changes the password and back.
+3. **04 Conversations:** Dara opens the chat in the mobile app and asks when her loan will be approved. Staff find it
+   in the inbox. Srey assigns it to Sophea, it is transferred to Rithy and unassigned, and staff take it over. Staff also
+   open a second conversation with Dara about another application.
+4. **05 Messages:** staff reply, Dara answers from the app, and staff mark her message delivered and read. Staff reply
+   to her question, edit their greeting, react, and forward a message to her other conversation (then delete that
+   copy). Then they send her a file and a voice message.
+5. **06-08:** staff add notes, tags, templates and an escalation, then schedule a callback and call Dara. Finally they
+   **resolve**, archive and restore the conversation.
+6. **09 Moderation:** Bopha sends a phishing link from the app. Staff report it, block her, lift the block, block her by
+   id, and lift it again at the end.
+7. **10 Mobile app:** **Sokha** registers in the app (a new email each run) and uses every customer endpoint.
 
 ```sh
 npx newman run docs/postman/chat-dashboard.postman_collection.json --working-dir docs/postman \
   --env-var baseUrl=http://localhost:4000
 ```
 
-All requests succeed except six that cannot here, and answer with the expected refusal: **Mark delivered** (`400`,
-receipts exist only for customer messages), **Answer** and **Decline a customer's call** (`403`, the call was started by
-the agent), **Hang up** (`409`, that call was cancelled), and the two **Sign in with LOS** requests (`503` while LOS is not
-configured; `401` until a real LOS token replaces the placeholder in `losHandoffToken` / `losCustomerToken`). It changes data (the admin's password becomes
-`a-new-password`), so use a throwaway database.
+The run can be repeated on the same database. Each run starts new conversations, restores the admin's password,
+and lifts Bopha's block.
+
+**Every request succeeds** (no `401`, `403`, `404` or `409`). Staff call Dara and she declines, then answers in the app;
+Dara calls staff, who answer, decline, or see her cancel (_08 / Calls_).
+
+The other ways to sign in (_02 / Other ways to sign in_ and _10 / Sign in with LOS_) are **skipped** unless you switch
+them on, so a plain run has nothing that can fail:
+
+| Variable      | Set to `true` when                                                      | Runs                                       |
+| ------------- | ----------------------------------------------------------------------- | ------------------------------------------ |
+| `useDevLogin` | the backend has `AUTH_MODE=dev`                                         | _Dev sign-in, the LOS way_                 |
+| `useLos`      | the mock LOS runs (`pnpm los:mock`, its lines in `.env`) or LOS is real | the _Mock LOS_ and _Sign in with LOS_ ones |
+
+Set them in the collection's variables, or with `--env-var useLos=true` for newman.
 
 New WebSocket frames (besides the list above): `call.offer`, `call.answer`, `call.ice_candidate`; see
 [../api-calls.md](../api-calls.md).

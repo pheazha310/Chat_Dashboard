@@ -2,7 +2,7 @@
   "info": {
     "name": "Chat Dashboard - Backend 2 (staff API)",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "description": "Every endpoint of the chat backend, in the order to run them: the numbered folders build on each other (01 checks the server, 02 signs in and saves {{token}}, 04 creates a conversation and takes it over, 05 sends a message, and so on). Each request that creates something saves its id in a collection variable for the next ones. Run the whole collection against a throwaway database (see docs/postman/README.md); a few requests answer with an expected refusal, explained in their folder. Staff requests use {{token}}, the mobile ones in folder 10 {{customerToken}}. With AUTH_MODE=dev a token can also be `dev:<uuid>:<ROLE>`, e.g. `dev:00000000-0000-4000-8000-000000000009:SUPERVISOR`."
+    "description": "Every endpoint of the chat backend, told as one conversation. First create the test accounts once with `pnpm --filter @chat-dashboard/backend user:seed-test` (password password123). Then: the people sign in with email and password (01), the admin signs in (02), Dara opens the chat in the mobile app and asks about her loan (04), staff take it over and reply while she answers from the app (05), work on it as a team (06-08), and Bopha's phishing message is moderated (09). Folder 10 is the mobile app on its own (Sokha registers). Each request saves the ids the next ones need; see docs/postman/README.md. Staff requests use {{token}}, the app ones {{customerToken}}."
   },
   "auth": {
     "type": "bearer",
@@ -20,8 +20,28 @@
       "value": "http://localhost:4000"
     },
     {
+      "key": "losUrl",
+      "value": "http://localhost:4500"
+    },
+    {
+      "key": "sokhaEmail",
+      "value": ""
+    },
+    {
+      "key": "useLos",
+      "value": "false"
+    },
+    {
+      "key": "useDevLogin",
+      "value": "false"
+    },
+    {
+      "key": "testPassword",
+      "value": "password123"
+    },
+    {
       "key": "token",
-      "value": "dev:00000000-0000-4000-8000-000000000003:AGENT"
+      "value": ""
     },
     {
       "key": "convId",
@@ -77,11 +97,11 @@
     },
     {
       "key": "customerId",
-      "value": "00000000-0000-4000-8000-000000000101"
+      "value": ""
     },
     {
       "key": "customerToken",
-      "value": "dev:00000000-0000-4000-8000-000000000101:CUSTOMER"
+      "value": ""
     },
     {
       "key": "customerConvId",
@@ -130,12 +150,64 @@
     {
       "key": "losCustomerToken",
       "value": "paste-an-LOS-token-here"
+    },
+    {
+      "key": "agentId",
+      "value": ""
+    },
+    {
+      "key": "agent2Id",
+      "value": ""
+    },
+    {
+      "key": "agentToken",
+      "value": ""
+    },
+    {
+      "key": "supervisorToken",
+      "value": ""
+    },
+    {
+      "key": "customerMsgId",
+      "value": ""
+    },
+    {
+      "key": "losStaffSession",
+      "value": ""
+    },
+    {
+      "key": "losCustomerSession",
+      "value": ""
+    },
+    {
+      "key": "customer2Id",
+      "value": ""
+    },
+    {
+      "key": "otherConvId",
+      "value": ""
+    },
+    {
+      "key": "spamConvId",
+      "value": ""
+    },
+    {
+      "key": "customer2Token",
+      "value": ""
+    },
+    {
+      "key": "forwardedMsgId",
+      "value": ""
+    },
+    {
+      "key": "customerCallId",
+      "value": ""
     }
   ],
   "item": [
     {
       "name": "01 Start here",
-      "description": "No token needed. `GET /api/health` must say `\"database\": \"up\"`.",
+      "description": "No token needed. `GET /api/health` must say `\"database\": \"up\"`. Then the people of the story sign in with email and password (accounts from `pnpm --filter @chat-dashboard/backend user:seed-test`, password {{testPassword}}): Agent Sophea, Agent Rithy, Supervisor Srey, and the customers Dara and Bopha. Later requests use their ids and tokens.",
       "item": [
         {
           "name": "GET /api/health (no auth)",
@@ -168,15 +240,9 @@
               "type": "noauth"
             }
           }
-        }
-      ]
-    },
-    {
-      "name": "02 Staff sign-in",
-      "description": "Sign in saves {{token}} and {{refreshToken}}; every later staff request uses {{token}}. With AUTH_MODE=dev, {{token}} may also be `dev:<uuid>:<ROLE>`. See docs/api-auth.md.",
-      "item": [
+        },
         {
-          "name": "Sign in (staff) - saves token",
+          "name": "Agent Sophea signs in (saves agentId, agentToken)",
           "request": {
             "method": "POST",
             "header": [
@@ -191,13 +257,13 @@
               "path": ["api", "v1", "admin", "auth", "login"],
               "query": []
             },
-            "description": "Public. Create the first admin with `pnpm --filter @chat-dashboard/backend user:create-admin`. Saves {{token}} and {{refreshToken}}.",
+            "description": "Seed account (user:seed-test). The agent the supervisor assigns Dara's conversation to.",
             "auth": {
               "type": "noauth"
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"admin@example.com\",\n  \"password\": \"change-me-please\"\n}"
+              "raw": "{\n  \"email\": \"agent1@test.local\",\n  \"password\": \"{{testPassword}}\"\n}"
             }
           },
           "event": [
@@ -206,10 +272,10 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "const session = pm.response.json().data;",
-                  "if (session && session.accessToken) {",
-                  "  pm.collectionVariables.set('token', session.accessToken);",
-                  "  pm.collectionVariables.set('refreshToken', session.refreshToken);",
+                  "const s = pm.response.json().data;",
+                  "if (s && s.user) {",
+                  "  pm.collectionVariables.set('agentId', s.user.id);",
+                  "  pm.collectionVariables.set('agentToken', s.accessToken);",
                   "}"
                 ]
               }
@@ -217,7 +283,7 @@
           ]
         },
         {
-          "name": "Sign in with LOS (staff) - saves token",
+          "name": "Agent Rithy signs in (saves agent2Id)",
           "request": {
             "method": "POST",
             "header": [
@@ -227,18 +293,186 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/v1/admin/auth/los",
+              "raw": "{{baseUrl}}/api/v1/admin/auth/login",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "admin", "auth", "los"],
+              "path": ["api", "v1", "admin", "auth", "login"],
               "query": []
             },
-            "description": "Public. Exchanges the short-lived LOS staff hand-off token (RS256; aud=LOS_HANDOFF_AUDIENCE, type=staff, tokenType=LOS_HANDOFF_TOKEN_TYPE, role) for this backend's tokens. 503 LOS_SIGN_IN_DISABLED when LOS_ISSUER is not set. Saves {{token}} and {{refreshToken}}.",
+            "description": "Seed account. The agent the conversation is transferred to.",
             "auth": {
               "type": "noauth"
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"handoffToken\": \"{{losHandoffToken}}\"\n}"
+              "raw": "{\n  \"email\": \"agent2@test.local\",\n  \"password\": \"{{testPassword}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const s = pm.response.json().data;",
+                  "if (s && s.user) {",
+                  "  pm.collectionVariables.set('agent2Id', s.user.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Supervisor Srey signs in (saves supervisorToken)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "auth", "login"],
+              "query": []
+            },
+            "description": "Seed account. Assigns conversations to agents.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"supervisor@test.local\",\n  \"password\": \"{{testPassword}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const s = pm.response.json().data;",
+                  "if (s && s.user) {",
+                  "  pm.collectionVariables.set('supervisorToken', s.accessToken);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Dara signs in to the app (saves customerId, customerToken)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/customer/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "customer", "auth", "login"],
+              "query": []
+            },
+            "description": "Seed account. The customer of the story: she opens the chat in 04 and talks with staff in 05.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"customer1@test.local\",\n  \"password\": \"{{testPassword}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const s = pm.response.json().data;",
+                  "if (s && s.user) {",
+                  "  pm.collectionVariables.set('customerId', s.user.id);",
+                  "  pm.collectionVariables.set('customerToken', s.accessToken);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Bopha signs in to the app (saves customer2Id, customer2Token)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/customer/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "customer", "auth", "login"],
+              "query": []
+            },
+            "description": "Seed account. Sends a phishing link in 09 Moderation.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"customer2@test.local\",\n  \"password\": \"{{testPassword}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const s = pm.response.json().data;",
+                  "if (s && s.user) {",
+                  "  pm.collectionVariables.set('customer2Id', s.user.id);",
+                  "  pm.collectionVariables.set('customer2Token', s.accessToken);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "02 Staff sign-in",
+      "description": "The admin signs in with email and password and saves {{token}} and {{refreshToken}}; every later staff request uses {{token}}. See docs/api-auth.md.",
+      "item": [
+        {
+          "name": "Admin signs in (saves token)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "auth", "login"],
+              "query": []
+            },
+            "description": "Public. Seed account admin@test.local (user:seed-test). Saves {{token}} and {{refreshToken}}; every later staff request runs as this admin.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@test.local\",\n  \"password\": \"{{testPassword}}\"\n}"
             }
           },
           "event": [
@@ -371,7 +605,7 @@
             "description": "Signs out other devices; returns a new sign-in.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"currentPassword\": \"change-me-please\",\n  \"newPassword\": \"a-new-password\"\n}"
+              "raw": "{\n  \"currentPassword\": \"{{testPassword}}\",\n  \"newPassword\": \"a-new-password\"\n}"
             }
           },
           "event": [
@@ -387,6 +621,192 @@
                   "}"
                 ]
               }
+            }
+          ]
+        },
+        {
+          "name": "Change my password back",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/auth/me/password",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "auth", "me", "password"],
+              "query": []
+            },
+            "description": "Restores the seed password, so the collection can run again on the same database.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"currentPassword\": \"a-new-password\",\n  \"newPassword\": \"{{testPassword}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const session = pm.response.json().data;",
+                  "if (session && session.accessToken) {",
+                  "  pm.collectionVariables.set('token', session.accessToken);",
+                  "  pm.collectionVariables.set('refreshToken', session.refreshToken);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Other ways to sign in (optional)",
+          "description": "Skipped by default. Set the collection variable useDevLogin to true (with AUTH_MODE=dev) or useLos to true (with `pnpm los:mock` running, or the real LOS configured) to run them.",
+          "item": [
+            {
+              "name": "Dev sign-in, the LOS way (AUTH_MODE=dev only)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/dev/login",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "dev", "login"],
+                  "query": []
+                },
+                "description": "Development only (AUTH_MODE=dev; 404 otherwise). Signs in by an LOS-style identity without a password. Optional: the run does not need it.",
+                "auth": {
+                  "type": "noauth"
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"type\": \"staff\",\n  \"userId\": 7,\n  \"username\": \"Sophea\",\n  \"role\": \"agent\"\n}"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": ["// Optional: does not replace {{token}}, so the run keeps its admin."]
+                  }
+                },
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// Skipped unless the collection variable useDevLogin is true (needs AUTH_MODE=dev).",
+                      "if (pm.variables.get('useDevLogin') !== 'true') pm.execution.skipRequest();"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Mock LOS: staff signs in (saves losHandoffToken)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{losUrl}}/staff/login",
+                  "host": ["{{losUrl}}"],
+                  "path": ["staff", "login"],
+                  "query": []
+                },
+                "description": "Not this backend: the mock LOS (`pnpm los:mock`, {{losUrl}}) standing in for LOS until it is connected. Returns a single-use staff hand-off token for the next request. Users: GET {{losUrl}}/users.",
+                "auth": {
+                  "type": "noauth"
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"username\": \"agent4\",\n  \"password\": \"password123\"\n}"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const j = pm.response.json();",
+                      "if (j.handoffToken) pm.collectionVariables.set('losHandoffToken', j.handoffToken);"
+                    ]
+                  }
+                },
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// Skipped unless the collection variable useLos is true (needs `pnpm los:mock` or the real LOS configured).",
+                      "if (pm.variables.get('useLos') !== 'true') pm.execution.skipRequest();"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Sign in with LOS (staff) - saves losStaffSession",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/admin/auth/los",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "admin", "auth", "los"],
+                  "query": []
+                },
+                "description": "Public. Exchanges the short-lived LOS staff hand-off token (RS256; aud=LOS_HANDOFF_AUDIENCE, type=staff, tokenType=LOS_HANDOFF_TOKEN_TYPE, role) for this backend's tokens. 503 LOS_SIGN_IN_DISABLED when LOS_ISSUER is not set. Saves {{token}} and {{refreshToken}}. Saves the access token in {{losStaffSession}} (not in token). Locally, `pnpm los:token staff` makes a test LOS token.",
+                "auth": {
+                  "type": "noauth"
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"handoffToken\": \"{{losHandoffToken}}\"\n}"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const s = pm.response.json().data;",
+                      "// Kept apart from token, so the rest of the run keeps its signed-in admin.",
+                      "if (s && s.accessToken) pm.collectionVariables.set('losStaffSession', s.accessToken);"
+                    ]
+                  }
+                },
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// Skipped unless the collection variable useLos is true (needs `pnpm los:mock` or the real LOS configured).",
+                      "if (pm.variables.get('useLos') !== 'true') pm.execution.skipRequest();"
+                    ]
+                  }
+                }
+              ]
             }
           ]
         }
@@ -443,10 +863,10 @@
                   "path": ["api", "v1", "admin", "users"],
                   "query": []
                 },
-                "description": "Admins only.",
+                "description": "Admins only. Optional staff profile: employeeCode, department, maxConcurrentChats.",
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"email\": \"agent@example.com\",\n  \"displayName\": \"First Agent\",\n  \"role\": \"AGENT\",\n  \"password\": \"agent-password\"\n}"
+                  "raw": "{\n  \"email\": \"agent-{{$timestamp}}@example.com\",\n  \"displayName\": \"Agent Vichea\",\n  \"role\": \"AGENT\",\n  \"password\": \"agent-password\",\n  \"staff\": {\n    \"employeeCode\": \"E-{{$timestamp}}\",\n    \"department\": \"Loans\"\n  }\n}"
                 }
               },
               "event": [
@@ -492,7 +912,7 @@
                   "path": ["api", "v1", "admin", "users", "{{userId}}"],
                   "query": []
                 },
-                "description": "Needs users.manage (admins by default). DISABLED or a new role signs the user out.",
+                "description": "Needs users.manage (admins by default). DISABLED or a new role signs the user out. Also edits the profile: { \"staff\": { ... } } for staff, { \"customer\": { \"phone\", \"customerCode\", \"preferredLanguage\" } } for customers; null clears a field.",
                 "body": {
                   "mode": "raw",
                   "raw": "{\n  \"status\": \"DISABLED\"\n}"
@@ -585,12 +1005,102 @@
     },
     {
       "name": "04 Conversations",
-      "description": "Run in order: Create saves {{convId}}, and Take over makes you its owner, which most later folders need.",
+      "description": "Dara's conversation from the app ({{convId}}) goes through the inbox: priority, status, archive, assignment between agents, and the customer panel. It ends with you taking it over, which the next folders need.",
       "item": [
         {
           "name": "Inbox and lifecycle",
-          "description": "See docs/api-conversations.md and docs/api-tags-priority.md (priority).",
+          "description": "Dara starts the conversation from the app; staff find it in the inbox and work on it. See docs/api-conversations.md and docs/api-tags-priority.md (priority).",
           "item": [
+            {
+              "name": "Dara opens the chat in the app (saves convId)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/customer/conversations/join",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "customer", "conversations", "join"],
+                  "query": []
+                },
+                "description": "Mobile app, Dara's token. Opens the chat about her loan application (a new application id each run, so each run starts a new conversation); it waits in the staff queue (NEEDS_HUMAN). Saves {{convId}}, the conversation the rest of the run works on.",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{customerToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"applicationId\": \"{{$guid}}\",\n  \"subject\": \"When will my loan be approved?\"\n}"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const j = pm.response.json();",
+                      "if (j.data && j.data.id) pm.collectionVariables.set('convId', String(j.data.id));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Dara asks her question (saves customerMsgId)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/customer/conversations/{{convId}}/messages",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "customer", "conversations", "{{convId}}", "messages"],
+                  "query": []
+                },
+                "description": "Mobile app, Dara's token. Staff now see it in the inbox.",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{customerToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"clientId\": \"{{$guid}}\",\n  \"text\": \"Hello, I applied for a personal loan last week. When will I get an answer?\"\n}"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const j = pm.response.json();",
+                      "if (j.data && j.data.id) pm.collectionVariables.set('customerMsgId', String(j.data.id));"
+                    ]
+                  }
+                }
+              ]
+            },
             {
               "name": "List inbox",
               "request": {
@@ -618,7 +1128,7 @@
               }
             },
             {
-              "name": "Create",
+              "name": "Staff start a conversation about another application (saves otherConvId)",
               "request": {
                 "method": "POST",
                 "header": [
@@ -635,13 +1145,14 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"customerId\": \"00000000-0000-4000-8000-000000000100\",\n  \"applicationId\": \"00000000-0000-4000-8000-000000005001\",\n  \"customerName\": \"Test Customer\",\n  \"subject\": \"Loan question\"\n}",
+                  "raw": "{\n  \"customerId\": \"{{customerId}}\",\n  \"applicationId\": \"{{$guid}}\",\n  \"customerName\": \"Dara\",\n  \"subject\": \"Documents for your second application\"\n}",
                   "options": {
                     "raw": {
                       "language": "json"
                     }
                   }
-                }
+                },
+                "description": "Staff can also open a conversation with a customer, here about Dara's second application. Saved as {{otherConvId}}; the run keeps working on Dara's own conversation ({{convId}})."
               },
               "event": [
                 {
@@ -650,7 +1161,7 @@
                     "type": "text/javascript",
                     "exec": [
                       "const j = pm.response.json();",
-                      "if (j.data && j.data.id) pm.collectionVariables.set('convId', String(j.data.id));"
+                      "if (j.data && j.data.id) pm.collectionVariables.set('otherConvId', String(j.data.id));"
                     ]
                   }
                 }
@@ -711,99 +1222,18 @@
               }
             },
             {
-              "name": "Change status",
-              "request": {
-                "method": "PATCH",
-                "header": [
-                  {
-                    "key": "Content-Type",
-                    "value": "application/json"
-                  }
-                ],
-                "url": {
-                  "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/status",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "v1", "admin", "conversations", "{{convId}}", "status"],
-                  "query": []
-                },
-                "body": {
-                  "mode": "raw",
-                  "raw": "{\n  \"status\": \"RESOLVED\"\n}",
-                  "options": {
-                    "raw": {
-                      "language": "json"
-                    }
-                  }
-                }
-              }
-            },
-            {
-              "name": "Archive",
-              "request": {
-                "method": "POST",
-                "header": [
-                  {
-                    "key": "Content-Type",
-                    "value": "application/json"
-                  }
-                ],
-                "url": {
-                  "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/archive",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "v1", "admin", "conversations", "{{convId}}", "archive"],
-                  "query": []
-                },
-                "body": {
-                  "mode": "raw",
-                  "raw": "{}",
-                  "options": {
-                    "raw": {
-                      "language": "json"
-                    }
-                  }
-                }
-              }
-            },
-            {
-              "name": "Restore",
-              "request": {
-                "method": "POST",
-                "header": [
-                  {
-                    "key": "Content-Type",
-                    "value": "application/json"
-                  }
-                ],
-                "url": {
-                  "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/restore",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "v1", "admin", "conversations", "{{convId}}", "restore"],
-                  "query": []
-                },
-                "body": {
-                  "mode": "raw",
-                  "raw": "{}",
-                  "options": {
-                    "raw": {
-                      "language": "json"
-                    }
-                  }
-                }
-              }
-            },
-            {
               "name": "By customer",
               "request": {
                 "method": "GET",
                 "header": [],
                 "url": {
-                  "raw": "{{baseUrl}}/api/v1/admin/conversations?customerId=00000000-0000-4000-8000-000000000100",
+                  "raw": "{{baseUrl}}/api/v1/admin/conversations?customerId={{customerId}}",
                   "host": ["{{baseUrl}}"],
                   "path": ["api", "v1", "admin", "conversations"],
                   "query": [
                     {
                       "key": "customerId",
-                      "value": "00000000-0000-4000-8000-000000000100"
+                      "value": "{{customerId}}"
                     }
                   ]
                 }
@@ -843,7 +1273,7 @@
               }
             },
             {
-              "name": "Assign agent 4 (supervisor)",
+              "name": "Assign an agent (supervisor)",
               "request": {
                 "method": "POST",
                 "header": [
@@ -860,7 +1290,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"agentId\": \"00000000-0000-4000-8000-000000000004\",\n  \"note\": \"please handle\"\n}",
+                  "raw": "{\n  \"agentId\": \"{{agentId}}\",\n  \"note\": \"Loan question from Dara, please take it\"\n}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -872,7 +1302,7 @@
                   "bearer": [
                     {
                       "key": "token",
-                      "value": "dev:00000000-0000-4000-8000-000000000009:SUPERVISOR",
+                      "value": "{{supervisorToken}}",
                       "type": "string"
                     }
                   ]
@@ -880,7 +1310,7 @@
               }
             },
             {
-              "name": "Transfer to agent 5",
+              "name": "Transfer to the second agent",
               "request": {
                 "method": "POST",
                 "header": [
@@ -897,7 +1327,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"agentId\": \"00000000-0000-4000-8000-000000000005\",\n  \"note\": \"handover\"\n}",
+                  "raw": "{\n  \"agentId\": \"{{agent2Id}}\",\n  \"note\": \"Rithy handles personal loans\"\n}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -924,7 +1354,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"note\": \"back to queue\"\n}",
+                  "raw": "{\n  \"note\": \"Back to the queue until the credit team answers\"\n}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -1027,10 +1457,10 @@
       "item": [
         {
           "name": "Send and read",
-          "description": "'Mark delivered' answers 400 here: receipts exist only for customer messages.",
+          "description": "Staff reply, Dara answers from the app, and staff read the history and mark her message delivered and read.",
           "item": [
             {
-              "name": "Send (idempotent via clientId)",
+              "name": "Reply to Dara (idempotent via clientId, saves msgId)",
               "request": {
                 "method": "POST",
                 "header": [
@@ -1047,7 +1477,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"clientId\": \"{{$guid}}\",\n  \"text\": \"Hello from Postman\"\n}",
+                  "raw": "{\n  \"clientId\": \"{{$guid}}\",\n  \"text\": \"Hello Dara, I can see your application. It is with our credit team now.\"\n}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -1064,6 +1494,51 @@
                       "const j = pm.response.json();",
                       "const m = j.data && (j.data.message || j.data);",
                       "if (m && m.id) pm.collectionVariables.set('msgId', String(m.id));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Dara answers from the app (saves customerMsgId)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/customer/conversations/{{convId}}/messages",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "customer", "conversations", "{{convId}}", "messages"],
+                  "query": []
+                },
+                "description": "Mobile app, Dara's token. Her newest message, which staff mark delivered and read next.",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{customerToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"clientId\": \"{{$guid}}\",\n  \"text\": \"Thank you! Do you need any more documents from me?\"\n}"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const j = pm.response.json();",
+                      "if (j.data && j.data.id) pm.collectionVariables.set('customerMsgId', String(j.data.id));"
                     ]
                   }
                 }
@@ -1120,9 +1595,18 @@
                   }
                 ],
                 "url": {
-                  "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/messages/{{msgId}}/delivered",
+                  "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/messages/{{customerMsgId}}/delivered",
                   "host": ["{{baseUrl}}"],
-                  "path": ["api", "v1", "admin", "conversations", "{{convId}}", "messages", "{{msgId}}", "delivered"],
+                  "path": [
+                    "api",
+                    "v1",
+                    "admin",
+                    "conversations",
+                    "{{convId}}",
+                    "messages",
+                    "{{customerMsgId}}",
+                    "delivered"
+                  ],
                   "query": []
                 },
                 "body": {
@@ -1134,7 +1618,7 @@
                     }
                   }
                 },
-                "description": "Receipts exist only for customer messages: use a customer message id (`400` for an agent message such as {{msgId}})."
+                "description": "Receipts exist only for customer messages: Dara's newest message ({{customerMsgId}}). An agent message such as {{msgId}} answers 400."
               }
             },
             {
@@ -1195,7 +1679,7 @@
         },
         {
           "name": "Message actions",
-          "description": "Reply, edit, react, forward, delete. See docs/api-message-actions.md.",
+          "description": "Reply, edit, react, forward to Dara's other conversation, and delete that copy. See docs/api-message-actions.md.",
           "item": [
             {
               "name": "Reply to a message",
@@ -1216,7 +1700,7 @@
                 "description": "Sends an agent message with `replyToMessageId` set. Same rules as sending (owner of an open conversation) and same idempotency by `clientId`. Delivered as `message.new`.",
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"clientId\": \"{{$guid}}\",\n  \"text\": \"Replying to that\"\n}",
+                  "raw": "{\n  \"clientId\": \"{{$guid}}\",\n  \"text\": \"No more documents for now; we will tell you if the credit team asks.\"\n}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -1244,7 +1728,7 @@
                 "description": "Author only, text messages only, while the caller still owns the open conversation. The previous text is saved in the edit history. Unchanged text is a no-op. Broadcast as `message.updated`.",
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"text\": \"Edited text\"\n}",
+                  "raw": "{\n  \"text\": \"Hello Dara, I can see your application. It is with our credit team, and you should hear back within 3 working days.\"\n}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -1324,7 +1808,35 @@
               }
             },
             {
-              "name": "Forward a message",
+              "name": "Take over Dara's other conversation",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/admin/conversations/{{otherConvId}}/assign",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "admin", "conversations", "{{otherConvId}}", "assign"],
+                  "query": []
+                },
+                "description": "Forwarding needs a target conversation you own: take over the one staff opened about Dara's second application.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Forward a message to Dara's other conversation (saves forwardedMsgId)",
               "request": {
                 "method": "POST",
                 "header": [
@@ -1342,24 +1854,37 @@
                 "description": "Copies a text message into another conversation the caller owns and that is open, keeping `forwardedFromMessageId`. Allowed only within the same customer's conversations or into an internal conversation. Idempotent by `clientId`. Broadcast as `message.new` plus `message.forwarded`.",
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"targetConversationId\": \"{{convId}}\",\n  \"clientId\": \"{{$guid}}\"\n}",
+                  "raw": "{\n  \"targetConversationId\": \"{{otherConvId}}\",\n  \"clientId\": \"{{$guid}}\"\n}",
                   "options": {
                     "raw": {
                       "language": "json"
                     }
                   }
                 }
-              }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const j = pm.response.json();",
+                      "const m = j.data && (j.data.message || j.data);",
+                      "if (m && m.id) pm.collectionVariables.set('forwardedMsgId', String(m.id));"
+                    ]
+                  }
+                }
+              ]
             },
             {
-              "name": "Delete a message",
+              "name": "Delete the forwarded copy",
               "request": {
                 "method": "DELETE",
                 "header": [],
                 "url": {
-                  "raw": "{{baseUrl}}/api/v1/admin/messages/{{msgId}}",
+                  "raw": "{{baseUrl}}/api/v1/admin/messages/{{forwardedMsgId}}",
                   "host": ["{{baseUrl}}"],
-                  "path": ["api", "v1", "admin", "messages", "{{msgId}}"],
+                  "path": ["api", "v1", "admin", "messages", "{{forwardedMsgId}}"],
                   "query": []
                 },
                 "description": "Soft delete (the row and its history are kept). Authors delete their own messages; supervisors and admins any agent, AI or customer message. SYSTEM messages cannot be deleted. Broadcast as `message.deleted`."
@@ -1398,7 +1923,7 @@
                     },
                     {
                       "key": "text",
-                      "value": "Signed contract",
+                      "value": "Loan agreement draft for you to read",
                       "type": "text"
                     },
                     {
@@ -1589,7 +2114,7 @@
                 "description": "Anyone who may see the conversation. `mentionedAgentIds` lists the agents to notify; each must exist in Backend 1 and be able to open the conversation (400 otherwise, `error.details.agentIds` names them). Mentioning yourself is ignored. Adds a `NOTE_ADDED` timeline entry (without the text). Broadcast as `note.created`, and `note.mentioned` plus a `MENTION` notification for each mentioned agent.",
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"text\": \"Customer prefers calls after 5pm\",\n  \"mentionedAgentIds\": []\n}",
+                  "raw": "{\n  \"text\": \"Dara prefers calls after 5pm. Second application needs her ID card.\",\n  \"mentionedAgentIds\": []\n}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -1631,7 +2156,7 @@
                 "description": "Author only. `text` and/or the complete new `mentionedAgentIds`; only agents added by this edit are notified. Broadcast as `note.updated`.",
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"text\": \"Updated note\"\n}",
+                  "raw": "{\n  \"text\": \"Dara prefers calls after 5pm. Second application needs her ID card and payslip.\"\n}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -1850,7 +2375,7 @@
                 "description": "`scope` PERSONAL (default; private to you) or SHARED (supervisors/admins only; visible to everyone). `shortcut` like `/greeting` must be free among the templates you can see (409). TEAM templates are not available yet.",
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"title\": \"Greeting\",\n  \"content\": \"Hello, how can I help you today?\",\n  \"shortcut\": \"/hi\",\n  \"scope\": \"PERSONAL\"\n}",
+                  "raw": "{\n  \"title\": \"Greeting\",\n  \"content\": \"Hello, thank you for contacting the loan team. How can I help you today?\",\n  \"shortcut\": \"/hi\",\n  \"scope\": \"PERSONAL\"\n}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -1968,7 +2493,7 @@
                 "description": "Only the owner of a conversation that is not closed. One escalation can be pending at a time (409). Adds an `ESCALATED` timeline entry and broadcasts `conversation.escalated` to everyone who can see the conversation. It does not change the owner, status or priority.",
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"reason\": \"Customer asks for a manager\"\n}",
+                  "raw": "{\n  \"reason\": \"Dara asks for a decision before the end of the week\"\n}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -2052,7 +2577,7 @@
                   "bearer": [
                     {
                       "key": "token",
-                      "value": "dev:00000000-0000-4000-8000-000000000004:AGENT",
+                      "value": "{{agentToken}}",
                       "type": "string"
                     }
                   ]
@@ -2115,7 +2640,7 @@
                   "bearer": [
                     {
                       "key": "token",
-                      "value": "dev:00000000-0000-4000-8000-000000000004:AGENT",
+                      "value": "{{agentToken}}",
                       "type": "string"
                     }
                   ]
@@ -2357,7 +2882,7 @@
                 "description": "Replaces my unsent text for this conversation (max 10000 characters). Drafts are per agent and conversation. An empty `content` deletes the draft and returns `null`. Broadcast as `workspace.draft_updated`.",
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"content\": \"Dear Maya,\"\n}",
+                  "raw": "{\n  \"content\": \"Dear Dara, good news about your application\"\n}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -2466,7 +2991,7 @@
       ]
     },
     {
-      "name": "08 Callbacks and calls",
+      "name": "08 Callbacks, calls and closing",
       "item": [
         {
           "name": "Callbacks",
@@ -2619,7 +3144,7 @@
                 "description": "Assignee, creator or supervisor. From PENDING or MISSED (a late call still counts). 409 if already closed. Broadcast as `callback.completed`.",
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"completionNote\": \"Reached the customer\"\n}",
+                  "raw": "{\n  \"completionNote\": \"Called Dara and explained the next steps\"\n}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -2699,7 +3224,7 @@
         },
         {
           "name": "Calls",
-          "description": "Answer and Decline need a call the customer started, so they answer 403 here; Hang up answers 409 (the call was cancelled). See docs/api-calls.md.",
+          "description": "Staff call Dara and she declines, then answers (staff hang up). Dara calls from the app: staff answer (she hangs up), decline, and she cancels one. Staff cancel a call of their own. See docs/api-calls.md.",
           "item": [
             {
               "name": "ICE servers for a call",
@@ -2730,7 +3255,7 @@
               }
             },
             {
-              "name": "Call the customer",
+              "name": "Staff call Dara (saves callId)",
               "request": {
                 "method": "POST",
                 "header": [
@@ -2745,7 +3270,7 @@
                   "path": ["api", "v1", "admin", "conversations", "{{convId}}", "calls"],
                   "query": []
                 },
-                "description": "Only the owner of a conversation that is not closed. The call starts `RINGING`; a conversation can have one call that is not over (409). Adds a `CALL` timeline entry and sends `call.incoming` to the customer's channel. After `call.accepted`, the caller sends the offer over the WebSocket (`call.offer`). Unanswered calls become `MISSED` after the ring timeout.",
+                "description": "Only the owner of an open conversation. Rings in Dara's app.",
                 "body": {
                   "mode": "raw",
                   "raw": "{\n  \"callType\": \"AUDIO\"\n}",
@@ -2763,9 +3288,7 @@
                     "type": "text/javascript",
                     "exec": [
                       "const j = pm.response.json();",
-                      "const d = j.data || {};",
-                      "const id = d.id || (d.reactions && d.reactions.length ? d.reactions[0].id : null);",
-                      "if (id) pm.collectionVariables.set('callId', String(id));"
+                      "if (j.data && j.data.id) pm.collectionVariables.set('callId', String(j.data.id));"
                     ]
                   }
                 }
@@ -2786,45 +3309,109 @@
               }
             },
             {
-              "name": "Answer a customer's call",
+              "name": "Dara declines the call in the app",
               "request": {
                 "method": "POST",
-                "header": [],
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
                 "url": {
-                  "raw": "{{baseUrl}}/api/v1/admin/calls/{{callId}}/accept",
+                  "raw": "{{baseUrl}}/api/v1/customer/calls/{{callId}}/decline",
                   "host": ["{{baseUrl}}"],
-                  "path": ["api", "v1", "admin", "calls", "{{callId}}", "accept"],
+                  "path": ["api", "v1", "customer", "calls", "{{callId}}", "decline"],
                   "query": []
                 },
-                "description": "A ringing call a customer started: a supervisor, the owner, or any agent while nobody owns the conversation. The first to answer wins; the others get 409. The answering agent becomes a participant. Broadcast as `call.accepted`. Only for a call the customer started (customer calls have no REST channel yet), so `403` for the call started above."
+                "description": "Mobile app, Dara's token: she is busy.",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{customerToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}"
+                }
               }
             },
             {
-              "name": "Decline a customer's call",
+              "name": "Staff call Dara again (saves callId)",
               "request": {
                 "method": "POST",
-                "header": [],
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
                 "url": {
-                  "raw": "{{baseUrl}}/api/v1/admin/calls/{{callId}}/decline",
+                  "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/calls",
                   "host": ["{{baseUrl}}"],
-                  "path": ["api", "v1", "admin", "calls", "{{callId}}", "decline"],
+                  "path": ["api", "v1", "admin", "conversations", "{{convId}}", "calls"],
                   "query": []
                 },
-                "description": "Same people as accept. The call becomes `DECLINED`. Broadcast as `call.declined`. Only for a call the customer started (customer calls have no REST channel yet), so `403` for the call started above."
-              }
+                "description": "She can talk now.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"callType\": \"AUDIO\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const j = pm.response.json();",
+                      "if (j.data && j.data.id) pm.collectionVariables.set('callId', String(j.data.id));"
+                    ]
+                  }
+                }
+              ]
             },
             {
-              "name": "Cancel a call I started",
+              "name": "Dara answers in the app",
               "request": {
                 "method": "POST",
-                "header": [],
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
                 "url": {
-                  "raw": "{{baseUrl}}/api/v1/admin/calls/{{callId}}/cancel",
+                  "raw": "{{baseUrl}}/api/v1/customer/calls/{{callId}}/accept",
                   "host": ["{{baseUrl}}"],
-                  "path": ["api", "v1", "admin", "calls", "{{callId}}", "cancel"],
+                  "path": ["api", "v1", "customer", "calls", "{{callId}}", "accept"],
                   "query": []
                 },
-                "description": "Only the caller, and only while it rings. The call becomes `CANCELLED`. Broadcast as `call.ended` with reason `cancelled`."
+                "description": "Mobile app, Dara's token. The call is ACTIVE; audio/video then flows over WebRTC (signalling on the WebSocket).",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{customerToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}"
+                }
               }
             },
             {
@@ -2840,15 +3427,570 @@
                 },
                 "description": "A participant, or a supervisor, on an answered call. Records the duration. Broadcast as `call.ended` with reason `ended`. For an accepted call; `409` after the call above was cancelled."
               }
+            },
+            {
+              "name": "Dara calls staff from the app (saves customerCallId)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/customer/conversations/{{convId}}/calls",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "customer", "conversations", "{{convId}}", "calls"],
+                  "query": []
+                },
+                "description": "Mobile app, Dara's token. Rings for every agent who may see the conversation.",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{customerToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"callType\": \"AUDIO\"\n}"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const j = pm.response.json();",
+                      "if (j.data && j.data.id) pm.collectionVariables.set('customerCallId', String(j.data.id));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Answer Dara's call",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/admin/calls/{{customerCallId}}/accept",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "admin", "calls", "{{customerCallId}}", "accept"],
+                  "query": []
+                },
+                "description": "A ringing call a customer started: a supervisor, the owner, or any agent while nobody owns the conversation. The first to answer wins; the others get 409. The answering agent becomes a participant. Broadcast as `call.accepted`. Only for a call the customer started (customer calls have no REST channel yet), so `403` for the call started above."
+              }
+            },
+            {
+              "name": "Dara hangs up in the app",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/customer/calls/{{customerCallId}}/end",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "customer", "calls", "{{customerCallId}}", "end"],
+                  "query": []
+                },
+                "description": "Mobile app, Dara's token.",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{customerToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}"
+                }
+              }
+            },
+            {
+              "name": "Dara calls again (saves customerCallId)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/customer/conversations/{{convId}}/calls",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "customer", "conversations", "{{convId}}", "calls"],
+                  "query": []
+                },
+                "description": "Mobile app, Dara's token.",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{customerToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"callType\": \"AUDIO\"\n}"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const j = pm.response.json();",
+                      "if (j.data && j.data.id) pm.collectionVariables.set('customerCallId', String(j.data.id));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Decline Dara's call",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/admin/calls/{{customerCallId}}/decline",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "admin", "calls", "{{customerCallId}}", "decline"],
+                  "query": []
+                },
+                "description": "Same people as accept. The call becomes `DECLINED`. Broadcast as `call.declined`. Only for a call the customer started (customer calls have no REST channel yet), so `403` for the call started above."
+              }
+            },
+            {
+              "name": "Dara calls and gives up (saves customerCallId)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/customer/conversations/{{convId}}/calls",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "customer", "conversations", "{{convId}}", "calls"],
+                  "query": []
+                },
+                "description": "Mobile app, Dara's token.",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{customerToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"callType\": \"AUDIO\"\n}"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const j = pm.response.json();",
+                      "if (j.data && j.data.id) pm.collectionVariables.set('customerCallId', String(j.data.id));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Dara cancels her call in the app",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/customer/calls/{{customerCallId}}/cancel",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "customer", "calls", "{{customerCallId}}", "cancel"],
+                  "query": []
+                },
+                "description": "Mobile app, Dara's token: nobody answered yet.",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{customerToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}"
+                }
+              }
+            },
+            {
+              "name": "Staff call Dara once more (saves callId)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/calls",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "admin", "conversations", "{{convId}}", "calls"],
+                  "query": []
+                },
+                "description": "To show cancelling.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"callType\": \"AUDIO\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const j = pm.response.json();",
+                      "if (j.data && j.data.id) pm.collectionVariables.set('callId', String(j.data.id));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Cancel a call I started",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/admin/calls/{{callId}}/cancel",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "admin", "calls", "{{callId}}", "cancel"],
+                  "query": []
+                },
+                "description": "Only the caller, and only while it rings. The call becomes `CANCELLED`. Broadcast as `call.ended` with reason `cancelled`."
+              }
+            }
+          ]
+        },
+        {
+          "name": "Close the conversation",
+          "description": "Last step of Dara's conversation.",
+          "item": [
+            {
+              "name": "Resolve the conversation",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/status",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "admin", "conversations", "{{convId}}", "status"],
+                  "query": []
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"status\": \"RESOLVED\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "description": "Dara has her answer: the owner marks the conversation RESOLVED."
+              }
+            },
+            {
+              "name": "Archive",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/archive",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "admin", "conversations", "{{convId}}", "archive"],
+                  "query": []
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "description": "Moves the resolved conversation out of the inbox."
+              }
+            },
+            {
+              "name": "Restore",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/restore",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "admin", "conversations", "{{convId}}", "restore"],
+                  "query": []
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "description": "Brings it back, e.g. when Dara writes again about the same loan."
+              }
             }
           ]
         }
-      ]
+      ],
+      "description": "Staff schedule a callback for Dara and call her; then the conversation is resolved, archived and restored."
     },
     {
       "name": "09 Moderation",
-      "description": "Blocks, keywords, spam reports and the log; most need the supervisor token. See docs/api-moderation.md.",
+      "description": "Blocks, keywords, spam reports and the log; most need the supervisor token. See docs/api-moderation.md. Bopha sends a phishing link from the app; staff report it, block her through the conversation, lift the block and block her by id.",
       "item": [
+        {
+          "name": "Bopha opens a chat in the app (saves spamConvId)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/customer/conversations/join",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "customer", "conversations", "join"],
+              "query": []
+            },
+            "description": "Mobile app, Bopha's token.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customer2Token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"subject\": \"You won a prize\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "if (j.data && j.data.id) pm.collectionVariables.set('spamConvId', String(j.data.id));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Bopha sends a phishing link",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/customer/conversations/{{spamConvId}}/messages",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "customer", "conversations", "{{spamConvId}}", "messages"],
+              "query": []
+            },
+            "description": "Mobile app, Bopha's token.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customer2Token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientId\": \"{{$guid}}\",\n  \"text\": \"Claim your free loan bonus now: http://win-prize.example/login\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Report spam or abuse",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/conversations/{{spamConvId}}/spam-reports",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "conversations", "{{spamConvId}}", "spam-reports"],
+              "query": []
+            },
+            "description": "Anyone who can see the conversation, about the conversation or one of its messages (`messageId`, which must belong to it). One pending report per reporter and target (409). Broadcast as `spam.reported` to whoever can see the conversation, which includes supervisors. Optional `messageId` (a message of this conversation) points at the offending message.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Phishing link asking for login details\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "const d = j.data || {};",
+                  "const id = d.id || (d.reactions && d.reactions.length ? d.reactions[0].id : null);",
+                  "if (id) pm.collectionVariables.set('reportId', String(id));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Spam reports of a conversation",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/conversations/{{spamConvId}}/spam-reports",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "conversations", "{{spamConvId}}", "spam-reports"],
+              "query": []
+            },
+            "description": "Anyone who can see the conversation. Newest first."
+          }
+        },
+        {
+          "name": "Spam report queue",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/moderation/spam-reports?status=PENDING",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "moderation", "spam-reports"],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "PENDING"
+                }
+              ]
+            },
+            "description": "Supervisors see every report (filter by `status`, usually `PENDING`); an agent sees the ones they filed."
+          }
+        },
+        {
+          "name": "Confirm or dismiss a report",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/moderation/spam-reports/{{reportId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "moderation", "spam-reports", "{{reportId}}"],
+              "query": []
+            },
+            "description": "Supervisors only. A reviewed report cannot be reviewed again (409). With `CONFIRMED`, `blockCustomer: true` also blocks the conversation's customer in the same transaction (a customer who is already blocked stays blocked). Broadcast as `spam.reviewed`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"CONFIRMED\",\n  \"blockCustomer\": false,\n  \"resolutionNote\": \"Confirmed phishing; blocked separately below\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
         {
           "name": "Block the conversation's customer",
           "request": {
@@ -2860,63 +4002,21 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/customer-block",
+              "raw": "{{baseUrl}}/api/v1/admin/conversations/{{spamConvId}}/customer-block",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "admin", "conversations", "{{convId}}", "customer-block"],
+              "path": ["api", "v1", "admin", "conversations", "{{spamConvId}}", "customer-block"],
               "query": []
             },
             "description": "The owner of the conversation, or a supervisor. The customer comes from the conversation. 409 if already blocked. Records the action in the moderation log and on the conversation timeline, and broadcasts `customer.blocked`. Open conversations stay open; the block stops what the customer does (messages, calls) once the customer channel exists.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"reason\": \"Abusive language\"\n}",
+              "raw": "{\n  \"reason\": \"Phishing links\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
             }
-          }
-        },
-        {
-          "name": "Block a customer by id",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/admin/moderation/customers/{{customerId}}/block",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "admin", "moderation", "customers", "{{customerId}}", "block"],
-              "query": []
-            },
-            "description": "Supervisors only. 409 if already blocked.",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"reason\": \"Repeated spam\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          }
-        },
-        {
-          "name": "Lift a block",
-          "request": {
-            "method": "DELETE",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/admin/moderation/customers/{{customerId}}/block",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "admin", "moderation", "customers", "{{customerId}}", "block"],
-              "query": []
-            },
-            "description": "A supervisor, or the agent who blocked the customer. Anyone else gets 404 (they cannot tell whether the customer is blocked)."
           }
         },
         {
@@ -2936,6 +4036,48 @@
               ]
             },
             "description": "Current blocks (`active=false` for lifted ones), newest first. Supervisors see all; an agent sees the blocks they made. `customerName` comes from Backend 1 and is null when it cannot be reached."
+          }
+        },
+        {
+          "name": "Lift a block",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/moderation/customers/{{customer2Id}}/block",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "moderation", "customers", "{{customer2Id}}", "block"],
+              "query": []
+            },
+            "description": "A supervisor, or the agent who blocked the customer. Anyone else gets 404 (they cannot tell whether the customer is blocked)."
+          }
+        },
+        {
+          "name": "Block a customer by id",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/moderation/customers/{{customer2Id}}/block",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "moderation", "customers", "{{customer2Id}}", "block"],
+              "query": []
+            },
+            "description": "Supervisors only. 409 if already blocked.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Blocked again after review: repeated phishing\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
           }
         },
         {
@@ -2981,7 +4123,7 @@
             "description": "Supervisors only. Unique ignoring case (409). At most 1000 active keywords.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"keyword\": \"wire transfer\"\n}",
+              "raw": "{\n  \"keyword\": \"win-prize.example\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -3047,109 +4189,6 @@
           }
         },
         {
-          "name": "Report spam or abuse",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/spam-reports",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "admin", "conversations", "{{convId}}", "spam-reports"],
-              "query": []
-            },
-            "description": "Anyone who can see the conversation, about the conversation or one of its messages (`messageId`, which must belong to it). One pending report per reporter and target (409). Broadcast as `spam.reported` to whoever can see the conversation, which includes supervisors. Optional `messageId` (a message of this conversation) points at the offending message.",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"reason\": \"Phishing links\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "const j = pm.response.json();",
-                  "const d = j.data || {};",
-                  "const id = d.id || (d.reactions && d.reactions.length ? d.reactions[0].id : null);",
-                  "if (id) pm.collectionVariables.set('reportId', String(id));"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Spam reports of a conversation",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/spam-reports",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "admin", "conversations", "{{convId}}", "spam-reports"],
-              "query": []
-            },
-            "description": "Anyone who can see the conversation. Newest first."
-          }
-        },
-        {
-          "name": "Spam report queue",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/admin/moderation/spam-reports?status=PENDING",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "admin", "moderation", "spam-reports"],
-              "query": [
-                {
-                  "key": "status",
-                  "value": "PENDING"
-                }
-              ]
-            },
-            "description": "Supervisors see every report (filter by `status`, usually `PENDING`); an agent sees the ones they filed."
-          }
-        },
-        {
-          "name": "Confirm or dismiss a report",
-          "request": {
-            "method": "PATCH",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/admin/moderation/spam-reports/{{reportId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "admin", "moderation", "spam-reports", "{{reportId}}"],
-              "query": []
-            },
-            "description": "Supervisors only. A reviewed report cannot be reviewed again (409). With `CONFIRMED`, `blockCustomer: true` also blocks the conversation's customer in the same transaction (a customer who is already blocked stays blocked). Broadcast as `spam.reviewed`.",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"status\": \"CONFIRMED\",\n  \"blockCustomer\": true,\n  \"resolutionNote\": \"Confirmed\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          }
-        },
-        {
           "name": "Moderation log",
           "request": {
             "method": "GET",
@@ -3162,12 +4201,26 @@
             },
             "description": "Supervisors only. Who blocked, unblocked, reported, reviewed or changed keywords, newest first. Filter by `targetType` or `actorId`."
           }
+        },
+        {
+          "name": "Lift Bopha's block again (clean up)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/moderation/customers/{{customer2Id}}/block",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "moderation", "customers", "{{customer2Id}}", "block"],
+              "query": []
+            },
+            "description": "Leaves Bopha unblocked, so the collection can run again on the same database."
+          }
         }
       ]
     },
     {
       "name": "10 Mobile app (customer)",
-      "description": "The customer side, with {{customerToken}} (sign-in saves it; with AUTH_MODE=dev the default `dev:<uuid>:CUSTOMER` works too). See docs/api-customer-mobile.md and docs/mobile-integration.md.",
+      "description": "The customer side, with {{customerToken}} (sign-in saves it; with AUTH_MODE=dev the default `dev:<uuid>:CUSTOMER` works too). See docs/api-customer-mobile.md and docs/mobile-integration.md. Sokha registers in the app with email and password and uses it on her own, separately from Dara's story.",
       "item": [
         {
           "name": "Customer sign-in",
@@ -3195,10 +4248,20 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"email\": \"customer@example.com\",\n  \"password\": \"customer-password\",\n  \"displayName\": \"Dara\"\n}"
+                  "raw": "{\n  \"email\": \"{{sokhaEmail}}\",\n  \"password\": \"customer-password\",\n  \"displayName\": \"Sokha\"\n}"
                 }
               },
               "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// A new email each run, so registering works again on the same database.",
+                      "pm.collectionVariables.set('sokhaEmail', `sokha-${Date.now()}@example.com`);"
+                    ]
+                  }
+                },
                 {
                   "listen": "test",
                   "script": {
@@ -3236,48 +4299,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"email\": \"customer@example.com\",\n  \"password\": \"customer-password\"\n}"
-                }
-              },
-              "event": [
-                {
-                  "listen": "test",
-                  "script": {
-                    "type": "text/javascript",
-                    "exec": [
-                      "const session = pm.response.json().data;",
-                      "if (session && session.accessToken) {",
-                      "  pm.collectionVariables.set('customerToken', session.accessToken);",
-                      "  pm.collectionVariables.set('customerRefreshToken', session.refreshToken);",
-                      "}"
-                    ]
-                  }
-                }
-              ]
-            },
-            {
-              "name": "Sign in with LOS (customer) - saves customerToken",
-              "request": {
-                "method": "POST",
-                "header": [
-                  {
-                    "key": "Content-Type",
-                    "value": "application/json"
-                  }
-                ],
-                "url": {
-                  "raw": "{{baseUrl}}/api/v1/customer/auth/los",
-                  "host": ["{{baseUrl}}"],
-                  "path": ["api", "v1", "customer", "auth", "los"],
-                  "query": []
-                },
-                "description": "Public. Exchanges the LOS customer access token the app holds (RS256; aud=LOS_CUSTOMER_AUDIENCE, type=customer, tokenType=access). Creates an account without email or password on the first sign-in. Saves {{customerToken}} and {{customerRefreshToken}}.",
-                "auth": {
-                  "type": "noauth"
-                },
-                "body": {
-                  "mode": "raw",
-                  "raw": "{\n  \"losToken\": \"{{losCustomerToken}}\"\n}"
+                  "raw": "{\n  \"email\": \"{{sokhaEmail}}\",\n  \"password\": \"customer-password\"\n}"
                 }
               },
               "event": [
@@ -3458,6 +4480,109 @@
                   }
                 }
               ]
+            },
+            {
+              "name": "Sign in with LOS (optional)",
+              "description": "Skipped by default. Set the collection variable useLos to true (with `pnpm los:mock` running, or the real LOS configured) to run them.",
+              "item": [
+                {
+                  "name": "Mock LOS: customer signs in (saves losCustomerToken)",
+                  "request": {
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{losUrl}}/customer/login",
+                      "host": ["{{losUrl}}"],
+                      "path": ["customer", "login"],
+                      "query": []
+                    },
+                    "description": "Not this backend: the mock LOS (`pnpm los:mock`, {{losUrl}}). Returns the LOS customer token the mobile app would hold, for the next request.",
+                    "auth": {
+                      "type": "noauth"
+                    },
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"username\": \"vanna\",\n  \"password\": \"password123\"\n}"
+                    }
+                  },
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                          "const j = pm.response.json();",
+                          "if (j.losToken) pm.collectionVariables.set('losCustomerToken', j.losToken);"
+                        ]
+                      }
+                    },
+                    {
+                      "listen": "prerequest",
+                      "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                          "// Skipped unless the collection variable useLos is true (needs `pnpm los:mock` or the real LOS configured).",
+                          "if (pm.variables.get('useLos') !== 'true') pm.execution.skipRequest();"
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "name": "Sign in with LOS (customer) - saves losCustomerSession",
+                  "request": {
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/v1/customer/auth/los",
+                      "host": ["{{baseUrl}}"],
+                      "path": ["api", "v1", "customer", "auth", "los"],
+                      "query": []
+                    },
+                    "description": "Public. Exchanges the LOS customer access token the app holds (RS256; aud=LOS_CUSTOMER_AUDIENCE, type=customer, tokenType=access). Creates an account without email or password on the first sign-in. Saves {{customerToken}} and {{customerRefreshToken}}. Saves the access token in {{losCustomerSession}} (not in customerToken). Locally, `pnpm los:token customer` makes a test LOS token.",
+                    "auth": {
+                      "type": "noauth"
+                    },
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"losToken\": \"{{losCustomerToken}}\"\n}"
+                    }
+                  },
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                          "const s = pm.response.json().data;",
+                          "// Kept apart from customerToken, so the rest of the run keeps its signed-in customer.",
+                          "if (s && s.accessToken) pm.collectionVariables.set('losCustomerSession', s.accessToken);"
+                        ]
+                      }
+                    },
+                    {
+                      "listen": "prerequest",
+                      "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                          "// Skipped unless the collection variable useLos is true (needs `pnpm los:mock` or the real LOS configured).",
+                          "if (pm.variables.get('useLos') !== 'true') pm.execution.skipRequest();"
+                        ]
+                      }
+                    }
+                  ]
+                }
+              ]
             }
           ]
         },
@@ -3493,7 +4618,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"applicationId\": \"00000000-0000-4000-8000-000000000201\",\n  \"subject\": \"Question about my loan\"\n}"
+                  "raw": "{\n  \"applicationId\": \"{{$guid}}\",\n  \"subject\": \"Changing my repayment date\"\n}"
                 }
               },
               "event": [
@@ -3583,7 +4708,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"clientId\": \"mobile-1\",\n  \"text\": \"Hello, I need help with my loan\"\n}"
+                  "raw": "{\n  \"clientId\": \"{{$guid}}\",\n  \"text\": \"Hello, can I change the repayment date of my loan?\"\n}"
                 }
               }
             },
@@ -3613,7 +4738,7 @@
                   "formdata": [
                     {
                       "key": "clientId",
-                      "value": "mobile-file-1",
+                      "value": "{{$guid}}",
                       "type": "text"
                     },
                     {
@@ -3669,7 +4794,7 @@
                   "formdata": [
                     {
                       "key": "clientId",
-                      "value": "mobile-voice-1",
+                      "value": "{{$guid}}",
                       "type": "text"
                     },
                     {

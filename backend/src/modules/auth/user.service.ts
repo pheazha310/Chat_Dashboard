@@ -5,9 +5,17 @@ import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "@
 import type { AgentProfile, CustomerProfile, Directory } from "@shared/ports/directory.js";
 import { pageMeta } from "@shared/utils/pagination.js";
 import { hashPassword } from "./auth.password.js";
-import { isUniqueViolation, type AuthRepository } from "./auth.repository.js";
+import { isUniqueViolation, isUniqueViolationOn, type AuthRepository } from "./auth.repository.js";
 import type { CreateUserInput, ListUsersQuery, UpdateUserInput } from "./auth.schema.js";
-import { STAFF_ROLES, isStaffRole, toUser, type UserDto, type UserRow, type UserStatus } from "./auth.types.js";
+import {
+  STAFF_ROLES,
+  isStaffRole,
+  toUser,
+  type StaffFields,
+  type UserDto,
+  type UserRow,
+  type UserStatus,
+} from "./auth.types.js";
 
 /**
  * Told about account changes so the chat identity (`chat_users`) follows: disabled or re-enabled (requests with an older
@@ -21,7 +29,8 @@ export interface AccountStatusListener {
 /**
  * Account management. Supervisors and admins can read accounts; only admins create staff, change roles, disable
  * accounts or set a password. An admin cannot change their own role or status (so nobody locks themselves out), and
- * a customer account cannot become staff or the other way round.
+ * a customer account cannot become staff or the other way round. Each account has a profile row (`staff` or
+ * `customers`) created with it; admins edit it through `PATCH /users/:userId`.
  */
 export class UserService {
   constructor(
@@ -69,6 +78,12 @@ export class UserService {
     if (input.role !== undefined && !isStaffRole(user.role)) {
       throw new BadRequestError("A customer account cannot be given a staff role");
     }
+    if (input.staff !== undefined && !isStaffRole(user.role)) {
+      throw new BadRequestError("Staff fields belong to staff accounts; this is a customer account");
+    }
+    if (input.customer !== undefined && isStaffRole(user.role)) {
+      throw new BadRequestError("Customer fields belong to customer accounts; this is a staff account");
+    }
     // LOS sets an LOS account's role on every sign-in, so a role set here would be undone at the next one.
     if (input.role !== undefined && input.role !== user.role && user.losUserId !== null) {
       throw new ConflictError("This account's role is managed in LOS");
@@ -76,18 +91,22 @@ export class UserService {
     const roleChanged = input.role !== undefined && input.role !== user.role;
     const statusChanged = input.status !== undefined && input.status !== user.status;
 
-    const updated = await this.repository.inTransaction(async (tx) => {
-      const row = await tx.updateUser(user.id, {
-        ...(input.displayName === undefined ? {} : { displayName: input.displayName }),
-        ...(input.role === undefined ? {} : { role: input.role }),
-        ...(input.status === undefined ? {} : { status: input.status }),
-        // Re-enabling also clears a sign-in lock.
-        ...(statusChanged && input.status === "ACTIVE" ? { lockedUntil: null, failedLoginCount: 0 } : {}),
-      });
-      // A new role or a disabled account: every session signs in again (and so gets a token with the new role).
-      if (roleChanged || (statusChanged && input.status === "DISABLED")) await tx.revokeAllForUser(user.id);
-      return row;
-    });
+    const updated = await withProfileConflicts(() =>
+      this.repository.inTransaction(async (tx) => {
+        const row = await tx.updateUser(user.id, {
+          ...(input.displayName === undefined ? {} : { displayName: input.displayName }),
+          ...(input.role === undefined ? {} : { role: input.role }),
+          ...(input.status === undefined ? {} : { status: input.status }),
+          // Re-enabling also clears a sign-in lock.
+          ...(statusChanged && input.status === "ACTIVE" ? { lockedUntil: null, failedLoginCount: 0 } : {}),
+          ...(input.staff === undefined ? {} : { staff: input.staff }),
+          ...(input.customer === undefined ? {} : { customer: input.customer }),
+        });
+        // A new role or a disabled account: every session signs in again (and so gets a token with the new role).
+        if (roleChanged || (statusChanged && input.status === "DISABLED")) await tx.revokeAllForUser(user.id);
+        return row;
+      }),
+    );
     if (statusChanged) await this.notifyStatus(updated);
     if (roleChanged || updated.displayName !== user.displayName) await this.syncIdentity(updated);
     return toUser(updated);
@@ -148,7 +167,7 @@ export class UserService {
       avatarUrl: null,
       blacklisted: null,
       email: user.email,
-      phone: null,
+      phone: user.customer?.phone ?? null,
       nationalId: null,
       occupation: null,
       salary: null,
@@ -166,20 +185,26 @@ export class UserService {
     role: string;
     password: string;
     createdBy: string | null;
+    staff?: Partial<StaffFields> | undefined;
   }): Promise<UserRow> {
-    let user: UserRow;
-    try {
-      user = await this.repository.createUser({
-        email: input.email,
-        displayName: input.displayName,
-        role: input.role,
-        passwordHash: await hashPassword(input.password),
-        createdBy: input.createdBy,
-      });
-    } catch (error) {
-      if (isUniqueViolation(error)) throw new ConflictError("An account with this email already exists");
-      throw error;
-    }
+    const passwordHash = await hashPassword(input.password);
+    const user = await withProfileConflicts(async () => {
+      try {
+        return await this.repository.createUser({
+          email: input.email,
+          displayName: input.displayName,
+          role: input.role,
+          passwordHash,
+          createdBy: input.createdBy,
+          ...(input.staff === undefined ? {} : { staff: input.staff }),
+        });
+      } catch (error) {
+        if (isUniqueViolation(error) && !isProfileViolation(error)) {
+          throw new ConflictError("An account with this email already exists");
+        }
+        throw error;
+      }
+    });
     await this.syncIdentity(user);
     return user;
   }
@@ -188,6 +213,20 @@ export class UserService {
     const user = await this.repository.findUserById(userId);
     if (!user) throw new NotFoundError("User not found");
     return user;
+  }
+}
+
+const isProfileViolation = (error: unknown) =>
+  isUniqueViolationOn(error, "employee_code") || isUniqueViolationOn(error, "customer_code");
+
+/** A taken employee or customer code is a 409 that says which. */
+async function withProfileConflicts<T>(fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (error) {
+    if (isUniqueViolationOn(error, "employee_code")) throw new ConflictError("This employee code is already in use");
+    if (isUniqueViolationOn(error, "customer_code")) throw new ConflictError("This customer code is already in use");
+    throw error;
   }
 }
 

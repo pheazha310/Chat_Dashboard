@@ -810,13 +810,220 @@ button {
   font-size: 13px;
 }
 .prompt-input {
-  height: 128px;
+  position: relative;
+  min-height: 128px;
   padding: 16px 20px 16px 16px;
   border: 1px solid #e5e7eb;
   border-radius: 24px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
+  gap: 8px;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
+}
+.prompt-input.has-files {
+  border-color: #bfdbfe;
+}
+.prompt-input.is-dragging {
+  border: 2px dashed #2563eb;
+  background: #eff6ff;
+}
+.drop-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: inherit;
+  background: rgba(239, 246, 255, 0.92);
+  color: #2563eb;
+  font-family: "Inter:Medium";
+  font-size: 14px;
+  pointer-events: none;
+}
+.attachment-tray {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-height: 112px;
+  margin: 0;
+  padding: 0 2px 2px 0;
+  list-style: none;
+  overflow-y: auto;
+}
+.attachment-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 calc(50% - 4px);
+  min-width: 160px;
+  max-width: 260px;
+  padding: 6px;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #f9fafb;
+}
+.attachment-thumb,
+.attachment-badge {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+}
+.attachment-thumb {
+  object-fit: cover;
+  background: #e5e7eb;
+}
+.attachment-badge {
+  display: grid;
+  place-items: center;
+  color: white;
+  font-family: "Inter:Medium";
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  background: #6b7280;
+}
+.attachment-badge.kind-pdf {
+  background: #dc2626;
+}
+.attachment-badge.kind-word {
+  background: #2563eb;
+}
+.attachment-badge.kind-sheet {
+  background: #16a34a;
+}
+.attachment-badge.kind-audio {
+  background: #7c3aed;
+}
+.attachment-badge.kind-video {
+  background: #ea580c;
+}
+.attachment-info {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.attachment-name {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: #111827;
+  font-family: "Inter:Medium";
+  font-size: 12px;
+}
+.attachment-meta {
+  color: #6b7280;
+  font-size: 11px;
+}
+.attachment-remove {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 50%;
+  background: #e5e7eb;
+  color: #374151;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+.attachment-remove:hover {
+  background: #fee2e2;
+  color: #dc2626;
+}
+.attachment-remove:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 1px;
+}
+.reply-lock {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 20px;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 14px;
+}
+.reply-lock .take-over {
+  flex: 0 0 auto;
+}
+.recording-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px 6px 10px;
+  border-radius: 12px;
+  background: #fef2f2;
+  color: #b91c1c;
+  font-size: 12px;
+}
+.recording-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #dc2626;
+  animation: recording-pulse 1s ease-in-out infinite;
+}
+@keyframes recording-pulse {
+  50% {
+    opacity: 0.25;
+  }
+}
+.recording-time {
+  font-family: "Inter:Medium";
+  font-variant-numeric: tabular-nums;
+}
+.recording-hint {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: #7f1d1d;
+}
+.recording-bar button {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 50%;
+  background: #fee2e2;
+  color: #b91c1c;
+}
+@media (prefers-reduced-motion: reduce) {
+  .recording-dot {
+    animation: none;
+  }
+}
+.upload-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #2563eb;
+  font-size: 11px;
+}
+.upload-bar {
+  flex: 1;
+  max-width: 200px;
+  height: 4px;
+  border-radius: 2px;
+  background: #dbeafe;
+  overflow: hidden;
+}
+.upload-bar span {
+  display: block;
+  height: 100%;
+  background: #2563eb;
+  transition: width 0.2s;
 }
 .prompt-input textarea {
   width: 100%;
@@ -882,6 +1089,12 @@ button {
   height: 40px;
   border-radius: 50%;
   background: #ebebeb;
+}
+.prompt-controls .submit-message.ready {
+  background: #2563eb;
+}
+.submit-message.ready span {
+  background: white;
 }
 .prompt-controls .recording {
   border-radius: 50%;
@@ -2915,7 +3128,7 @@ button {
     padding: 8px 10px 10px;
   }
   .prompt-input {
-    height: 95px;
+    min-height: 95px;
     border-radius: 18px;
     padding: 10px;
   }
@@ -3229,7 +3442,7 @@ button {
     font-size: 12px;
   }
   .prompt-input {
-    height: 100px;
+    min-height: 100px;
     border-radius: 18px;
     padding: 12px;
   }
@@ -3497,7 +3710,7 @@ button {
     padding: 8px 10px 10px;
   }
   .prompt-input {
-    height: 90px;
+    min-height: 90px;
     border-radius: 16px;
     padding: 10px;
   }

@@ -88,7 +88,7 @@ The same applies when the app returns from the background, and it is the fallbac
 Envelope `{ "status": "error", "error": { "code", "message" } }` ([api-response-contracts.md](api-response-contracts.md)).
 `400` validation or a disallowed file, `401` missing or invalid token, `403` blocked customer or disabled chat user or a
 staff token, `404` not found or not yours, `413` file too large, `429` too many sign-in attempts. Only sign-in,
-registration and refresh are rate limited.
+registration, refresh and logout are rate limited.
 
 ## Not available yet
 

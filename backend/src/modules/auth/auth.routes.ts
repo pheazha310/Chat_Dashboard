@@ -4,10 +4,11 @@ import { authenticate, getAuth } from "@shared/middleware/auth.middleware.js";
 import { rateLimit } from "@shared/middleware/rate-limit.middleware.js";
 import { validate } from "@shared/middleware/validate.middleware.js";
 import { authClient, authService, rateLimitStore, userService } from "../../app-container.js";
-import { AuthController, UserController } from "./auth.controller.js";
+import { AuthController, DevAuthController, UserController } from "./auth.controller.js";
 import {
   changePasswordBody,
   createUserBody,
+  devLoginBody,
   listUsersQuery,
   loginBody,
   losCustomerBody,
@@ -20,7 +21,7 @@ import {
 } from "./auth.schema.js";
 import type { Audience } from "./auth.types.js";
 
-/** Sign-in, registration and refresh: per client IP (password change: per user), per minute (AUTH_RATE_LIMIT_PER_MINUTE). */
+/** Sign-in, registration, refresh and logout: per client IP (password change: per user), per minute (AUTH_RATE_LIMIT_PER_MINUTE). */
 const limited = (name: string) =>
   rateLimit({ store: rateLimitStore, name, limit: env.AUTH_RATE_LIMIT_PER_MINUTE, windowMs: 60_000 });
 
@@ -36,7 +37,7 @@ function authRouter(audience: Audience) {
     controller.losSignIn,
   );
   router.post("/refresh", limited(`${audience}-refresh`), validate({ body: refreshBody }), controller.refresh);
-  router.post("/logout", validate({ body: refreshBody }), controller.logout);
+  router.post("/logout", limited(`${audience}-logout`), validate({ body: refreshBody }), controller.logout);
   router.post("/logout-all", signedIn, controller.logoutAll);
   router.get("/me", signedIn, controller.me);
   router.post(
@@ -63,6 +64,13 @@ export const staffAuthRoutes = authRouter("staff");
 
 /** Mounted at /api/v1/customer/auth, before the customer API's authentication. Customer accounts only. */
 export const customerAuthRoutes = authRouter("customer");
+
+/**
+ * Mounted at /api/v1/dev only when AUTH_MODE=dev (app.ts): `POST /login { role, number? }` signs in as a test account
+ * of that role without a password. Never mounted in production (env.ts refuses AUTH_MODE=dev there).
+ */
+export const devAuthRoutes = Router();
+devAuthRoutes.post("/login", validate({ body: devLoginBody }), new DevAuthController(authService).login);
 
 const users = new UserController(userService);
 

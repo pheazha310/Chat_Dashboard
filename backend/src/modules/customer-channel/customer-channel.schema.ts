@@ -13,6 +13,11 @@ export const joinBody = z.object({
 export type JoinInput = z.infer<typeof joinBody>;
 
 export const conversationParams = z.object({ conversationId: idSchema });
+export const callParams = z.object({ callId: idSchema });
+
+/** The customer calls the staff of a conversation. */
+export const startCallBody = z.object({ callType: z.enum(["AUDIO", "VIDEO"]).default("AUDIO") });
+export type StartCallInput = z.infer<typeof startCallBody>;
 export const attachmentParams = z.object({ attachmentId: idSchema });
 export const messageAudioParams = z.object({ messageId: idSchema });
 

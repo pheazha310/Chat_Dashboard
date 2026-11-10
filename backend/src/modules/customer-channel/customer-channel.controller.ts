@@ -7,12 +7,14 @@ import { voiceFields } from "@modules/attachments/attachment.schema.js";
 import type { CustomerChannelService } from "./customer-channel.service.js";
 import {
   attachmentParams,
+  callParams,
   conversationParams,
   downloadQuery,
   fileFields,
   joinBody,
   messageAudioParams,
   sendBody,
+  startCallBody,
 } from "./customer-channel.schema.js";
 
 /** The verified customer id (the token's `userId`). */
@@ -20,6 +22,19 @@ const customerOf = (req: Request) => getAuth(req).userId;
 
 export class CustomerChannelController {
   constructor(private readonly service: CustomerChannelService) {}
+
+  startCall = async (req: Request, res: Response) => {
+    const { conversationId } = parsed(req, "params", conversationParams);
+    const call = await this.service.startCall(customerOf(req), conversationId, parsed(req, "body", startCallBody));
+    res.status(201).json({ status: "success", data: call });
+  };
+
+  /** accept, decline, cancel or end a call: the action is the last path segment. */
+  callAction =
+    (action: "acceptCall" | "declineCall" | "cancelCall" | "endCall") => async (req: Request, res: Response) => {
+      const { callId } = parsed(req, "params", callParams);
+      res.json({ status: "success", data: await this.service[action](customerOf(req), callId) });
+    };
 
   join = async (req: Request, res: Response) => {
     const { conversation, created } = await this.service.join(customerOf(req), parsed(req, "body", joinBody));

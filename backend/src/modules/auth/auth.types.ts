@@ -18,6 +18,24 @@ export interface ClientInfo {
   ipAddress?: string | undefined;
 }
 
+/** The `staff` row of a staff account (AGENT, SUPERVISOR, ADMIN). */
+export interface StaffFields {
+  employeeCode: string | null;
+  department: string | null;
+  /** Most open chats this person should own at once; null = no limit. Stored only, not yet enforced. */
+  maxConcurrentChats: number | null;
+}
+
+/** The `customers` row of a CUSTOMER account. */
+export interface CustomerFields {
+  /** E.164, e.g. +85512345678. */
+  phone: string | null;
+  /** The customer's code in the loan system (LOS). */
+  customerCode: string | null;
+  /** BCP 47 tag, e.g. km or en. */
+  preferredLanguage: string | null;
+}
+
 /** A user as the API returns it. Never carries the password hash or lockout counters. */
 export interface UserDto {
   id: string;
@@ -30,6 +48,10 @@ export interface UserDto {
   status: UserStatus;
   lastLoginAt: string | null;
   createdAt: string;
+  /** Staff accounts: the `staff` row; null for customers. */
+  staff: StaffFields | null;
+  /** Customer accounts: the `customers` row; null for staff. */
+  customer: CustomerFields | null;
 }
 
 /** The answer to sign-in, registration, refresh and password change. */
@@ -56,6 +78,8 @@ export interface UserRow {
   lockedUntil: Date | null;
   lastLoginAt: Date | null;
   createdAt: Date;
+  staff: StaffFields | null;
+  customer: CustomerFields | null;
 }
 
 export interface AuthOptions {
@@ -80,4 +104,6 @@ export const toUser = (row: UserRow): UserDto => ({
   status: row.status as UserStatus,
   lastLoginAt: row.lastLoginAt?.toISOString() ?? null,
   createdAt: row.createdAt.toISOString(),
+  staff: row.staff ? { ...row.staff } : null,
+  customer: row.customer ? { ...row.customer } : null,
 });

@@ -9,7 +9,14 @@ import { errorHandler } from "@shared/middleware/error-handler.middleware.js";
 import { notFound } from "@shared/middleware/not-found.middleware.js";
 import { withRequestContext } from "@shared/middleware/request-context.middleware.js";
 import { healthRoutes } from "@modules/health/index.js";
-import { ADMIN_API_PREFIX, CUSTOMER_API_PREFIX, apiRouter, customerApiRouter } from "./routes.js";
+import {
+  ADMIN_API_PREFIX,
+  CUSTOMER_API_PREFIX,
+  DEV_API_PREFIX,
+  apiRouter,
+  customerApiRouter,
+  devApiRouter,
+} from "./routes.js";
 
 export const app = express();
 
@@ -26,6 +33,8 @@ app.use(express.json());
 app.use("/api/health", healthRoutes);
 app.use(ADMIN_API_PREFIX, apiRouter);
 app.use(CUSTOMER_API_PREFIX, customerApiRouter);
+// Password-less test sign-in. Not mounted otherwise, so it is a plain 404 with AUTH_MODE=jwt and in production.
+if (env.AUTH_MODE === "dev") app.use(DEV_API_PREFIX, devApiRouter);
 
 app.use(notFound);
 app.use(errorHandler);

@@ -15,7 +15,9 @@
     "test:coverage": "vitest run --coverage",
     "user:create-admin": "tsx src/scripts/create-admin.ts",
     "user:seed-test": "tsx src/scripts/seed-test-accounts.ts",
-    "db:dbml": "tsx src/scripts/build-dbml.ts"
+    "db:dbml": "tsx src/scripts/build-dbml.ts",
+    "los:token": "tsx src/scripts/los-token.ts",
+    "los:mock": "tsx src/scripts/los-mock.ts"
   },
   "dependencies": {
     "@asteasolutions/zod-to-openapi": "^9.1.0",

@@ -34,6 +34,42 @@ export const losCustomerBody = z.object({ losToken }).strict();
 /** Dashboard: the short-lived LOS staff hand-off token. */
 export const losStaffBody = z.object({ handoffToken: losToken }).strict();
 
+/** An LOS userId: a positive 32-bit integer, as LOS stores it. */
+const losUserIdSchema = z
+  .number()
+  .int()
+  .min(1)
+  .max(2 ** 31 - 1);
+
+/**
+ * Development sign-in (`POST /api/v1/dev/login`, AUTH_MODE=dev only): the identity an LOS token would carry, sent
+ * directly. `customer` → a CUSTOMER account; `staff` → `role` agent, supervisor or admin (any case; LOS_STAFF_ROLE_MAP
+ * names are not used here).
+ */
+export const devLoginBody = z.discriminatedUnion("type", [
+  z
+    .object({
+      type: z.literal("customer"),
+      userId: losUserIdSchema.default(1),
+      username: displayName.default("Dev Customer"),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("staff"),
+      userId: losUserIdSchema.default(1),
+      username: displayName.default("Dev Staff"),
+      role: z
+        .string()
+        .trim()
+        .transform((value) => value.toUpperCase())
+        .pipe(z.enum(STAFF_ROLES))
+        .default("AGENT"),
+    })
+    .strict(),
+]);
+export type DevLoginInput = z.infer<typeof devLoginBody>;
+
 export const changePasswordBody = z
   .object({ currentPassword: passwordSchema, newPassword: newPasswordSchema })
   .strict()
@@ -45,6 +81,38 @@ export type ChangePasswordInput = z.infer<typeof changePasswordBody>;
 
 // ─── user management (admins) ──────────────────────────────────────────────
 
+/** Optional text that can be cleared with null. */
+const optionalText = (max: number) => z.string().trim().min(1).max(max).nullable();
+
+/** The `staff` row: send only what changes; null clears a field. */
+export const staffFieldsBody = z
+  .object({
+    employeeCode: optionalText(100),
+    department: optionalText(100),
+    maxConcurrentChats: z.number().int().min(1).max(1000).nullable(),
+  })
+  .partial()
+  .strict();
+
+/** The `customers` row: send only what changes; null clears a field. */
+export const customerFieldsBody = z
+  .object({
+    phone: z
+      .string()
+      .trim()
+      .regex(/^\+[1-9][0-9]{6,14}$/, "Use the international format, e.g. +85512345678")
+      .nullable(),
+    customerCode: optionalText(100),
+    preferredLanguage: z
+      .string()
+      .trim()
+      .max(10)
+      .regex(/^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$/, "A language tag such as km or en")
+      .nullable(),
+  })
+  .partial()
+  .strict();
+
 export const userParams = z.object({ userId: idSchema });
 
 export const listUsersQuery = pageQuery.extend({
@@ -55,12 +123,24 @@ export const listUsersQuery = pageQuery.extend({
 export type ListUsersQuery = z.infer<typeof listUsersQuery>;
 
 export const createUserBody = z
-  .object({ email: emailSchema, displayName, role: z.enum(STAFF_ROLES), password: newPasswordSchema })
+  .object({
+    email: emailSchema,
+    displayName,
+    role: z.enum(STAFF_ROLES),
+    password: newPasswordSchema,
+    staff: staffFieldsBody.optional(),
+  })
   .strict();
 export type CreateUserInput = z.infer<typeof createUserBody>;
 
 export const updateUserBody = z
-  .object({ displayName, role: z.enum(STAFF_ROLES), status: z.enum(USER_STATUSES) })
+  .object({
+    displayName,
+    role: z.enum(STAFF_ROLES),
+    status: z.enum(USER_STATUSES),
+    staff: staffFieldsBody,
+    customer: customerFieldsBody,
+  })
   .partial()
   .strict()
   .refine((value) => Object.keys(value).length > 0, "Send at least one field");

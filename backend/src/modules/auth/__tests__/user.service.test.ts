@@ -192,3 +192,85 @@ describe("UserService", () => {
     await expect(directory.getCustomer(agent.id)).resolves.toBeNull();
   });
 });
+
+describe("UserService: staff and customer profiles", () => {
+  let repo: FakeAuthRepository;
+  let service: UserService;
+  let admin: AuthContext;
+
+  beforeEach(async () => {
+    repo = new FakeAuthRepository();
+    service = new UserService(repo.asRepository(), { setStatus: async () => {}, sync: async () => {} });
+    const created = await service.bootstrapAdmin({
+      email: "root@example.com",
+      displayName: "Root",
+      password: "x".repeat(8),
+    });
+    admin = { userId: created.id, role: "ADMIN" };
+  });
+
+  const customerAccount = () =>
+    service.bootstrapAccount({
+      email: "c@example.com",
+      displayName: "Cust",
+      password: "x".repeat(8),
+      role: "CUSTOMER",
+    });
+
+  it("gives every staff account a staff row and every customer a customer row", async () => {
+    const agent = await service.create(admin, { ...staff, staff: { employeeCode: "E-1", department: "Loans" } });
+    expect(agent.staff).toEqual({ employeeCode: "E-1", department: "Loans", maxConcurrentChats: null });
+    expect(agent.customer).toBeNull();
+    const customer = await customerAccount();
+    expect(customer.staff).toBeNull();
+    expect(customer.customer).toEqual({ phone: null, customerCode: null, preferredLanguage: null });
+  });
+
+  it("lets an admin edit the profile of the right kind, with null clearing a field", async () => {
+    const agent = await service.create(admin, { ...staff, staff: { department: "Loans" } });
+    const updated = await service.update(admin, agent.id, { staff: { maxConcurrentChats: 5, department: null } });
+    expect(updated.staff).toEqual({ employeeCode: null, department: null, maxConcurrentChats: 5 });
+
+    const customer = await customerAccount();
+    const withPhone = await service.update(admin, customer.id, {
+      customer: { phone: "+85512345678", preferredLanguage: "km" },
+    });
+    expect(withPhone.customer).toMatchObject({ phone: "+85512345678", preferredLanguage: "km" });
+  });
+
+  it("refuses profile fields of the other kind (400)", async () => {
+    const agent = await service.create(admin, staff);
+    const customer = await customerAccount();
+    await expect(service.update(admin, agent.id, { customer: { phone: "+85512345678" } })).rejects.toBeInstanceOf(
+      BadRequestError,
+    );
+    await expect(service.update(admin, customer.id, { staff: { department: "x" } })).rejects.toBeInstanceOf(
+      BadRequestError,
+    );
+  });
+
+  it("refuses a taken employee or customer code with a 409 that says which", async () => {
+    await service.create(admin, { ...staff, staff: { employeeCode: "E-1" } });
+    await expect(
+      service.create(admin, { ...staff, email: "other@example.com", staff: { employeeCode: "E-1" } }),
+    ).rejects.toThrow(new ConflictError("This employee code is already in use"));
+
+    const first = await customerAccount();
+    const second = await service.bootstrapAccount({
+      email: "d@example.com",
+      displayName: "D",
+      password: "x".repeat(8),
+      role: "CUSTOMER",
+    });
+    await service.update(admin, first.id, { customer: { customerCode: "C-1" } });
+    await expect(service.update(admin, second.id, { customer: { customerCode: "C-1" } })).rejects.toThrow(
+      new ConflictError("This customer code is already in use"),
+    );
+  });
+
+  it("gives the customer's phone to the directory", async () => {
+    const customer = await customerAccount();
+    await service.update(admin, customer.id, { customer: { phone: "+85512345678" } });
+    await expect(new UserDirectory(service).getCustomer(customer.id)).resolves.toMatchObject({ phone: "+85512345678" });
+  });
+});

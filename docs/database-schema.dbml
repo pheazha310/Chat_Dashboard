@@ -35,6 +35,8 @@ Project Chat_Dashboard {
 
 TableGroup "01 Identity and access" [color: #2563EB] {
   users
+  staff
+  customers
   refresh_tokens
   roles
   permissions
@@ -65,6 +67,28 @@ Table users [headercolor: #2563EB] {
   }
 
   Note: 'Sign-in accounts. Email and password, an LOS link, or both (docs/api-auth.md)'
+}
+
+Table staff [headercolor: #2563EB] {
+  user_id uuid [pk, note: 'users.id of a staff account (AGENT, SUPERVISOR, ADMIN); created with the account']
+  employee_code varchar(100) [unique, note: "The organisation's staff number"]
+  department varchar(100)
+  max_concurrent_chats int [note: 'Most open chats to own at once (> 0, CHECK); null = no limit. Not yet enforced']
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  Note: 'Staff side of an account, 1:1 with users. That the account is staff is checked by the application'
+}
+
+Table customers [headercolor: #2563EB] {
+  user_id uuid [pk, note: 'users.id of a CUSTOMER account; created with the account']
+  phone varchar(30) [note: 'E.164, e.g. +85512345678 (CHECK)']
+  customer_code varchar(100) [unique, note: "The customer's code in the loan system (LOS)"]
+  preferred_language varchar(10) [note: 'BCP 47 tag, e.g. km or en']
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  Note: 'Customer side of an account, 1:1 with users. Loan data stays in Backend 1'
 }
 
 Table refresh_tokens [headercolor: #2563EB] {
@@ -151,6 +175,8 @@ Ref: roles.id < role_permissions.role_id [delete: cascade]
 Ref: permissions.id < role_permissions.permission_id [delete: cascade]
 Ref: roles.name < users.role [delete: restrict]
 Ref: users.id < refresh_tokens.user_id [delete: cascade]
+Ref: users.id - staff.user_id [delete: cascade]
+Ref: users.id - customers.user_id [delete: cascade]
 Ref: refresh_tokens.id - refresh_tokens.replaced_by_id [delete: set null]
 
 // ==============================================================================================================
@@ -989,12 +1015,12 @@ Ref: messages.id < spam_reports.message_id [delete: set null]
 // ==============================================================================================================
 
 TableGroup "12 Backend 1 (external)" [color: #94A3B8] {
-  customers
-  agents
+  los_customers
+  los_agents
   loan_applications
 }
 
-Table customers [headercolor: #94A3B8] {
+Table los_customers [headercolor: #94A3B8] {
   id uuid [pk, default: `gen_random_uuid()`]
   user_id uuid [not null]
   customer_code varchar(100)
@@ -1006,7 +1032,7 @@ Table customers [headercolor: #94A3B8] {
   Note: 'EXTERNAL TABLE — customer profiles owned by Backend 1'
 }
 
-Table agents [headercolor: #94A3B8] {
+Table los_agents [headercolor: #94A3B8] {
   id uuid [pk, default: `gen_random_uuid()`]
   user_id uuid [not null]
   employee_code varchar(100)
@@ -1033,6 +1059,6 @@ Table loan_applications [headercolor: #94A3B8] {
 }
 
 // Relations of backend 1
-Ref: users.id - customers.user_id [color: #9CA3AF]
-Ref: users.id - agents.user_id [color: #9CA3AF]
-Ref: customers.id < loan_applications.customer_id [color: #9CA3AF]
+Ref: users.id - los_customers.user_id [color: #9CA3AF]
+Ref: users.id - los_agents.user_id [color: #9CA3AF]
+Ref: los_customers.id < loan_applications.customer_id [color: #9CA3AF]

@@ -1,7 +1,18 @@
 import { randomUUID } from "node:crypto";
 import type { AuthRepository } from "../auth.repository.js";
 import type { ListUsersQuery } from "../auth.schema.js";
-import type { UserRow } from "../auth.types.js";
+import type { CustomerFields, StaffFields, UserRow } from "../auth.types.js";
+
+const emptyStaff = (): StaffFields => ({ employeeCode: null, department: null, maxConcurrentChats: null });
+const emptyCustomer = (): CustomerFields => ({ phone: null, customerCode: null, preferredLanguage: null });
+
+/** The profile row created with an account, as the repository does: `customers` for CUSTOMER, else `staff`. */
+const profileFor = (role: string, staff?: Partial<StaffFields>) =>
+  role === "CUSTOMER"
+    ? { staff: null, customer: emptyCustomer() }
+    : { staff: { ...emptyStaff(), ...staff }, customer: null };
+
+const unique = (column: string) => Object.assign(new Error("unique"), { code: "P2002", meta: { target: [column] } });
 
 interface SessionRow {
   id: string;
@@ -59,9 +70,7 @@ export class FakeAuthRepository {
   }
 
   async createLosUser(data: { losUserType: string; losUserId: number; role: string; displayName: string }) {
-    if (await this.findUserByLos(data.losUserType, data.losUserId)) {
-      throw Object.assign(new Error("unique"), { code: "P2002" });
-    }
+    if (await this.findUserByLos(data.losUserType, data.losUserId)) throw unique("los_user_id");
     const row: UserRow = {
       id: randomUUID(),
       email: null,
@@ -71,14 +80,25 @@ export class FakeAuthRepository {
       lockedUntil: null,
       lastLoginAt: null,
       createdAt: new Date(),
+      ...profileFor(data.role),
       ...data,
     };
     this.users.set(row.id, row);
     return row;
   }
 
-  async createUser(data: { email: string; passwordHash: string; role: string; displayName: string }) {
-    if (await this.findUserByEmail(data.email)) throw Object.assign(new Error("unique"), { code: "P2002" });
+  async createUser({
+    staff,
+    ...data
+  }: {
+    email: string;
+    passwordHash: string;
+    role: string;
+    displayName: string;
+    staff?: Partial<StaffFields>;
+  }) {
+    if (await this.findUserByEmail(data.email)) throw unique("email");
+    this.checkCodes(undefined, staff);
     const row: UserRow & { email: string; passwordHash: string } = {
       id: randomUUID(),
       losUserId: null,
@@ -88,17 +108,42 @@ export class FakeAuthRepository {
       lockedUntil: null,
       lastLoginAt: null,
       createdAt: new Date(),
+      ...profileFor(data.role, staff),
       ...data,
     };
     this.users.set(row.id, row);
     return row;
   }
 
-  async updateUser(id: string, data: Partial<UserRow>) {
+  async updateUser(
+    id: string,
+    {
+      staff,
+      customer,
+      ...data
+    }: Partial<Omit<UserRow, "staff" | "customer">> & {
+      staff?: Partial<StaffFields>;
+      customer?: Partial<CustomerFields>;
+    },
+  ) {
     const user = this.users.get(id);
     if (!user) throw Object.assign(new Error("missing"), { code: "P2025" });
+    this.checkCodes(id, staff, customer);
     Object.assign(user, data);
+    if (staff) user.staff = { ...(user.staff ?? emptyStaff()), ...staff };
+    if (customer) user.customer = { ...(user.customer ?? emptyCustomer()), ...customer };
     return user;
+  }
+
+  /** The unique indexes on staff.employee_code and customers.customer_code. */
+  private checkCodes(id: string | undefined, staff?: Partial<StaffFields>, customer?: Partial<CustomerFields>) {
+    for (const other of this.users.values()) {
+      if (other.id === id) continue;
+      if (staff?.employeeCode && other.staff?.employeeCode === staff.employeeCode) throw unique("employee_code");
+      if (customer?.customerCode && other.customer?.customerCode === customer.customerCode) {
+        throw unique("customer_code");
+      }
+    }
   }
 
   async setPassword(id: string, passwordHash: string) {

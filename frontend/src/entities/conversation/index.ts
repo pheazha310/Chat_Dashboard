@@ -8,4 +8,5 @@ export {
 } from "./model/store";
 export { FILTERS, filterConversations } from "./model/filter";
 export { loadArchived, loadDetails } from "./model/details";
+export { canReply } from "./model/reply";
 export { default as ConversationItem } from "./ui/ConversationItem";

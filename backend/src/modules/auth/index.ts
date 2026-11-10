@@ -1,1 +1,1 @@
-export { customerAuthRoutes, staffAuthRoutes, userRoutes } from "./auth.routes.js";
+export { customerAuthRoutes, devAuthRoutes, staffAuthRoutes, userRoutes } from "./auth.routes.js";

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useSelectedConversation } from "@/entities/conversation";
+import { canReply, useSelectedConversation } from "@/entities/conversation";
 import {
   MessageBubble,
   TypingBubble,
@@ -14,7 +14,7 @@ import { MessageActions, MessageEditor, useEditingStore } from "@/features/messa
 import { selectConversation } from "@/features/select-conversation";
 import { archiveConversation, restoreConversation } from "@/features/archive-conversation";
 import { markConversationUnread } from "@/features/mark-unread";
-import { takeOverConversation } from "@/features/take-over-conversation";
+import { takeOverConversation, TakeOverButton } from "@/features/take-over-conversation";
 import { useSessionStore } from "@/shared/api/session";
 import { ChatSearchBar, filterByQuery, useChatSearchStore } from "@/features/search-in-chat";
 import { blockConversationCustomerAction, reportSpamAction } from "@/features/moderate-conversation";
@@ -286,12 +286,25 @@ export default function ChatWindow({
         {conversation.handoff === "assigned" && !handledByOther && (
           <div className="takeover-confirmation">You’re now handling this conversation.</div>
         )}
-        <MessageComposer
-          conversationId={conversation.id}
-          extraControls={
-            API_URL ? <TemplatePicker onInsert={(text) => insertIntoDraft(conversation.id, text)} /> : undefined
-          }
-        />
+        {/* With the backend only the agent who handles the conversation may write (text, files or voice); the mock
+            server lets anyone. Others see why, and can take it over, instead of failing after typing or recording. */}
+        {!API_URL || canReply(conversation, me) ? (
+          <MessageComposer
+            conversationId={conversation.id}
+            extraControls={
+              API_URL ? <TemplatePicker onInsert={(text) => insertIntoDraft(conversation.id, text)} /> : undefined
+            }
+          />
+        ) : (
+          <div className="reply-lock" role="status">
+            <span>
+              {handledByOther && conversation.assignedAgent
+                ? `${conversation.assignedAgent.name} is handling this conversation. Take it over to reply.`
+                : "Take over this conversation to reply with a message, a file or a voice message."}
+            </span>
+            {conversation.handoff !== "needs-human" && <TakeOverButton conversationId={conversation.id} />}
+          </div>
+        )}
       </div>
     </section>
   );

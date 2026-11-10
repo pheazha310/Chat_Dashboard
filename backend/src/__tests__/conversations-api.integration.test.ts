@@ -60,6 +60,21 @@ describe.skipIf(!url)("/api/v1/admin/conversations over HTTP", () => {
     expect(Object.keys(doc.paths)).toContain("/conversations/{id}/messages");
   });
 
+  it("signs in the LOS way with AUTH_MODE=dev (POST /api/v1/dev/login), and the token works", async () => {
+    const devLogin = (body: unknown) =>
+      fetch(base.replace("/api/v1/admin/conversations", "/api/v1/dev/login"), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    const response = await devLogin({ type: "staff", userId: 3, username: "Sophea", role: "agent" });
+    expect(response.status).toBe(200);
+    const { data } = (await response.json()) as { data: { accessToken: string; user: Record<string, unknown> } };
+    expect(data.user).toMatchObject({ email: null, losUserId: 3, role: "AGENT" });
+    expect((await call("", data.accessToken)).status).toBe(200);
+    expect((await devLogin({ type: "staff", role: "boss" })).status).toBe(400);
+  });
+
   it("rejects missing, malformed and customer tokens", async () => {
     expect((await call("", null)).status).toBe(401);
     expect((await call("", "garbage")).status).toBe(401);

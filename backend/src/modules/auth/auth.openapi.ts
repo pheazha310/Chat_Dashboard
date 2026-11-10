@@ -17,6 +17,26 @@ import {
 import { USER_STATUSES, type AuthTokensDto, type UserDto } from "./auth.types.js";
 
 // `satisfies` keeps the schemas in step with the TypeScript DTOs: drift fails the build.
+const staffProfile = z
+  .object({
+    employeeCode: z.string().nullable(),
+    department: z.string().nullable(),
+    maxConcurrentChats: z
+      .number()
+      .int()
+      .nullable()
+      .openapi({ description: "Most open chats this person should own at once; null = no limit. Not yet enforced" }),
+  })
+  .openapi("StaffProfile");
+
+const customerProfile = z
+  .object({
+    phone: z.string().nullable().openapi({ description: "E.164, e.g. +85512345678" }),
+    customerCode: z.string().nullable().openapi({ description: "The customer's code in the loan system (LOS)" }),
+    preferredLanguage: z.string().nullable().openapi({ description: "BCP 47 tag, e.g. km or en" }),
+  })
+  .openapi("CustomerProfile");
+
 const user = z
   .object({
     id: z.string(),
@@ -27,6 +47,8 @@ const user = z
     status: z.enum(USER_STATUSES),
     lastLoginAt: z.string().nullable(),
     createdAt: z.string(),
+    staff: staffProfile.nullable().openapi({ description: "Staff accounts only; null for customers" }),
+    customer: customerProfile.nullable().openapi({ description: "Customer accounts only; null for staff" }),
   })
   .openapi("User") satisfies z.ZodType<UserDto>;
 
@@ -157,7 +179,7 @@ export function registerAuthOpenApi(registry: OpenAPIRegistry) {
     security,
     summary: "Create a staff account",
     description:
-      "Admins only. Roles AGENT, SUPERVISOR or ADMIN; customers register themselves in the mobile app. 409 if the email is taken.",
+      "Admins only. Roles AGENT, SUPERVISOR or ADMIN; customers register themselves in the mobile app. Optional `staff` fields (employeeCode, department, maxConcurrentChats) fill the account's `staff` row. 409 if the email or the employee code is taken.",
     request: { body: jsonBody(createUserBody) },
     responses: {
       201: ok("Account", successOf(user)),
@@ -184,7 +206,7 @@ export function registerAuthOpenApi(registry: OpenAPIRegistry) {
     security,
     summary: "Change an account",
     description:
-      "Admins only. `displayName`, `role` (staff roles, staff accounts only) and `status`. Admins cannot change their own role or status. A new role or DISABLED signs the user out everywhere; re-enabling clears a sign-in lock. 409 for a new role on an LOS account: LOS sets its role at every sign-in.",
+      "Admins only. `displayName`, `role` (staff roles, staff accounts only), `status`, and the profile: `staff` (staff accounts) or `customer` (customer accounts; phone, customerCode, preferredLanguage), where null clears a field and 400 is the wrong kind of account. Admins cannot change their own role or status. A new role or DISABLED signs the user out everywhere; re-enabling clears a sign-in lock. 409 for a new role on an LOS account (LOS sets its role at every sign-in) or a taken employee or customer code.",
     request: { params: userParams, body: jsonBody(updateUserBody) },
     responses: {
       200: ok("Account", successOf(user)),

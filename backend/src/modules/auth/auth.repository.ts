@@ -2,7 +2,7 @@ import { prisma, runInTransaction, type Db } from "@config/database.js";
 import { escapeLike } from "@shared/utils/like.js";
 import { pageArgs } from "@shared/utils/pagination.js";
 import type { ListUsersQuery } from "./auth.schema.js";
-import type { UserRow } from "./auth.types.js";
+import type { CustomerFields, StaffFields, UserRow } from "./auth.types.js";
 
 const userSelect = {
   id: true,
@@ -17,11 +17,33 @@ const userSelect = {
   lockedUntil: true,
   lastLoginAt: true,
   createdAt: true,
+  staff: { select: { employeeCode: true, department: true, maxConcurrentChats: true } },
+  customer: { select: { phone: true, customerCode: true, preferredLanguage: true } },
 } as const;
 
 /** True for a unique-constraint violation (a second account with the same email). */
 export const isUniqueViolation = (error: unknown) =>
   typeof error === "object" && error !== null && (error as { code?: unknown }).code === "P2002";
+
+/**
+ * True for a unique-constraint violation on `column` (e.g. `employee_code`). The driver adapter reports the columns in
+ * different places depending on the version, so the error's metadata is searched as a whole.
+ */
+export const isUniqueViolationOn = (error: unknown, column: string) =>
+  isUniqueViolation(error) && JSON.stringify((error as { meta?: unknown }).meta ?? {}).includes(column);
+
+/**
+ * The profile row created with an account: `customers` for a CUSTOMER, `staff` for every other role. Every account has
+ * exactly one of them.
+ */
+const profileFor = (role: string, staff?: Partial<StaffFields>) =>
+  role === "CUSTOMER" ? { customer: { create: {} } } : { staff: { create: { ...staff } } };
+
+/** Profile changes as nested upserts (the row normally exists; an upsert also repairs one that does not). */
+const profileUpdates = (data: { staff?: Partial<StaffFields>; customer?: Partial<CustomerFields> }) => ({
+  ...(data.staff ? { staff: { upsert: { create: data.staff, update: data.staff } } } : {}),
+  ...(data.customer ? { customer: { upsert: { create: data.customer, update: data.customer } } } : {}),
+});
 
 /** `users` and `refresh_tokens`. The only place that queries them. */
 export class AuthRepository {
@@ -44,9 +66,12 @@ export class AuthRepository {
     });
   }
 
-  /** An account that signs in only through LOS: no email, no password. */
+  /** An account that signs in only through LOS: no email, no password. Created with its profile row. */
   createLosUser(data: { losUserType: string; losUserId: number; role: string; displayName: string }): Promise<UserRow> {
-    return this.db.authUser.create({ data: { ...data, createdBy: null }, select: userSelect });
+    return this.db.authUser.create({
+      data: { ...data, createdBy: null, ...profileFor(data.role) },
+      select: userSelect,
+    });
   }
 
   findUserById(id: string): Promise<UserRow | null> {
@@ -58,21 +83,37 @@ export class AuthRepository {
     return this.db.authUser.findMany({ where: { id: { in: ids }, role: { in: roles } }, select: userSelect });
   }
 
+  /** Creates the account and its profile row together (`staff` fields apply to staff roles only). */
   createUser(data: {
     email: string;
     passwordHash: string;
     role: string;
     displayName: string;
     createdBy: string | null;
+    staff?: Partial<StaffFields>;
   }): Promise<UserRow> {
-    return this.db.authUser.create({ data, select: userSelect });
+    const { staff, ...user } = data;
+    return this.db.authUser.create({ data: { ...user, ...profileFor(user.role, staff) }, select: userSelect });
   }
 
   updateUser(
     id: string,
-    data: { displayName?: string; role?: string; status?: string; lockedUntil?: null; failedLoginCount?: number },
+    data: {
+      displayName?: string;
+      role?: string;
+      status?: string;
+      lockedUntil?: null;
+      failedLoginCount?: number;
+      staff?: Partial<StaffFields>;
+      customer?: Partial<CustomerFields>;
+    },
   ): Promise<UserRow> {
-    return this.db.authUser.update({ where: { id }, data, select: userSelect });
+    const { staff, customer, ...user } = data;
+    return this.db.authUser.update({
+      where: { id },
+      data: { ...user, ...profileUpdates({ staff, customer }) },
+      select: userSelect,
+    });
   }
 
   async setPassword(id: string, passwordHash: string): Promise<void> {
