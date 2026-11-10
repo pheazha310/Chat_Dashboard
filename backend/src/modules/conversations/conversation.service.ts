@@ -109,7 +109,8 @@ export class ConversationService implements ConversationAccess, CustomerConversa
 
   /**
    * "Join room" for the mobile app: the customer's own conversation for the application (or, without an application,
-   * their latest conversation that is not closed), created when there is none. Always scoped to `customerId`, which
+   * their latest conversation that is not closed), created when there is none. One open chat per customer: a new
+   * application joins the open conversation and becomes its application. Always scoped to `customerId`, which
    * comes from the verified token and never from the request body. NOTE: like `create`, the application is not
    * verified with Backend 1 (contract unknown).
    */
@@ -120,12 +121,18 @@ export class ConversationService implements ConversationAccess, CustomerConversa
     const customerName = await this.customerName(customerId);
     const { id, created } = await this.repository.inTransaction(async (tx) => {
       await tx.lockCustomer(customerId);
-      const existing =
-        input.applicationId === undefined
-          ? await tx.findOpenForCustomer(customerId)
-          : await tx.findByApplication(input.applicationId);
+      // One open chat per customer: the application's own conversation first (older data may have one per
+      // application), otherwise the customer's open conversation, which then follows the latest application.
+      const byApplication = input.applicationId === undefined ? null : await tx.findByApplication(input.applicationId);
+      if (byApplication) {
+        if (byApplication.customerId !== customerId) throw new NotFoundError("Application not found");
+        return { id: byApplication.id, created: false };
+      }
+      const existing = await tx.findOpenForCustomer(customerId);
       if (existing) {
-        if (existing.customerId !== customerId) throw new NotFoundError("Application not found");
+        if (input.applicationId !== undefined && existing.applicationId !== input.applicationId) {
+          await tx.setApplication(existing.id, input.applicationId);
+        }
         return { id: existing.id, created: false };
       }
       const conversation = await tx.create({

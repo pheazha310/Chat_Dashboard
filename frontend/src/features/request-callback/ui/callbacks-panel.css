@@ -2,39 +2,104 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 12px 16px;
+  margin: 16px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--card);
+  box-shadow: 0 1px 2px rgba(17, 24, 39, 0.04);
 }
 .callback-form label {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-top: 2px;
   font-size: 13px;
+  font-weight: 600;
+}
+.callback-hint {
+  color: var(--muted-foreground);
+  font-size: 12px;
+  font-weight: 400;
+}
+.callback-quick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.callback-chip {
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--foreground);
+  background: var(--card);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+}
+.callback-chip:hover {
+  background: var(--muted);
+}
+.callback-chip[aria-pressed="true"] {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
 }
 .callback-form input,
 .callback-form textarea {
-  padding: 8px 10px;
-  border: 1px solid #d7deeb;
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
   border-radius: 10px;
+  outline: none;
+  background: var(--card);
   font: inherit;
+  font-size: 14px;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+.callback-form input:focus,
+.callback-form textarea:focus {
+  border-color: var(--ring);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 30%, transparent);
 }
 .callback-form textarea {
-  min-height: 64px;
+  min-height: 72px;
   resize: vertical;
+}
+.callback-count {
+  align-self: flex-end;
+  color: var(--muted-foreground);
+  font-size: 11px;
 }
 .callback-form > button,
 .callback-actions button {
-  align-self: flex-start;
-  padding: 6px 12px;
-  border: 0;
-  border-radius: 8px;
-  color: #fff;
-  background: #3b6df0;
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--foreground);
+  background: var(--card);
   font: inherit;
+  font-size: 13px;
   cursor: pointer;
 }
+.callback-form > button {
+  margin-top: 4px;
+  border-color: transparent;
+  color: var(--primary-foreground);
+  background: var(--primary);
+  font-weight: 600;
+}
+.callback-form > button:hover:not(:disabled) {
+  filter: brightness(1.07);
+}
 .callback-form > button:disabled {
-  opacity: 0.5;
-  cursor: default;
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 .callback-list {
   display: flex;
@@ -44,42 +109,95 @@
 }
 .callback-list h4 {
   margin: 8px 0 0;
-  font-size: 12px;
-  opacity: 0.7;
+  color: var(--muted-foreground);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 .callback-item {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 10px 12px;
-  border: 1px solid #e3e8f2;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--primary);
   border-radius: 12px;
+  background: var(--card);
 }
 .callback-item header {
   display: flex;
+  align-items: center;
   justify-content: space-between;
   gap: 8px;
+  font-size: 13px;
 }
-.callback-item header span {
-  font-size: 12px;
+.callback-badge {
+  padding: 2px 8px;
+  border-radius: 999px;
+  color: var(--muted-foreground);
+  background: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
   text-transform: capitalize;
 }
 .callback-item p {
   margin: 0;
+  font-size: 13px;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
-.callback-missed header span {
-  color: #b42318;
+.callback-item small {
+  color: var(--muted-foreground);
+  font-size: 12px;
 }
-.callback-completed,
+.callback-missed {
+  border-left-color: #b42318;
+}
+.callback-missed .callback-badge {
+  color: #b42318;
+  background: #fef3f2;
+}
+.callback-completed {
+  border-left-color: #12b76a;
+}
+.callback-completed .callback-badge {
+  color: #027a48;
+  background: #ecfdf3;
+}
 .callback-cancelled {
+  border-left-color: var(--border);
   opacity: 0.7;
 }
 .callback-actions {
   display: flex;
   gap: 8px;
+  margin-top: 2px;
 }
-.callback-actions button:last-child {
-  background: #6b7a99;
+.callback-actions button:hover {
+  background: var(--muted);
+}
+.callback-actions .callback-primary {
+  border-color: transparent;
+  color: var(--primary-foreground);
+  background: var(--primary);
+}
+.callback-actions .callback-primary:hover {
+  background: var(--primary);
+  filter: brightness(1.07);
+}
+.callback-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 28px 16px;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  color: var(--muted-foreground);
+  font-size: 13px;
+  text-align: center;
+}
+.callback-empty strong {
+  color: var(--foreground);
 }

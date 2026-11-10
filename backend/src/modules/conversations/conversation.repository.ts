@@ -161,6 +161,11 @@ export class ConversationRepository {
     });
   }
 
+  /** Points the conversation at the customer's latest loan application. */
+  async setApplication(id: string, applicationId: number): Promise<void> {
+    await this.db.conversation.update({ where: { id }, data: { applicationId } });
+  }
+
   /** Serializes concurrent creates for one customer for the rest of the transaction. */
   async lockCustomer(customerId: string): Promise<void> {
     await this.db.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${customerId}::text, 0))`;

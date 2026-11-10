@@ -1,6 +1,7 @@
 import "./template-picker.css";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSessionStore } from "@/shared/api/session";
+import { confirmAction } from "@/shared/ui";
 import {
   createTemplate,
   deactivateTemplate,
@@ -174,7 +175,13 @@ export default function TemplatePicker({ onInsert }: { onInsert: (text: string) 
                         </button>
                         <button
                           type="button"
-                          onClick={() => window.confirm(`Deactivate “${t.title}”?`) && void deactivateTemplate(t.id)}
+                          onClick={() =>
+                            void confirmAction({ title: `Deactivate “${t.title}”?`, confirmLabel: "Deactivate" }).then(
+                              (ok) => {
+                                if (ok) void deactivateTemplate(t.id);
+                              },
+                            )
+                          }
                           aria-label={`Deactivate ${t.title}`}
                         >
                           Remove

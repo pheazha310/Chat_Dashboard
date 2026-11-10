@@ -2,12 +2,13 @@ import "./organize-panel.css";
 import { useEffect, useState } from "react";
 import { useConversationStore } from "@/entities/conversation";
 import type { Priority } from "@/shared/api/ws";
+import { Button, Input } from "@/shared/ui";
 import { createTag, loadTagCatalog, setConversationTags, setPriority, useTagCatalog } from "../model/organize";
 
-const PRIORITIES: { id: Priority; label: string }[] = [
-  { id: "HIGH", label: "High" },
-  { id: "MEDIUM", label: "Medium" },
-  { id: "LOW", label: "Low" },
+const PRIORITIES: { id: Priority; label: string; hint: string }[] = [
+  { id: "HIGH", label: "High", hint: "Needs attention first" },
+  { id: "MEDIUM", label: "Medium", hint: "Normal queue" },
+  { id: "LOW", label: "Low", hint: "Can wait" },
 ];
 
 /** Priority and tags of one conversation. The server decides who may change them and answers with the new state. */
@@ -62,44 +63,65 @@ export default function OrganizePanel({ conversationId, onBack }: { conversation
         </div>
       </header>
 
-      <fieldset className="organize-group">
-        <legend>Priority</legend>
-        {PRIORITIES.map(({ id, label }) => (
-          <label key={id}>
-            <input
-              type="radio"
-              name={`priority-${conversationId}`}
-              checked={priority === id}
+      <section className="organize-group" aria-labelledby="organize-priority">
+        <h4 id="organize-priority">Priority</h4>
+        <div className="organize-segmented" role="radiogroup" aria-labelledby="organize-priority">
+          {PRIORITIES.map(({ id, label, hint }) => (
+            <button
+              key={id}
+              type="button"
+              role="radio"
+              aria-checked={priority === id}
+              title={hint}
+              data-priority={id}
               disabled={busy}
-              onChange={() => {
+              onClick={() => {
+                if (priority === id) return;
                 setBusy(true);
                 void setPriority(conversationId, id).finally(() => setBusy(false));
               }}
-            />
-            {label}
-          </label>
-        ))}
-      </fieldset>
+            >
+              <span className="organize-dot" aria-hidden />
+              {label}
+            </button>
+          ))}
+        </div>
+        <p className="organize-hint">{PRIORITIES.find((p) => p.id === priority)?.hint}</p>
+      </section>
 
-      <fieldset className="organize-group">
-        <legend>Tags</legend>
-        {status === "loading" && catalog.length === 0 && <p className="empty-files">Loading tags…</p>}
-        {status === "error" && <p className="empty-files">Could not load the tags.</p>}
-        {status === "ready" && catalog.length === 0 && (
-          <p className="empty-files">No tags yet. Create the first one below.</p>
+      <section className="organize-group" aria-labelledby="organize-tags">
+        <h4 id="organize-tags">
+          Tags{selected.size > 0 && <span className="organize-count">{selected.size} selected</span>}
+        </h4>
+        {status === "loading" && catalog.length === 0 && <p className="organize-empty">Loading tags…</p>}
+        {status === "error" && (
+          <p className="organize-empty">
+            Could not load the tags.{" "}
+            <Button size="xs" variant="outline" onClick={() => void loadTagCatalog()}>
+              Try again
+            </Button>
+          </p>
         )}
-        {catalog.map((tag) => (
-          <label key={tag.id}>
-            <input
-              type="checkbox"
-              checked={selected.has(tag.id)}
-              disabled={busy}
-              onChange={(event) => void toggle(tag.id, event.target.checked)}
-            />
-            <span className="organize-dot" style={tag.color ? { background: tag.color } : undefined} aria-hidden />
-            {tag.name}
-          </label>
-        ))}
+        {status === "ready" && catalog.length === 0 && (
+          <p className="organize-empty">No tags yet. Create the first one below.</p>
+        )}
+        {catalog.length > 0 && (
+          <div className="organize-tags" role="group" aria-labelledby="organize-tags">
+            {catalog.map((tag) => (
+              <button
+                key={tag.id}
+                type="button"
+                className="organize-chip"
+                aria-pressed={selected.has(tag.id)}
+                disabled={busy}
+                onClick={() => void toggle(tag.id, !selected.has(tag.id))}
+              >
+                <span className="organize-dot" style={tag.color ? { background: tag.color } : undefined} aria-hidden />
+                {tag.name}
+              </button>
+            ))}
+          </div>
+        )}
         <form
           className="organize-new"
           onSubmit={(event) => {
@@ -107,18 +129,18 @@ export default function OrganizePanel({ conversationId, onBack }: { conversation
             void addTag();
           }}
         >
-          <input
+          <Input
             value={newTag}
             maxLength={100}
-            placeholder="New tag"
+            placeholder="Create a new tag…"
             aria-label="New tag name"
             onChange={(event) => setNewTag(event.target.value)}
           />
-          <button type="submit" disabled={!newTag.trim() || busy}>
+          <Button type="submit" disabled={!newTag.trim() || busy}>
             Add
-          </button>
+          </Button>
         </form>
-      </fieldset>
+      </section>
     </section>
   );
 }

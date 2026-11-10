@@ -21,7 +21,7 @@ import { blockConversationCustomerAction, reportSpamAction } from "@/features/mo
 import { TemplatePicker } from "@/features/canned-responses";
 import { insertIntoDraft, MessageComposer, retryMessage, useComposerStore } from "@/features/send-message";
 import { API_URL, assets } from "@/shared/config";
-import { AssetIcon, IconButton, notify, Icon } from "@/shared/ui";
+import { AssetIcon, IconButton, notify, Icon, promptAction } from "@/shared/ui";
 import { useCustomerCallStore } from "@/features/customer-call";
 import HandoffCard from "./HandoffCard";
 
@@ -206,9 +206,19 @@ export default function ChatWindow({
                   </button>
                   <button
                     onClick={() => {
-                      const reason = window.prompt("Why is this spam or abuse?");
-                      if (reason !== null && reason.trim()) void reportSpamAction(conversation.id, reason);
                       setShowMore(false);
+                      void promptAction({
+                        title: "Report spam or abuse",
+                        description: "Supervisors will review this report.",
+                        inputLabel: "What happened?",
+                        placeholder: "e.g. Repeated threatening messages",
+                        required: true,
+                        maxLength: 2000,
+                        confirmLabel: "Report",
+                        destructive: true,
+                      }).then((reason) => {
+                        if (reason) void reportSpamAction(conversation.id, reason);
+                      });
                     }}
                   >
                     Report spam or abuse
@@ -216,9 +226,16 @@ export default function ChatWindow({
                   {conversation.handoff === "assigned" && !handledByOther && (
                     <button
                       onClick={() => {
-                        const reason = window.prompt("Block this customer? Add a reason (optional)");
-                        if (reason !== null) void blockConversationCustomerAction(conversation.id, reason);
                         setShowMore(false);
+                        void promptAction({
+                          title: "Block this customer?",
+                          description: "They will no longer be able to send messages.",
+                          inputLabel: "Reason",
+                          confirmLabel: "Block customer",
+                          destructive: true,
+                        }).then((reason) => {
+                          if (reason !== null) void blockConversationCustomerAction(conversation.id, reason);
+                        });
                       }}
                     >
                       Block customer
@@ -227,9 +244,15 @@ export default function ChatWindow({
                   {conversation.handoff === "assigned" && !handledByOther && (
                     <button
                       onClick={() => {
-                        const reason = window.prompt("Why are you escalating this conversation? (optional)");
-                        if (reason !== null) void escalateConversation(conversation.id, reason);
                         setShowMore(false);
+                        void promptAction({
+                          title: "Escalate to supervisor",
+                          inputLabel: "Why are you escalating?",
+                          placeholder: "e.g. Customer is asking for a fee waiver",
+                          confirmLabel: "Escalate",
+                        }).then((reason) => {
+                          if (reason !== null) void escalateConversation(conversation.id, reason);
+                        });
                       }}
                     >
                       Escalate to supervisor

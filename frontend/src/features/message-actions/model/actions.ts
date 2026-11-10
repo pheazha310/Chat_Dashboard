@@ -28,7 +28,8 @@ export function availableActions(message: ChatMessage) {
   return {
     reply: stored,
     react: stored,
-    forward: stored,
+    // The server forwards text only (files arrive with FR-17); anything else is a 400.
+    forward: stored && !message.attachments?.length && message.text.trim() !== "",
     copy: message.side !== "system",
     edit: stored && mine,
     remove: stored && (mine || (isSupervisor() && message.side !== "system")),

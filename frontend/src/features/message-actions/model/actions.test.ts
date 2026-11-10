@@ -62,6 +62,20 @@ describe("availableActions", () => {
     expect(availableActions(message({ side: "customer", senderId: "c" }))).toMatchObject({ remove: true, edit: false });
     expect(availableActions(message({ side: "system" }))).toMatchObject({ remove: false, reply: false, copy: false });
   });
+
+  it("offers forward only for text messages, since the server refuses files and voice (400)", () => {
+    const file = {
+      id: "f1",
+      kind: "IMAGE" as const,
+      fileName: "a.png",
+      mimeType: "image/png",
+      size: 1,
+      downloadPath: "/x",
+    };
+    expect(availableActions(message()).forward).toBe(true);
+    expect(availableActions(message({ attachments: [file] })).forward).toBe(false);
+    expect(availableActions(message({ text: "", attachments: [] })).forward).toBe(false);
+  });
 });
 
 describe("actions", () => {

@@ -43,10 +43,11 @@ with the same bearer token.
 
 ## Join room
 
-A "room" is a conversation. With `applicationId`, the customer has one open conversation per loan application; without
-it, their latest conversation that is not closed is reused. A new conversation starts in `HUMAN` mode waiting for an
-agent (the AI worker is not built), and available agents are notified. `applicationId` is the LOS loan application id, a
-positive integer. The conversation stores the customer's display name so the dashboard inbox can show it.
+A "room" is a conversation. A customer has **one open conversation**: joining reuses it whatever the `applicationId`,
+and a different `applicationId` becomes the conversation's current application (a conversation that already belongs to
+that application is reused first, which keeps older per-application chats working). A closed conversation is not
+reused, so the next join starts a new one, in `HUMAN` mode waiting for an agent (the AI worker is not built); available
+agents are notified. `applicationId` is the LOS loan application id, a positive integer. The conversation stores the customer's display name so the dashboard inbox can show it.
 
 ```json
 {

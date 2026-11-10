@@ -1,51 +1,145 @@
 .organize-group {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 10px;
   margin: 0;
-  padding: 12px 16px;
-  border: 0;
-}
-.organize-group legend {
   padding: 0;
-  margin-bottom: 6px;
-  font-weight: 600;
 }
-.organize-group label {
+.organize-group h4 {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
+  align-items: baseline;
+  justify-content: space-between;
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.organize-count {
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
 }
 .organize-dot {
-  width: 10px;
-  height: 10px;
+  flex: none;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   background: #9aa6c0;
+}
+
+/* Priority: a segmented control, one colour per level. */
+.organize-segmented {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  padding: 4px;
+  border-radius: 12px;
+  background: var(--muted);
+}
+.organize-segmented button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 4px;
+  border: 0;
+  border-radius: 9px;
+  color: var(--muted-foreground);
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    color 0.15s,
+    box-shadow 0.15s;
+}
+.organize-segmented button:hover:not(:disabled):not([aria-checked="true"]) {
+  color: var(--foreground);
+}
+.organize-segmented button[aria-checked="true"] {
+  color: var(--foreground);
+  background: var(--card);
+  box-shadow:
+    0 1px 2px rgba(17, 24, 39, 0.1),
+    0 0 0 1px var(--border);
+  font-weight: 600;
+}
+.organize-segmented button:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+}
+.organize-segmented button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+.organize-segmented [data-priority="HIGH"] .organize-dot {
+  background: #f5222d;
+}
+.organize-segmented [data-priority="MEDIUM"] .organize-dot {
+  background: #f59e0b;
+}
+.organize-segmented [data-priority="LOW"] .organize-dot {
+  background: #22c55e;
+}
+.organize-hint {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+
+/* Tags: toggleable chips instead of checkboxes. */
+.organize-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.organize-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--foreground);
+  background: var(--card);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+}
+.organize-chip:hover:not(:disabled) {
+  background: var(--muted);
+}
+.organize-chip[aria-pressed="true"] {
+  border-color: var(--primary);
+  color: var(--accent-foreground);
+  background: var(--accent);
+  font-weight: 600;
+}
+.organize-chip[aria-pressed="true"]::after {
+  content: "✓";
+  font-size: 11px;
+}
+.organize-chip:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+}
+.organize-chip:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+.organize-empty {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 13px;
 }
 .organize-new {
   display: flex;
   gap: 8px;
-  margin-top: 6px;
-}
-.organize-new input {
-  flex: 1;
-  min-width: 0;
-  padding: 6px 8px;
-  border: 1px solid #d7deeb;
-  border-radius: 8px;
-  font: inherit;
-}
-.organize-new button {
-  padding: 6px 12px;
-  border: 0;
-  border-radius: 8px;
-  color: #fff;
-  background: #3b6df0;
-  font: inherit;
-  cursor: pointer;
-}
-.organize-new button:disabled {
-  opacity: 0.5;
-  cursor: default;
+  padding-top: 4px;
 }

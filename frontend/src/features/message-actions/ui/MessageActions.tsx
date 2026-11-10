@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useConversationStore } from "@/entities/conversation";
 import type { ChatMessage } from "@/entities/message";
 import { API_URL } from "@/shared/config";
+import { confirmAction } from "@/shared/ui";
 import {
   availableActions,
   copyMessage,
@@ -105,8 +106,14 @@ export default function MessageActions({ message }: { message: ChatMessage }) {
               role="menuitem"
               className="danger"
               onClick={() => {
-                if (window.confirm("Delete this message?")) void deleteMessage(message);
                 close();
+                void confirmAction({
+                  title: "Delete this message?",
+                  description: "The message will be removed from the conversation for everyone.",
+                  confirmLabel: "Delete",
+                }).then((ok) => {
+                  if (ok) void deleteMessage(message);
+                });
               }}
             >
               Delete

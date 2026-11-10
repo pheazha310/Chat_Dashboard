@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ApplicationsPage, ChatPage, LoginPage } from "@/pages";
 import { CustomerCallDialog, LiveCallDialog } from "@/features/customer-call";
 import { authRequired, startSessionKeeper, useAuthStore } from "@/shared/api/auth";
-import { Toaster } from "@/shared/ui";
+import { ConfirmDialogHost, Toaster } from "@/shared/ui";
 import { startRealtime } from "./providers/realtime";
 
 export default function App() {
@@ -22,6 +22,7 @@ export default function App() {
     <>
       {authRequired && !signedIn ? <LoginPage /> : <Workspace />}
       <Toaster />
+      <ConfirmDialogHost />
     </>
   );
 }

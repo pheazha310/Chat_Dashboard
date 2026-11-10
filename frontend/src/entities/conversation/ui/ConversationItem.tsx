@@ -1,4 +1,5 @@
 import { formatListTime } from "@/shared/lib/format-time";
+import { applicationLabel } from "../model/label";
 import type { Conversation } from "../model/store";
 
 export default function ConversationItem({
@@ -10,12 +11,16 @@ export default function ConversationItem({
   selected: boolean;
   onSelect: () => void;
 }) {
+  const appLabel = applicationLabel(conversation.application);
   return (
     <button className={`conversation-item ${selected ? "selected" : ""}`} onClick={onSelect}>
       <img className="conversation-avatar" src={conversation.avatar} alt="" />
       <span className="conversation-content">
         <span className="conversation-line">
-          <strong>{conversation.name}</strong>
+          <strong>
+            {conversation.name}
+            {appLabel && <small> · {appLabel}</small>}
+          </strong>
           <time>{formatListTime(conversation.lastMessageAt)}</time>
         </span>
         <span className="conversation-line">

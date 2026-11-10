@@ -1,82 +1,232 @@
-.internal-note-form {
+/* Composer: one card holding the text, who to notify and the submit row. */
+.internal-note-composer {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--card);
+  box-shadow: 0 1px 2px rgba(17, 24, 39, 0.04);
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
 }
-.internal-note-form textarea,
-.internal-note textarea {
+.internal-note-composer:focus-within {
+  border-color: var(--ring);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 30%, transparent);
+}
+.internal-note-composer textarea {
   width: 100%;
-  min-height: 72px;
-  padding: 8px 10px;
-  border: 1px solid #d7deeb;
-  border-radius: 10px;
+  min-height: 84px;
+  max-height: 240px;
+  padding: 12px 14px 6px;
+  border: 0;
+  border-radius: 14px 14px 0 0;
+  outline: none;
+  background: transparent;
   font: inherit;
+  font-size: 14px;
+  line-height: 1.5;
   resize: vertical;
 }
-.internal-note-form fieldset {
+.internal-note-composer textarea::placeholder {
+  color: var(--muted-foreground);
+}
+.internal-note-notify {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 12px;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  font-size: 13px;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px 8px;
 }
-.internal-note-form legend {
-  margin-bottom: 4px;
+.internal-note-notify > span {
+  margin-right: 2px;
+  color: var(--muted-foreground);
   font-size: 12px;
-  opacity: 0.7;
 }
-.internal-note-form > button,
-.internal-note-actions button {
-  align-self: flex-start;
-  padding: 6px 12px;
-  border: 0;
-  border-radius: 8px;
-  color: #fff;
-  background: #3b6df0;
+.internal-note-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px 3px 3px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--foreground);
+  background: var(--card);
   font: inherit;
+  font-size: 12px;
   cursor: pointer;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
 }
-.internal-note-form > button:disabled {
-  opacity: 0.5;
-  cursor: default;
+.internal-note-chip img {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
 }
+.internal-note-chip:hover {
+  background: var(--muted);
+}
+.internal-note-chip[aria-pressed="true"] {
+  border-color: var(--primary);
+  color: var(--accent-foreground);
+  background: var(--accent);
+}
+.internal-note-chip:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+}
+.internal-note-composer footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 8px 8px 14px;
+  border-top: 1px solid var(--border);
+  border-radius: 0 0 14px 14px;
+  background: var(--muted);
+}
+.internal-note-hint {
+  color: var(--muted-foreground);
+  font-size: 11px;
+}
+
+/* List */
 .internal-note-list {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 0 16px 16px;
-  overflow-y: auto;
+}
+.internal-note-count {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 .internal-note {
-  padding: 10px 12px;
-  border: 1px solid #f0d98a;
-  border-radius: 10px;
-  background: #fff9e0;
+  display: flex;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #f3e3a6;
+  border-left: 3px solid #f0b429;
+  border-radius: 12px;
+  background: #fffbeb;
+}
+.internal-note-avatar {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+}
+.internal-note-body {
+  flex: 1;
+  min-width: 0;
 }
 .internal-note header {
   display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  font-size: 12px;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 13px;
+}
+.internal-note header time,
+.internal-note-edited {
+  color: var(--muted-foreground);
+  font-size: 11px;
+}
+.internal-note-edited::before {
+  content: "· ";
 }
 .internal-note p {
-  margin: 6px 0;
+  margin: 4px 0 0;
+  font-size: 14px;
+  line-height: 1.5;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
-.internal-note small {
-  display: block;
-  opacity: 0.7;
+.internal-note textarea {
+  width: 100%;
+  min-height: 72px;
+  margin-top: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  outline: none;
+  background: var(--card);
+  font: inherit;
+  font-size: 14px;
+  resize: vertical;
+}
+.internal-note textarea:focus {
+  border-color: var(--ring);
+}
+.internal-note-mentions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.internal-note-mentions li {
+  padding: 1px 8px;
+  border-radius: 999px;
+  color: var(--accent-foreground);
+  background: var(--accent);
+  font-size: 12px;
 }
 .internal-note-actions {
   display: flex;
-  gap: 8px;
-  margin-top: 6px;
+  gap: 4px;
+  margin-top: 8px;
 }
-.internal-note-actions button {
-  color: inherit;
-  background: #00000012;
+.internal-note-actions-hover {
+  margin: 4px 0 -4px -8px;
+}
+.internal-note .internal-note-delete {
+  color: var(--destructive);
+}
+/* On devices with a mouse, the Edit/Delete row appears on hover or keyboard focus to keep notes calm to read. */
+@media (hover: hover) {
+  .internal-note-actions-hover {
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+  .internal-note:hover .internal-note-actions-hover,
+  .internal-note:focus-within .internal-note-actions-hover {
+    opacity: 1;
+  }
+}
+
+/* Empty, loading and error states */
+.internal-note-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 32px 16px;
+  color: var(--muted-foreground);
+  font-size: 13px;
+  text-align: center;
+}
+.internal-note-empty p {
+  max-width: 260px;
+  margin: 0;
+  line-height: 1.5;
+}
+.internal-note-empty strong {
+  color: var(--foreground);
+  font-size: 14px;
+}
+.internal-note-empty-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin-bottom: 4px;
+  border-radius: 50%;
+  background: #fffbeb;
+  font-size: 20px;
 }

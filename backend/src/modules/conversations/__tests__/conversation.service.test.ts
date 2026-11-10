@@ -24,6 +24,7 @@ const repo = {
   findManyForAccess: vi.fn(),
   findForEvent: vi.fn(),
   findByApplication: vi.fn(),
+  setApplication: vi.fn(),
   findOpenForCustomer: vi.fn(),
   listForCustomer: vi.fn(),
   lockCustomer: vi.fn(),
@@ -476,6 +477,21 @@ describe("joinForCustomer", () => {
     repo.findForAccess.mockResolvedValue(row({ id: uid(13), customerId: customer }));
     expect((await service.joinForCustomer(customer, {})).created).toBe(false);
     expect(repo.findOpenForCustomer).toHaveBeenCalledWith(customer);
+  });
+
+  it("one open chat per customer: a new application joins the open conversation and becomes its application", async () => {
+    repo.findOpenForCustomer.mockResolvedValue(row({ id: uid(14), customerId: customer, applicationId: 100 }));
+    repo.findForAccess.mockResolvedValue(row({ id: uid(14), customerId: customer, applicationId: 200 }));
+    const result = await service.joinForCustomer(customer, { applicationId: 200 });
+    expect(result.created).toBe(false);
+    expect(repo.create).not.toHaveBeenCalled();
+    expect(repo.setApplication).toHaveBeenCalledWith(uid(14), 200);
+  });
+
+  it("does not touch the application when the open conversation already has it", async () => {
+    repo.findOpenForCustomer.mockResolvedValue(row({ id: uid(14), customerId: customer, applicationId: 200 }));
+    await service.joinForCustomer(customer, { applicationId: 200 });
+    expect(repo.setApplication).not.toHaveBeenCalled();
   });
 
   it("does not reveal that an application belongs to another customer", async () => {

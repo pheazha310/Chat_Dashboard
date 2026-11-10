@@ -1,5 +1,12 @@
 export { default as AssetIcon } from "./AssetIcon";
 export { Toaster, notify, type ToastType } from "./toast";
+export {
+  ConfirmDialogHost,
+  confirmAction,
+  promptAction,
+  type ConfirmOptions,
+  type PromptOptions,
+} from "./confirm-dialog";
 export { default as IconButton } from "./IconButton";
 export { default as Icon } from "./Icon";
 export { default as IconPill } from "./IconPill";
