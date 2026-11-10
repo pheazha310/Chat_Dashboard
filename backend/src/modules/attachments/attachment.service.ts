@@ -147,14 +147,13 @@ export class AttachmentService {
     });
   }
 
-  /** The uploader, or a supervisor/admin. The record is kept (soft delete); the bytes are removed from storage. */
+  /** The uploader, or a supervisor/admin. Soft delete only: the record and the stored bytes are kept. */
   async remove(auth: AuthContext, attachmentId: string) {
     const row = await this.visible(auth, await this.repository.findLive(attachmentId));
     const own = row.uploadedByType === "AGENT" && row.uploadedById === auth.userId;
     if (!own && !can(auth, "attachments.delete_any"))
       throw new ForbiddenError("You can only delete files you uploaded");
     if (!(await this.repository.softDelete(row.id))) throw new NotFoundError("File not found");
-    await bestEffort("delete stored file", () => this.storage.delete(row.storageKey));
 
     const messageId = row.messageAttachments[0]?.messageId ?? null;
     const result = {

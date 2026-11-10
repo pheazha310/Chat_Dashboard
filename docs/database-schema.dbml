@@ -417,6 +417,7 @@ Table message_reactions [headercolor: #7C3AED] {
 
   emoji varchar(50) [not null]
   created_at timestamptz [not null, default: `now()`]
+  deleted_at timestamptz [note: 'Soft delete; reacting again revives the row']
 
   indexes {
     (message_id, user_type, user_id, emoji) [unique]
@@ -567,11 +568,13 @@ TableGroup "06 Tags" [color: #CA8A04] {
 
 Table tags [headercolor: #CA8A04] {
   id uuid [pk, default: `gen_random_uuid()`]
-  name varchar(100) [not null, unique]
+  name varchar(100) [not null, note: 'Unique ignoring case among tags with deleted_at null (partial index tags_name_lower_key)']
   color varchar(30)
 
   created_by uuid [note: 'Staff users.id']
   created_at timestamptz [not null, default: `now()`]
+  deleted_at timestamptz [note: 'Soft delete']
+  deleted_by uuid [note: 'Staff users.id']
 }
 
 Table conversation_tags [headercolor: #CA8A04] {

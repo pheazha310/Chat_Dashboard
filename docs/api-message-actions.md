@@ -24,15 +24,15 @@ Sender information is `senderType` and `senderId` (a Backend 1 id); names and av
 
 ## Endpoints
 
-| Method and path                                     | Body                                 | Who and when                                                                                                                 |
-| --------------------------------------------------- | ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
-| `POST /messages/:messageId/replies`                 | `{ clientId, text }`                 | Same as sending: owner of an open conversation. 201, or 200 with the original on a retry.                                    |
-| `PATCH /messages/:messageId`                        | `{ text }` (1 to 4000)               | The **author** only, text messages only, while they still own the open conversation. Unchanged text is a no-op.              |
-| `DELETE /messages/:messageId`                       |                                      | The author, or a supervisor/admin for any agent, AI or customer message. SYSTEM messages never.                              |
-| `GET /messages/:messageId/history`                  |                                      | The author and supervisors. Newest edit first. A deleted message's history: supervisors only.                                |
-| `PUT /messages/:messageId/reactions`                | `{ emoji }`                          | Anyone who can see the conversation. Idempotent. Not on SYSTEM messages. Max 10 different emojis per user and message (409). |
-| `DELETE /messages/:messageId/reactions/:reactionId` |                                      | The reaction's owner only (403 otherwise; 404 if it belongs to another message).                                             |
-| `POST /messages/:messageId/forwards`                | `{ targetConversationId, clientId }` | See the rules below. 201, or 200 with the existing copy on a retry.                                                          |
+| Method and path                                     | Body                                 | Who and when                                                                                                                                                |
+| --------------------------------------------------- | ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /messages/:messageId/replies`                 | `{ clientId, text }`                 | Same as sending: owner of an open conversation. 201, or 200 with the original on a retry.                                                                   |
+| `PATCH /messages/:messageId`                        | `{ text }` (1 to 4000)               | The **author** only, text messages only, while they still own the open conversation. Unchanged text is a no-op.                                             |
+| `DELETE /messages/:messageId`                       |                                      | The author, or a supervisor/admin for any agent, AI or customer message. SYSTEM messages never.                                                             |
+| `GET /messages/:messageId/history`                  |                                      | The author and supervisors. Newest edit first. A deleted message's history: supervisors only.                                                               |
+| `PUT /messages/:messageId/reactions`                | `{ emoji }`                          | Anyone who can see the conversation. Idempotent. Not on SYSTEM messages. Max 10 different emojis per user and message (409).                                |
+| `DELETE /messages/:messageId/reactions/:reactionId` |                                      | The reaction's owner only (403 otherwise; 404 if it belongs to another message). Soft delete (`deleted_at`); reacting again with the same emoji revives it. |
+| `POST /messages/:messageId/forwards`                | `{ targetConversationId, clientId }` | See the rules below. 201, or 200 with the existing copy on a retry.                                                                                         |
 
 ### Rules
 

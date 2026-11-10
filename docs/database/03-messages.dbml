@@ -111,6 +111,7 @@ Table message_reactions [headercolor: #7C3AED] {
 
   emoji varchar(50) [not null]
   created_at timestamptz [not null, default: `now()`]
+  deleted_at timestamptz [note: 'Soft delete; reacting again revives the row']
 
   indexes {
     (message_id, user_type, user_id, emoji) [unique]

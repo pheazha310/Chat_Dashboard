@@ -208,12 +208,18 @@ describe.skipIf(!url)("tags and priority over HTTP", () => {
 
       const forced = await call(`/tags/${vip.id}?force=true`, supervisor, "DELETE");
       expect(forced.body.data).toEqual({ id: vip.id, removedFromConversations: 2 });
-      expect(await db.tag.count()).toBe(0);
-      expect(await db.conversationTag.count()).toBe(0);
+      // Soft delete: the tag and its links stay in the database, hidden.
+      expect(await db.tag.count({ where: { deletedAt: null } })).toBe(0);
+      expect(await db.tag.count()).toBe(1);
+      expect(await db.conversationTag.count()).toBe(2);
+      expect((await call("/tags", agent1)).body.data).toEqual([]);
+      expect((await call(`/conversations?tag=${vip.id}`, agent1)).body.data).toEqual([]);
       expect((await call(`/conversations/${c1}`, agent1)).body.data.tags).toEqual([]);
       const removed = await db.conversationActivity.findMany({ where: { activityType: "TAG_REMOVED" } });
       expect(removed.map((a) => a.conversationId).sort()).toEqual([c1, c2].sort());
       expect((await call(`/tags/${vip.id}`, supervisor, "DELETE")).status).toBe(404);
+      // The name is free again.
+      expect((await call("/tags", agent1, "POST", { name: "vip" })).status).toBe(201);
     });
 
     it("deletes an unused tag without force", async () => {

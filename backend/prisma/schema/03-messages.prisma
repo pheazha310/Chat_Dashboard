@@ -99,8 +99,9 @@ model MessageReaction {
   userType  String   @map("user_type") @db.VarChar(30)
   userId    String   @map("user_id") @db.Uuid
   emoji     String   @db.VarChar(50)
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6) /// Soft delete: reacting again with the same emoji revives the row
+  message   Message   @relation(fields: [messageId], references: [id], onDelete: Cascade)
 
   @@unique([messageId, userType, userId, emoji])
   @@map("message_reactions")

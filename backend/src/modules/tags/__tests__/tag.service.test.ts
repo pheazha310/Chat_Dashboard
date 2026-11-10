@@ -16,7 +16,7 @@ const repo = {
   findByName: vi.fn(),
   create: vi.fn(),
   update: vi.fn(),
-  delete: vi.fn(),
+  softDelete: vi.fn(),
   conversationIdsUsing: vi.fn(),
   existingIds: vi.fn(),
   lockConversation: vi.fn(),
@@ -107,11 +107,11 @@ describe("remove", () => {
 
   it("is for supervisors only", async () => {
     await expect(service.remove(agent, uid(30), { force: true })).rejects.toBeInstanceOf(ForbiddenError);
-    expect(repo.delete).not.toHaveBeenCalled();
+    expect(repo.softDelete).not.toHaveBeenCalled();
   });
 
   it("deletes an unused tag", async () => {
-    repo.delete.mockResolvedValue(true);
+    repo.softDelete.mockResolvedValue(true);
     await expect(service.remove(supervisor, uid(30), { force: false })).resolves.toEqual({
       id: uid(30),
       removedFromConversations: 0,
@@ -124,17 +124,18 @@ describe("remove", () => {
       status: 409,
       details: { usageCount: 2 },
     });
-    expect(repo.delete).not.toHaveBeenCalled();
+    expect(repo.softDelete).not.toHaveBeenCalled();
     expect(repo.addActivities).not.toHaveBeenCalled();
   });
 
-  it("with force, records the removal on each conversation, deletes the tag, then announces", async () => {
+  it("with force, records the removal on each conversation, soft-deletes the tag as the caller, then announces", async () => {
     repo.conversationIdsUsing.mockResolvedValue([uid(10), uid(11)]);
-    repo.delete.mockResolvedValue(true);
+    repo.softDelete.mockResolvedValue(true);
     await expect(service.remove(supervisor, uid(30), { force: true })).resolves.toEqual({
       id: uid(30),
       removedFromConversations: 2,
     });
+    expect(repo.softDelete).toHaveBeenCalledWith(uid(30), uid(9));
     expect(repo.addActivities).toHaveBeenCalledWith([
       expect.objectContaining({ conversationId: uid(10), type: "TAG_REMOVED", agentId: uid(9) }),
       expect.objectContaining({ conversationId: uid(11), type: "TAG_REMOVED" }),
@@ -143,7 +144,7 @@ describe("remove", () => {
   });
 
   it("does not announce anything when the delete is lost to another request", async () => {
-    repo.delete.mockResolvedValue(false);
+    repo.softDelete.mockResolvedValue(false);
     await expect(service.remove(supervisor, uid(30), { force: false })).rejects.toBeInstanceOf(NotFoundError);
     expect(realtime.conversationEvent).not.toHaveBeenCalled();
   });

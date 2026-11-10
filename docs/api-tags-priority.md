@@ -13,14 +13,14 @@ filtering and sorting in the inbox. Routes are under `/api/v1/admin` and need a 
 | `PATCH /tags/:tagId`  | `{ name?, color? (null clears) }`           | The tag's creator, or a supervisor/admin. 409 on a name clash. |
 | `DELETE /tags/:tagId` | query `force` (`true` or `1`)               | Supervisors/admins only.                                       |
 
-Names are unique ignoring case. This is enforced twice: a check for a clear message, and the database index
+Names are unique ignoring case among tags that are not deleted (a deleted tag frees its name). This is enforced twice: a check for a clear message, and the database index
 `tags_name_lower_key`, which also settles simultaneous creates (one `201`, the rest `409`).
 
 ### Deleting a tag that is in use
 
 Without `force`, a tag used by any conversation is **refused with 409**, and `error.details.usageCount` says how many.
 With `force=true`, in one transaction the tag is recorded as removed on each conversation (`TAG_REMOVED` timeline entry),
-and deleted; its links to conversations go with it. Afterwards every affected conversation receives
+and soft-deleted (`deleted_at`, `deleted_by`): the tag and its links to conversations stay in the database but are hidden from lists, conversations and inbox filters. Afterwards every affected conversation receives
 `conversation.tags_updated`. The response is `{ id, removedFromConversations }`. Renaming or recoloring a tag sends the
 same event to the conversations that use it, so open screens do not show the old name.
 

@@ -14,7 +14,10 @@ export class TagRepository {
   }
 
   async list(query: ListTagsQuery) {
-    const where = query.q ? { name: { contains: query.q, mode: "insensitive" as const } } : {};
+    const where = {
+      deletedAt: null,
+      ...(query.q ? { name: { contains: query.q, mode: "insensitive" as const } } : {}),
+    };
     const [items, total] = await Promise.all([
       this.db.tag.findMany({
         where,
@@ -28,12 +31,12 @@ export class TagRepository {
   }
 
   findById(id: string): Promise<TagWithUsage | null> {
-    return this.db.tag.findUnique({ where: { id }, include: withUsage });
+    return this.db.tag.findFirst({ where: { id, deletedAt: null }, include: withUsage });
   }
 
   /** Names are unique ignoring case (also enforced by a database index). */
   findByName(name: string): Promise<Tag | null> {
-    return this.db.tag.findFirst({ where: { name: { equals: name, mode: "insensitive" } } });
+    return this.db.tag.findFirst({ where: { name: { equals: name, mode: "insensitive" }, deletedAt: null } });
   }
 
   create(data: { name: string; color: string | null; createdBy: string }): Promise<TagWithUsage> {
@@ -49,15 +52,18 @@ export class TagRepository {
     return rows.map((row) => row.conversationId);
   }
 
-  /** Deletes the tag; its links to conversations go with it (cascade). */
-  async delete(id: string): Promise<boolean> {
-    const { count } = await this.db.tag.deleteMany({ where: { id } });
+  /** Soft delete: the tag and its links to conversations stay; every read hides a tag with `deleted_at` set. */
+  async softDelete(id: string, deletedBy: string): Promise<boolean> {
+    const { count } = await this.db.tag.updateMany({
+      where: { id, deletedAt: null },
+      data: { deletedAt: new Date(), deletedBy },
+    });
     return count === 1;
   }
 
   async existingIds(ids: string[]): Promise<Set<string>> {
     if (ids.length === 0) return new Set();
-    const rows = await this.db.tag.findMany({ where: { id: { in: ids } }, select: { id: true } });
+    const rows = await this.db.tag.findMany({ where: { id: { in: ids }, deletedAt: null }, select: { id: true } });
     return new Set(rows.map((row) => row.id));
   }
 
@@ -70,7 +76,7 @@ export class TagRepository {
 
   async tagsOf(conversationId: string): Promise<Tag[]> {
     const rows = await this.db.conversationTag.findMany({
-      where: { conversationId },
+      where: { conversationId, tag: { deletedAt: null } },
       include: { tag: true },
       orderBy: { tag: { name: "asc" } },
     });
@@ -78,7 +84,9 @@ export class TagRepository {
   }
 
   tagsByIds(ids: string[]): Promise<Tag[]> {
-    return ids.length === 0 ? Promise.resolve([]) : this.db.tag.findMany({ where: { id: { in: ids } } });
+    return ids.length === 0
+      ? Promise.resolve([])
+      : this.db.tag.findMany({ where: { id: { in: ids }, deletedAt: null } });
   }
 
   async link(conversationId: string, tagIds: string[]): Promise<void> {

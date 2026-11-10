@@ -186,6 +186,8 @@ describe.skipIf(!url)("moderation on PostgreSQL", () => {
       await c.moderation.deleteKeyword(supervisor, keyword.id);
       await customerSays("scam scam", "d");
       expect(await timeline()).toHaveLength(2);
+      const kept = (await c.moderation.listKeywords({ page: 1, size: 10 })).items;
+      expect(kept).toEqual([expect.objectContaining({ id: keyword.id, keyword: "scam", isActive: false })]);
       expect((await log("REMOVE_KEYWORD"))[0]?.metadata).toEqual({ keyword: "scam" });
     });
 

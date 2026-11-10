@@ -101,8 +101,9 @@ export class ModerationRepository {
     return this.db.blockedKeyword.update({ where: { id }, data });
   }
 
+  /** Soft delete: the row stays, switched off, so the keyword and its history are never lost. */
   async deleteKeyword(id: string): Promise<boolean> {
-    const { count } = await this.db.blockedKeyword.deleteMany({ where: { id } });
+    const { count } = await this.db.blockedKeyword.updateMany({ where: { id }, data: { isActive: false } });
     return count > 0;
   }
 

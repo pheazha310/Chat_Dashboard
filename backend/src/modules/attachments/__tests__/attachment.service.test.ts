@@ -220,10 +220,10 @@ describe("remove", () => {
     repo.softDelete.mockResolvedValue(true);
   });
 
-  it("soft-deletes, removes the bytes and announces it", async () => {
+  it("soft-deletes, keeps the bytes and announces it", async () => {
     await service.remove(owner, uid(60));
     expect(repo.softDelete).toHaveBeenCalledWith(uid(60));
-    expect(storage.delete).toHaveBeenCalledWith("conversations/x/y.png");
+    expect(storage.delete).not.toHaveBeenCalled();
     expect(realtime.messageEvent).toHaveBeenCalledWith(uid(10), "attachment.deleted", {
       id: uid(60),
       conversationId: uid(10),

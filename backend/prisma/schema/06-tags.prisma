@@ -4,10 +4,12 @@
 
 model Tag {
   id               String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name             String            @unique @db.VarChar(100)
+  name             String            @db.VarChar(100) /// Unique ignoring case among live tags: partial index `tags_name_lower_key` (migration)
   color            String?           @db.VarChar(30)
   createdBy        String?           @map("created_by") @db.Uuid /// External agents.id
   createdAt        DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  deletedAt        DateTime?         @map("deleted_at") @db.Timestamptz(6) /// Soft delete: the row and its conversation links stay
+  deletedBy        String?           @map("deleted_by") @db.Uuid /// External agents.id
   conversationTags ConversationTag[]
 
   @@map("tags")

@@ -67,7 +67,7 @@ export class TagService {
           { usageCount: conversationIds.length },
         );
       }
-      // The links disappear with the tag (cascade); the timeline keeps a record on each conversation.
+      // Soft delete: the tag and its links stay in the database but are hidden; the timeline records the removal.
       await tx.addActivities(
         conversationIds.map((conversationId) => ({
           conversationId,
@@ -76,7 +76,7 @@ export class TagService {
           tag,
         })),
       );
-      if (!(await tx.delete(tagId))) throw new NotFoundError("Tag not found");
+      if (!(await tx.softDelete(tagId, auth.userId))) throw new NotFoundError("Tag not found");
       return conversationIds;
     });
     await this.announce(affected);

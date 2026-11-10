@@ -16,7 +16,7 @@ Envelope: `{ "status": "success", "data": ... }`. Interactive reference: `GET /a
 | `GET /attachments/:attachmentId`                     | Metadata.                                                                                                                                               |
 | `GET /attachments/:attachmentId/download`            | The bytes. `?inline=1` shows images, audio and video in the page; other types are always a download. One `Range` is supported (206).                    |
 | `GET /messages/:messageId/audio`                     | The audio of a voice or audio message, inline, with `Range`.                                                                                            |
-| `DELETE /attachments/:attachmentId`                  | Soft delete; the stored bytes are removed.                                                                                                              |
+| `DELETE /attachments/:attachmentId`                  | Soft delete only; the stored bytes are kept.                                                                                                            |
 
 Upload and voice answer `201` with the created `Message`, or `200` with the original on a retry of the same `clientId`.
 The message carries `attachments[]`:
@@ -72,7 +72,7 @@ paths and control characters and limited to 255 characters, and it never reaches
 | List, details, download, audio | Anyone who may see the conversation (`canView`, supervisors included). A hidden conversation's files answer `404`.    |
 | Delete                         | The uploader, or a supervisor/admin.                                                                                  |
 
-Customers cannot use these routes (the dashboard token roles only). Deleting a message also deletes its files.
+Customers cannot use these routes (the dashboard token roles only). Deleting a message also soft-deletes its files.
 
 ## Secure preview and download
 
@@ -105,8 +105,9 @@ expected number of simultaneous uploads.
   file is removed and the error is returned; the client shows the message as failed and can retry with the same
   `clientId`.
 - A retry of an existing `clientId` returns the original message and the just-stored duplicate is removed.
-- Deleting an attachment or its message soft-deletes the record (`deleted_at`) and removes the bytes. If removing the
-  bytes fails, a warning is logged and an orphan file remains.
+- Deleting an attachment or its message soft-deletes the record (`deleted_at`); the bytes stay in storage and are no
+  longer served. Only an upload that was never saved against a message (a failed save or a duplicate `clientId`) has
+  its stored file removed.
 - **Not built:** a sweep for orphans left by a crash between storing the bytes and committing the message, and
   `PENDING`/`FAILED` upload states (an attachment row only exists once its bytes are stored, so it is `UPLOADED`).
 

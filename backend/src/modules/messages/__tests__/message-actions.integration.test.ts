@@ -130,6 +130,11 @@ describe.skipIf(!url)("message actions on PostgreSQL", () => {
       await expect(c.messageActions.unreact(agent1, m.id, theirs.id)).rejects.toBeInstanceOf(ForbiddenError);
       const { reactions } = await c.messageActions.unreact(agent1, m.id, mine.id);
       expect(reactions.map((r) => r.userId)).toEqual([uid(9)]);
+      // Soft delete: the row stays, and reacting again revives it instead of adding another.
+      expect(await db.messageReaction.count()).toBe(2);
+      const again = (await c.messageActions.react(agent1, m.id, { emoji: "👍" })).reaction;
+      expect(again.id).toBe(mine.id);
+      expect(await db.messageReaction.count()).toBe(2);
     });
 
     it("cascades with the message and is announced to viewers of the chat", async () => {

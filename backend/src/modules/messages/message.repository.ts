@@ -344,7 +344,7 @@ export class MessageRepository {
     const grouped = new Map<string, ReactionRow[]>();
     if (messageIds.length === 0) return grouped;
     const rows = await this.db.messageReaction.findMany({
-      where: { messageId: { in: messageIds } },
+      where: { messageId: { in: messageIds }, deletedAt: null },
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     });
     for (const row of rows) grouped.set(row.messageId, [...(grouped.get(row.messageId) ?? []), row]);
@@ -352,25 +352,27 @@ export class MessageRepository {
   }
 
   countDistinctReactions(messageId: string, userId: string) {
-    return this.db.messageReaction.count({ where: { messageId, userType: "AGENT", userId } });
+    return this.db.messageReaction.count({ where: { messageId, userType: "AGENT", userId, deletedAt: null } });
   }
 
-  /** Adds the reaction unless the same user already reacted with the same emoji (the unique key makes this race-safe). */
-  async addReaction(messageId: string, userId: string, emoji: string): Promise<ReactionRow> {
-    await this.db.messageReaction.createMany({
-      data: [{ messageId, userType: "AGENT", userId, emoji }],
-      skipDuplicates: true,
-    });
-    return this.db.messageReaction.findUniqueOrThrow({
+  /**
+   * Adds the reaction unless the same user already reacted with the same emoji (the unique key makes this race-safe).
+   * A reaction the user removed earlier (soft-deleted) is revived instead of duplicated.
+   */
+  addReaction(messageId: string, userId: string, emoji: string): Promise<ReactionRow> {
+    return this.db.messageReaction.upsert({
       where: { messageId_userType_userId_emoji: { messageId, userType: "AGENT", userId, emoji } },
+      create: { messageId, userType: "AGENT", userId, emoji },
+      update: { deletedAt: null },
     });
   }
 
   findReaction(id: string): Promise<ReactionRow | null> {
-    return this.db.messageReaction.findUnique({ where: { id } });
+    return this.db.messageReaction.findFirst({ where: { id, deletedAt: null } });
   }
 
+  /** Soft delete: the row stays with `deleted_at` set. */
   async deleteReaction(id: string): Promise<void> {
-    await this.db.messageReaction.deleteMany({ where: { id } });
+    await this.db.messageReaction.updateMany({ where: { id, deletedAt: null }, data: { deletedAt: new Date() } });
   }
 }

@@ -58,7 +58,7 @@ again later.
 transfer` matches "WIRE TRANSFER now"); it is not a regular expression, and `%` or `_` in a search are ordinary characters.
 Unique ignoring case (`409`, also under simultaneous requests, by the `lower(keyword)` index). At most 1000 active ones. Control
 characters are refused. Each process remembers the active list for 15 seconds; a change applies immediately on the instance that
-made it and within 15 seconds on the others. `DELETE` removes the row for good (the log keeps the text).
+made it and within 15 seconds on the others. `DELETE` is a soft delete: the row is kept and switched off (`isActive: false`), so it stops matching and can be switched on again with `PATCH`; the log records `REMOVE_KEYWORD`.
 
 ### Spam reports
 

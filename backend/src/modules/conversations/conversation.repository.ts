@@ -7,7 +7,9 @@ import { pageArgs, type PageQuery } from "@shared/utils/pagination.js";
 import type { ListQuery } from "./conversation.schema.js";
 import type { AccessibleConversation, ConversationWithTags } from "./conversation.types.js";
 
-const withTags = { conversationTags: { include: { tag: true } } } satisfies Prisma.ConversationInclude;
+const withTags = {
+  conversationTags: { where: { tag: { deletedAt: null } }, include: { tag: true } },
+} satisfies Prisma.ConversationInclude;
 
 export class ConversationRepository {
   constructor(private readonly db: Db = prisma) {}
@@ -270,10 +272,12 @@ export function buildInboxWhere(
   if (query.priority) and.push({ priority: query.priority });
   const tagIds = [...new Set([...(query.tag ? [query.tag] : []), ...(query.tags ?? [])])];
   const [onlyTag] = tagIds;
-  if (tagIds.length === 1 && onlyTag !== undefined) and.push({ conversationTags: { some: { tagId: onlyTag } } });
+  if (tagIds.length === 1 && onlyTag !== undefined)
+    and.push({ conversationTags: { some: { tagId: onlyTag, tag: { deletedAt: null } } } });
   else if (tagIds.length > 1 && query.tagMatch === "all") {
-    for (const tagId of tagIds) and.push({ conversationTags: { some: { tagId } } });
-  } else if (tagIds.length > 1) and.push({ conversationTags: { some: { tagId: { in: tagIds } } } });
+    for (const tagId of tagIds) and.push({ conversationTags: { some: { tagId, tag: { deletedAt: null } } } });
+  } else if (tagIds.length > 1)
+    and.push({ conversationTags: { some: { tagId: { in: tagIds }, tag: { deletedAt: null } } } });
 
   if (query.q) {
     const text = { contains: query.q, mode: "insensitive" } as const;

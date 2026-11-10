@@ -127,7 +127,7 @@ export function registerAttachmentOpenApi(registry: OpenAPIRegistry) {
     security,
     summary: "Delete a file",
     description:
-      "The uploader or a supervisor/admin. The record is kept (soft delete) and the stored bytes are removed. Broadcast as `attachment.deleted`. Deleting the message removes its files the same way.",
+      "The uploader or a supervisor/admin. Soft delete only: the record and the stored bytes are kept, but the file is no longer served. Broadcast as `attachment.deleted`. Deleting the message soft-deletes its files the same way.",
     request: { params: attachmentParams },
     responses: { 200: ok("Deleted", successOf(deleted)), ...failures },
   });

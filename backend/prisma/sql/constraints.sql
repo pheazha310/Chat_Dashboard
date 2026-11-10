@@ -244,8 +244,8 @@ CREATE INDEX conversations_customer_name_lower
 -- Search-in-chat: full-text index on message content.
 CREATE INDEX messages_content_fts ON messages USING GIN (to_tsvector('simple', coalesce(content, '')));
 
--- Tag names and blocked keywords are unique ignoring case (the plain UNIQUE from the schema also stays).
-CREATE UNIQUE INDEX tags_name_lower_key ON tags (lower(name));
+-- Tag names (among tags not soft-deleted) and blocked keywords are unique ignoring case.
+CREATE UNIQUE INDEX tags_name_lower_key ON tags (lower(name)) WHERE deleted_at IS NULL;
 CREATE UNIQUE INDEX blocked_keywords_keyword_lower_key ON blocked_keywords (lower(keyword));
 
 -- Chat identity mapping.

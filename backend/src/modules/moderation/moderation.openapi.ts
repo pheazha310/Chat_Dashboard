@@ -157,7 +157,8 @@ export function registerModerationOpenApi(registry: OpenAPIRegistry) {
     tags,
     security,
     summary: "Remove a keyword",
-    description: "Supervisors only. Deletes it for good (the log keeps its text).",
+    description:
+      "Supervisors only. Soft delete: the keyword is kept but switched off (`isActive: false`), so it stops matching; switch it back on with `PATCH`. The log records `REMOVE_KEYWORD`.",
     request: { params: keywordParams },
     responses: { 200: ok("Removed", successOf(z.object({ id: z.string() }))), ...failures },
   });
