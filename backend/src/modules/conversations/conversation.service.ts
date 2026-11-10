@@ -72,6 +72,7 @@ export class ConversationService implements ConversationAccess, CustomerConversa
   async create(auth: AuthContext, input: CreateInput) {
     // conversations.customer_id references chat_users; a customer who never signed in gets an identity now.
     await this.identities.ensureCustomer(input.customerId);
+    const customerName = input.customerName ?? (await this.customerName(input.customerId));
     const { id, created } = await this.repository.inTransaction(async (tx) => {
       await tx.lockCustomer(input.customerId);
       if (input.applicationId !== undefined) {
@@ -86,7 +87,7 @@ export class ConversationService implements ConversationAccess, CustomerConversa
       const conversation = await tx.create({
         customerId: input.customerId,
         applicationId: input.applicationId ?? null,
-        customerName: input.customerName ?? null,
+        customerName,
         customerIdentifier: input.customerIdentifier ?? null,
         subject: input.subject ?? null,
         priority: input.priority,
@@ -114,8 +115,9 @@ export class ConversationService implements ConversationAccess, CustomerConversa
    */
   async joinForCustomer(
     customerId: string,
-    input: { applicationId?: string | undefined; subject?: string | undefined },
+    input: { applicationId?: number | undefined; subject?: string | undefined },
   ) {
+    const customerName = await this.customerName(customerId);
     const { id, created } = await this.repository.inTransaction(async (tx) => {
       await tx.lockCustomer(customerId);
       const existing =
@@ -129,6 +131,7 @@ export class ConversationService implements ConversationAccess, CustomerConversa
       const conversation = await tx.create({
         customerId,
         applicationId: input.applicationId ?? null,
+        customerName,
         subject: input.subject ?? null,
         priority: "MEDIUM",
         createdByType: "CUSTOMER",
@@ -304,6 +307,16 @@ export class ConversationService implements ConversationAccess, CustomerConversa
   }
 
   /** Agent names from Backend 1. If it is unreachable the conversations still load, just without the profile. */
+  /** The customer's display name, snapshotted on the conversation for the inbox; null when it cannot be looked up. */
+  private async customerName(customerId: string): Promise<string | null> {
+    try {
+      return (await this.directory.getCustomer(customerId))?.name ?? null;
+    } catch (error) {
+      logger.warn({ err: error }, "customer name unavailable");
+      return null;
+    }
+  }
+
   private async agentProfiles(ids: (string | null)[]): Promise<Map<string, AgentProfile>> {
     const wanted = [...new Set(ids.filter((id): id is string => id !== null))];
     if (wanted.length === 0) return new Map();
@@ -413,7 +426,7 @@ function toSummary(
     customerId: nullableId(row.customerId),
     customerName: row.customerName,
     customerIdentifier: row.customerIdentifier,
-    applicationId: nullableId(row.applicationId),
+    applicationId: row.applicationId,
     subject: row.subject,
     status: row.status,
     priority: row.priority,
@@ -461,7 +474,7 @@ const toActivity = (row: ConversationActivity): ActivityDto => ({
 function toCustomerView(row: ConversationWithTags): CustomerConversationDto {
   return {
     id: idToString(row.id),
-    applicationId: nullableId(row.applicationId),
+    applicationId: row.applicationId,
     subject: row.subject,
     status: row.status,
     agentAssigned: row.assignedAgentId !== null,

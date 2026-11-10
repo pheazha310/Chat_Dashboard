@@ -1,5 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { assets } from "@/shared/config";
+import { cn } from "@/shared/lib/utils";
+import { Button, Dialog, DialogClose, DialogContent, DialogTitle } from "@/shared/ui";
 import SettingsDetail, { pageTitles, type SettingsPage } from "./SettingsDetail";
 import { useMessageSettingsStore } from "../model/store";
 import SettingsRow from "./SettingsRow";
@@ -7,58 +9,26 @@ import SettingsRow from "./SettingsRow";
 export default function MessageSettingsDialog() {
   const { open, values, setOpen, toggle } = useMessageSettingsStore();
   const [page, setPage] = useState<SettingsPage | null>(null);
-  const closeRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
-    if (!open) return;
-    setPage(null);
-    const previousFocus = document.activeElement as HTMLElement | null;
-    const overflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    closeRef.current?.focus();
-    const closeOnEscape = (event: KeyboardEvent) => event.key === "Escape" && setOpen(false);
-    window.addEventListener("keydown", closeOnEscape);
-    return () => {
-      window.removeEventListener("keydown", closeOnEscape);
-      document.body.style.overflow = overflow;
-      previousFocus?.focus();
-    };
-  }, [open, setOpen]);
-
-  if (!open) return null;
+    if (open) setPage(null);
+  }, [open]);
 
   return (
-    <div
-      className="settings-overlay"
-      role="presentation"
-      onMouseDown={(event) => event.target === event.currentTarget && setOpen(false)}
-    >
-      <section
-        className={`message-settings ${page ? "message-settings-detail" : ""}`}
-        role="dialog"
-        onKeyDown={(event) => {
-          if (event.key !== "Tab") return;
-          const controls = Array.from(
-            event.currentTarget.querySelectorAll<HTMLElement>("button:not(:disabled), input, textarea"),
-          );
-          const first = controls[0];
-          const last = controls[controls.length - 1];
-          if (event.shiftKey && document.activeElement === first) {
-            event.preventDefault();
-            last?.focus();
-          } else if (!event.shiftKey && document.activeElement === last) {
-            event.preventDefault();
-            first?.focus();
-          }
-        }}
-        aria-modal="true"
-        aria-labelledby="message-settings-title"
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogContent
+        showCloseButton={false}
+        className={cn(
+          // Figma sizing and look stay in index.css; these only undo the shadcn defaults that clash with it.
+          "message-settings max-w-[calc(100%-3rem)] gap-0 text-base/normal sm:max-w-[calc(100%-3rem)]",
+          page && "message-settings-detail",
+        )}
       >
         <header>
-          <h2 id="message-settings-title">{page ? pageTitles[page] : "Message setting"}</h2>
-          <button ref={closeRef} onClick={() => setOpen(false)} aria-label="Close message settings">
+          <DialogTitle>{page ? pageTitles[page] : "Message setting"}</DialogTitle>
+          <DialogClose render={<Button variant="ghost" size="icon-sm" />} aria-label="Close message settings">
             ×
-          </button>
+          </DialogClose>
         </header>
         <div className="settings-content">
           {page ? (
@@ -146,7 +116,7 @@ export default function MessageSettingsDialog() {
             </>
           )}
         </div>
-      </section>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

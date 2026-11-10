@@ -35,7 +35,7 @@ describe.skipIf(!url)("message actions on PostgreSQL", () => {
       conversation: { id: cid },
     } = await c.conversations.create(agent1, {
       customerId: CUSTOMER,
-      applicationId: uid(7),
+      applicationId: 7,
       customerName: "Maya",
       priority: "MEDIUM",
     }));
@@ -159,7 +159,7 @@ describe.skipIf(!url)("message actions on PostgreSQL", () => {
         conversation: { id: other },
       } = await c.conversations.create(agent1, {
         customerId: CUSTOMER,
-        applicationId: uid(8),
+        applicationId: 8,
         customerName: "Maya",
         priority: "MEDIUM",
       }));
@@ -188,7 +188,7 @@ describe.skipIf(!url)("message actions on PostgreSQL", () => {
       const m = await send("private");
       const { conversation: stranger } = await c.conversations.create(agent1, {
         customerId: uid(200),
-        applicationId: uid(9),
+        applicationId: 9,
         customerName: "Other",
         priority: "MEDIUM",
       });

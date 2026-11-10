@@ -53,7 +53,7 @@ describe.skipIf(!url)("tags and priority over HTTP", () => {
     const id = (
       await call("/conversations", agent1, "POST", {
         customerId: uid(100 + n),
-        applicationId: uid(200 + n),
+        applicationId: 200 + n,
         customerName: `Customer ${n}`,
         priority,
       })

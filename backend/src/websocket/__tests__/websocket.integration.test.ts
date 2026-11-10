@@ -60,7 +60,7 @@ describe.skipIf(!url || !redisUrl)("WebSocket gateway", () => {
     c.events.length = 0;
     const { conversation } = await c.conversations.create(
       { userId: uid(1), role: "AGENT" },
-      { customerId: uid(100), applicationId: uid(7), customerName: "Maya Chen", priority: "MEDIUM" },
+      { customerId: uid(100), applicationId: 7, customerName: "Maya Chen", priority: "MEDIUM" },
     );
     cid = conversation.id;
   });
@@ -283,7 +283,7 @@ describe.skipIf(!url || !redisUrl)("WebSocket gateway", () => {
       const agent2 = await connect(2);
       await c.conversations.create(
         { userId: uid(1), role: "AGENT" },
-        { customerId: uid(200), applicationId: uid(8), priority: "HIGH" },
+        { customerId: uid(200), applicationId: 8, priority: "HIGH" },
       );
       expect((await agent2.waitFor("conversation.created")).conversation).toMatchObject({
         customerId: uid(200),
@@ -558,7 +558,7 @@ describe.skipIf(!url || !redisUrl)("WebSocket gateway", () => {
 
       await c.conversations.create(
         { userId: uid(1), role: "AGENT" },
-        { customerId: uid(200), applicationId: uid(8), customerName: "Sokha", priority: "HIGH" },
+        { customerId: uid(200), applicationId: 8, customerName: "Sokha", priority: "HIGH" },
       );
       const note = await available.waitFor("notification.new", (p) => p.notification.type === "NEW_CONVERSATION");
       expect(note.notification).toMatchObject({

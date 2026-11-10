@@ -51,7 +51,7 @@ describe.skipIf(!url)("internal notes and escalations over HTTP", () => {
     cid = (
       await call("/conversations", agent1, "POST", {
         customerId: uid(100),
-        applicationId: uid(7),
+        applicationId: 7,
         customerName: "Maya",
         priority: "MEDIUM",
       })

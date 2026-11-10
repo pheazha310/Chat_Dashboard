@@ -6,7 +6,7 @@
 model Conversation {
   id                               String                            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   customerId                       String?                           @map("customer_id") @db.Uuid /// chat_users.external_id (= users.id). Required for CUSTOMER_SUPPORT, NULL for INTERNAL (CHECK)
-  applicationId                    String?                           @map("application_id") @db.Uuid /// External loan_applications.id
+  applicationId                    Int?                              @map("application_id") /// The loan application's id in LOS (Backend 1)
   customerName                     String?                           @map("customer_name") @db.VarChar(150) /// Snapshot of the Backend 1 customer name so the inbox can be searched and sorted in SQL (FR-07); refresh when Backend 1 reports a change
   customerIdentifier               String?                           @map("customer_identifier") @db.VarChar(100) /// Snapshot of a searchable identifier (customer_code, phone, application_number)
   conversationType                 String                            @default("CUSTOMER_SUPPORT") @map("conversation_type") @db.VarChar(30)

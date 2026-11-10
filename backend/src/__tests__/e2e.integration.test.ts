@@ -116,7 +116,7 @@ describe.skipIf(!url || !redisUrl)("a working day across every feature (HTTP + W
       "/conversations",
       {
         customerId: CUSTOMER,
-        applicationId: uid(7),
+        applicationId: 7,
         customerName: "Maya Chen",
         priority: "MEDIUM",
       },

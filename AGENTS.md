@@ -11,7 +11,7 @@ Node 22, pnpm 10 (pinned in `.mise.toml` and root `package.json`).
 
 | Area        | Stack                                                                                                                   |
 | ----------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `frontend/` | React 19, TypeScript, Vite, Zustand 5, Tailwind 4, Vitest, oxlint, Prettier                                             |
+| `frontend/` | React 19, TypeScript, Vite, Zustand 5, Tailwind 4, shadcn/ui (Base UI) in `shared/ui`, Vitest, oxlint, Prettier         |
 | `backend/`  | Node 22, Express 5, TypeScript (ESM, `NodeNext`), Prisma 7 (`pg` adapter), PostgreSQL 16+, `ws`, Redis (`ioredis`), zod |
 
 ## Commands (run from repo root)

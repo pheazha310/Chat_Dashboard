@@ -31,7 +31,7 @@ describe.skipIf(!url)("workspace on PostgreSQL", () => {
     (
       await c.conversations.create(agent1, {
         customerId: uid(100 + n),
-        applicationId: uid(200 + n),
+        applicationId: 200 + n,
         customerName: `Customer ${n}`,
         priority: "MEDIUM",
       })

@@ -1,13 +1,14 @@
 import { z } from "zod";
 import { idSchema } from "@shared/utils/ids.js";
 import { MAX_TEXT_LENGTH } from "@modules/messages/message.schema.js";
+import { applicationIdSchema } from "@modules/conversations/conversation.schema.js";
 
 const clientId = z.string().trim().min(1).max(100);
 
 /** The customer is identified by the token, never by the body: there is deliberately no `customerId` field. */
 export const joinBody = z.object({
   /** The loan application the chat is about. Without it the customer's latest open conversation is used. */
-  applicationId: idSchema.optional(),
+  applicationId: applicationIdSchema.optional(),
   subject: z.string().trim().min(1).max(255).optional(),
 });
 export type JoinInput = z.infer<typeof joinBody>;

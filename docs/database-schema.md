@@ -59,10 +59,10 @@ from the access token, so one person has one id everywhere. Three of them have a
 `chat_users.external_id`: `conversations.customer_id`, `messages.sender_id` and `attachments.uploaded_by_id`. The rest
 are plain ids checked in the service layer. Other outside ids:
 
-| Column           | Holds                                             |
-| ---------------- | ------------------------------------------------- |
-| `application_id` | Backend 1 `loan_applications.id` (no foreign key) |
-| `team_id`        | a Backend 1 team id (unused until teams exist)    |
+| Column           | Holds                                                            |
+| ---------------- | ---------------------------------------------------------------- |
+| `application_id` | LOS (Backend 1) loan application id, an integer (no foreign key) |
+| `team_id`        | a Backend 1 team id (unused until teams exist)                   |
 
 Names come from `users.display_name` (copied to `chat_users.username`); loan details will come from Backend 1. The one
 exception is `conversations.customer_name` and `customer_identifier`, snapshots kept so the inbox can be searched and

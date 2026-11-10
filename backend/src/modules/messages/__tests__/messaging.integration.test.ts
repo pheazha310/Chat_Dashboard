@@ -38,7 +38,7 @@ describe.skipIf(!url)("messaging on PostgreSQL", () => {
     await db.$executeRaw`TRUNCATE conversations, notifications, notification_preferences, tags RESTART IDENTITY CASCADE`;
     const { conversation } = await conversations.create(agent1, {
       customerId: CUSTOMER,
-      applicationId: uid(7),
+      applicationId: 7,
       customerName: "Maya Chen",
       priority: "MEDIUM",
     });
@@ -113,9 +113,8 @@ describe.skipIf(!url)("messaging on PostgreSQL", () => {
 
     it("rejects a reply to a message from another conversation", async () => {
       await takeOver();
-      const other = (
-        await conversations.create(agent1, { customerId: uid(200), applicationId: uid(8), priority: "LOW" })
-      ).conversation;
+      const other = (await conversations.create(agent1, { customerId: uid(200), applicationId: 8, priority: "LOW" }))
+        .conversation;
       await assignments.assign(agent1, other.id, {});
       const foreign = await messages.send(agent1, other.id, { clientId: "f", text: "elsewhere" });
       await expect(

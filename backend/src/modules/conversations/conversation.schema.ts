@@ -33,9 +33,12 @@ type ParsedListQuery = z.infer<typeof listQuery>;
 export type ListQuery = Omit<ParsedListQuery, "tagMatch" | "sort"> &
   Partial<Pick<ParsedListQuery, "tagMatch" | "sort">>;
 
+/** The loan application's number in LOS; stored in an INT column. */
+export const applicationIdSchema = z.number().int().positive().max(2147483647);
+
 export const createBody = z.object({
   customerId: idSchema,
-  applicationId: idSchema.optional(),
+  applicationId: applicationIdSchema.optional(),
   customerName: z.string().trim().min(1).max(150).optional(),
   customerIdentifier: z.string().trim().min(1).max(100).optional(),
   subject: z.string().trim().min(1).max(255).optional(),

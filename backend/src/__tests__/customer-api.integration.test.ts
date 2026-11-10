@@ -57,7 +57,7 @@ describe.skipIf(!url)("/api/v1/customer over HTTP", () => {
     }
     return { status: response.status, body, text, headers: response.headers };
   };
-  const join = async (token = maya, body: unknown = { applicationId: uid(200) }) =>
+  const join = async (token = maya, body: unknown = { applicationId: 200 }) =>
     call("/conversations/join", token, { method: "POST", body });
 
   const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0]);
@@ -125,13 +125,24 @@ describe.skipIf(!url)("/api/v1/customer over HTTP", () => {
   it("joins: creates once, then returns the same conversation without agent details", async () => {
     const first = await join();
     expect(first.status).toBe(201);
-    expect(first.body.data).toMatchObject({ applicationId: uid(200), status: "OPEN", agentAssigned: false });
+    expect(first.body.data).toMatchObject({ applicationId: 200, status: "OPEN", agentAssigned: false });
     expect(first.body.data).not.toHaveProperty("assignedAgentId");
     const again = await join();
     expect(again.status).toBe(200);
     expect(again.body.data.id).toBe(first.body.data.id);
     // another customer cannot join someone else's application
     expect((await join(noah)).status).toBe(404);
+  });
+
+  it("joins with a numeric application id only, and the inbox shows the customer's name", async () => {
+    expect((await join(maya, { applicationId: uid(7) })).status).toBe(400);
+    const id = (await join()).body.data.id as string;
+    const staff = await fetch(`${host}/admin/conversations/${id}`, {
+      headers: { authorization: `Bearer dev:${uid(9)}:SUPERVISOR` },
+    });
+    const { data } = (await staff.json()) as { data: { customerName: string | null; applicationId: number } };
+    // BACKEND1_MODE=dev names customers "Customer <id>"; with BACKEND1_MODE=local it is users.display_name.
+    expect(data).toMatchObject({ customerName: `Customer ${uid(100)}`, applicationId: 200 });
   });
 
   it("sends text idempotently and retrieves it", async () => {

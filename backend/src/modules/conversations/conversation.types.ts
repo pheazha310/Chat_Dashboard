@@ -15,7 +15,7 @@ export interface ConversationSummaryDto {
   customerId: string | null;
   customerName: string | null;
   customerIdentifier: string | null;
-  applicationId: string | null;
+  applicationId: number | null;
   subject: string | null;
   status: string;
   priority: string;
@@ -61,7 +61,7 @@ export type { ConversationPermissions };
 /** A conversation as the customer's mobile app sees it: no agent ids, priority, tags or other staff-side fields. */
 export interface CustomerConversationDto {
   id: string;
-  applicationId: string | null;
+  applicationId: number | null;
   subject: string | null;
   status: string;
   /** True once a human agent owns the conversation; false while it waits for one. */

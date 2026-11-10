@@ -41,7 +41,7 @@ Create (201; 200 when the open conversation for that `applicationId` is reused; 
 ```json
 {
   "customerId": "00000000-0000-4000-8000-000000000100",
-  "applicationId": "00000000-0000-4000-8000-000000005001",
+  "applicationId": 5001,
   "customerName": "Test Customer",
   "customerIdentifier": "CUS-0100",
   "subject": "Loan question",

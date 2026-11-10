@@ -49,7 +49,7 @@ async function until<T>(read: () => T | undefined | false, what: string, timeout
 async function newConversation(name: string): Promise<string> {
   const created = await rest("/conversations", AGENT1, "POST", {
     customerId: crypto.randomUUID(),
-    applicationId: crypto.randomUUID(),
+    applicationId: Math.floor(Math.random() * 1_000_000_000) + 1,
     customerName: name,
     priority: "HIGH",
   });

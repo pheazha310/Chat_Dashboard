@@ -52,6 +52,7 @@ export function toAgent(agent: BackendAgentProfile): AgentDto {
  * block shows what is known (the id) and "—" for the rest instead of inventing values.
  */
 export function toConversation(source: BackendConversation, unread: number): ConversationDto {
+  const appId = source.applicationId === null ? UNKNOWN : String(source.applicationId);
   const name = source.customerName ?? (source.customerId ? `Customer ${source.customerId}` : "Conversation");
   return {
     id: source.id,
@@ -67,12 +68,12 @@ export function toConversation(source: BackendConversation, unread: number): Con
     handoff: HANDOFF[source.handoffStatus],
     ...(source.assignedAgent ? { assignedAgent: toAgent(source.assignedAgent) } : {}),
     application: {
-      appId: source.applicationId ?? UNKNOWN,
+      appId,
       product: UNKNOWN,
       amount: UNKNOWN,
       tenor: UNKNOWN,
       status: "Unknown",
-      reference: source.applicationId ?? UNKNOWN,
+      reference: appId,
     },
     activity: [],
     summary: source.summary ?? "",

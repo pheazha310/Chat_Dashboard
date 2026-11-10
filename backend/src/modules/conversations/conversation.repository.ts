@@ -133,7 +133,7 @@ export class ConversationRepository {
     return { conversation, viewerIds: viewers.map((v) => v.agentId) };
   }
 
-  findByApplication(applicationId: string): Promise<ConversationWithTags | null> {
+  findByApplication(applicationId: number): Promise<ConversationWithTags | null> {
     return this.db.conversation.findFirst({ where: { applicationId, status: { not: "CLOSED" } }, include: withTags });
   }
 

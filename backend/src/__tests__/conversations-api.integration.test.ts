@@ -94,7 +94,7 @@ describe.skipIf(!url)("/api/v1/admin/conversations over HTTP", () => {
   it("walks create → take over → forbidden/hidden for others → list → resolve", async () => {
     const created = await call("", agent1, "POST", {
       customerId: uid(300),
-      applicationId: uid(55),
+      applicationId: 55,
       customerName: "Dara Sok",
     });
     expect(created.status).toBe(201);
@@ -103,7 +103,7 @@ describe.skipIf(!url)("/api/v1/admin/conversations over HTTP", () => {
       handoffStatus: "NEEDS_HUMAN",
       customerName: "Dara Sok",
     });
-    expect((await call("", agent1, "POST", { customerId: uid(300), applicationId: uid(55) })).status).toBe(200); // reused
+    expect((await call("", agent1, "POST", { customerId: uid(300), applicationId: 55 })).status).toBe(200); // reused
 
     const taken = await call("/1/assign", agent1, "POST", {});
     expect(taken.status).toBe(200);
@@ -139,7 +139,7 @@ describe.skipIf(!url)("/api/v1/admin/conversations over HTTP", () => {
   });
 
   it("sends idempotently, pages history, syncs after a reconnect and tracks read state", async () => {
-    await call("", agent1, "POST", { customerId: uid(300), applicationId: uid(55), customerName: "Dara Sok" });
+    await call("", agent1, "POST", { customerId: uid(300), applicationId: 55, customerName: "Dara Sok" });
     await call("/1/assign", agent1, "POST", {});
 
     expect((await call("/1/messages", agent1, "POST", { clientId: "", text: "x" })).status).toBe(400);
@@ -213,7 +213,7 @@ describe.skipIf(!url)("/api/v1/admin/conversations over HTTP", () => {
     };
 
     it("delivers, counts and marks read per recipient, and never exposes someone else's", async () => {
-      await call("", agent1, "POST", { customerId: uid(300), applicationId: uid(55), customerName: "Dara Sok" });
+      await call("", agent1, "POST", { customerId: uid(300), applicationId: 55, customerName: "Dara Sok" });
       expect((await call("/1/assign", sup, "POST", { agentId: uid(3) })).status).toBe(200);
 
       const mine = await api("/notifications", agent3);
@@ -235,7 +235,7 @@ describe.skipIf(!url)("/api/v1/admin/conversations over HTTP", () => {
     });
 
     it("marks everything read and stores preferences, with every switch on by default", async () => {
-      await call("", agent1, "POST", { customerId: uid(300), applicationId: uid(55) });
+      await call("", agent1, "POST", { customerId: uid(300), applicationId: 55 });
       await call("/1/assign", sup, "POST", { agentId: uid(3) });
       await call("/1/transfer", sup, "POST", { agentId: uid(4) });
       await call("/1/transfer", sup, "POST", { agentId: uid(3) });
@@ -266,7 +266,7 @@ describe.skipIf(!url)("/api/v1/admin/conversations over HTTP", () => {
     });
 
     it("mutes a conversation only for someone who can see it", async () => {
-      await call("", agent1, "POST", { customerId: uid(300), applicationId: uid(55) });
+      await call("", agent1, "POST", { customerId: uid(300), applicationId: 55 });
       await call("/1/assign", sup, "POST", { agentId: uid(3) });
       expect((await call("/1/mute", agent2, "PUT", { muted: true })).status).toBe(404);
       expect((await call("/1/mute", agent3, "PUT", { muted: "yes" })).status).toBe(400);
@@ -284,7 +284,7 @@ describe.skipIf(!url)("/api/v1/admin/conversations over HTTP", () => {
     const owner = `dev:${uid(3)}:AGENT`;
 
     it("shows the profile by role, hides the conversation from other agents, and says where the data came from", async () => {
-      await call("", agent1, "POST", { customerId: uid(300), applicationId: uid(55), customerName: "Dara Sok" });
+      await call("", agent1, "POST", { customerId: uid(300), applicationId: 55, customerName: "Dara Sok" });
       await call("/1/assign", owner, "POST", {});
 
       const own = (await call("/1/customer", owner)).body.data;
@@ -304,10 +304,10 @@ describe.skipIf(!url)("/api/v1/admin/conversations over HTTP", () => {
     });
 
     it("lists the customer's other conversations and the participants with names", async () => {
-      await call("", agent1, "POST", { customerId: uid(300), applicationId: uid(55) });
+      await call("", agent1, "POST", { customerId: uid(300), applicationId: 55 });
       await call("/1/assign", owner, "POST", {});
-      await call("", agent1, "POST", { customerId: uid(300), applicationId: uid(56) });
-      await call("", agent1, "POST", { customerId: uid(301), applicationId: uid(57) }); // someone else's customer
+      await call("", agent1, "POST", { customerId: uid(300), applicationId: 56 });
+      await call("", agent1, "POST", { customerId: uid(301), applicationId: 57 }); // someone else's customer
       await call("/1/status", owner, "PATCH", { status: "RESOLVED" });
       await call("/2/status", sup, "PATCH", { status: "CLOSED" });
 
@@ -340,7 +340,7 @@ describe.skipIf(!url)("/api/v1/admin/conversations over HTTP", () => {
     });
 
     it("shows the assigned agent's name in the inbox", async () => {
-      await call("", agent1, "POST", { customerId: uid(300), applicationId: uid(55) });
+      await call("", agent1, "POST", { customerId: uid(300), applicationId: 55 });
       await call("/1/assign", owner, "POST", {});
       const [item] = (await call("", sup)).body.data;
       expect(item).toMatchObject({ assignedAgentId: uid(3), assignedAgent: { id: uid(3), name: `Agent ${uid(3)}` } });

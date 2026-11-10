@@ -7,7 +7,7 @@ const conversation = (id: string, patch: Record<string, unknown> = {}) => ({
   customerId: "100",
   customerName: "Maya Chen",
   customerIdentifier: null,
-  applicationId: "7",
+  applicationId: 7,
   subject: null,
   status: "OPEN",
   priority: "MEDIUM",

@@ -41,7 +41,7 @@ describe.skipIf(!url)("conversation flows on PostgreSQL", () => {
     await db.$executeRaw`TRUNCATE conversations, notifications, notification_preferences, tags RESTART IDENTITY CASCADE`;
   });
 
-  const create = async (customerId = uid(100), applicationId: string | undefined = uid(7), name = "Maya Chen") =>
+  const create = async (customerId = uid(100), applicationId: number | undefined = 7, name = "Maya Chen") =>
     (
       await conversations.create(agent1, {
         customerId,
@@ -76,7 +76,7 @@ describe.skipIf(!url)("conversation flows on PostgreSQL", () => {
       expect(first).toMatchObject({ handoffStatus: "NEEDS_HUMAN", status: "OPEN", customerId: uid(100) });
       const again = await conversations.create(agent2, {
         customerId: uid(100),
-        applicationId: uid(7),
+        applicationId: 7,
         priority: "HIGH",
       });
       expect(again.created).toBe(false);
@@ -88,7 +88,7 @@ describe.skipIf(!url)("conversation flows on PostgreSQL", () => {
     it("serializes concurrent creates for one application into a single conversation", async () => {
       const results = await Promise.all(
         Array.from({ length: 5 }, () =>
-          conversations.create(agent1, { customerId: uid(100), applicationId: uid(7), priority: "MEDIUM" }),
+          conversations.create(agent1, { customerId: uid(100), applicationId: 7, priority: "MEDIUM" }),
         ),
       );
       expect(new Set(results.map((r) => r.conversation.id)).size).toBe(1);
@@ -98,7 +98,7 @@ describe.skipIf(!url)("conversation flows on PostgreSQL", () => {
     it("rejects an application that belongs to another customer", async () => {
       await create();
       await expect(
-        conversations.create(agent1, { customerId: uid(200), applicationId: uid(7), priority: "LOW" }),
+        conversations.create(agent1, { customerId: uid(200), applicationId: 7, priority: "LOW" }),
       ).rejects.toBeInstanceOf(ConflictError);
     });
   });
@@ -126,8 +126,8 @@ describe.skipIf(!url)("conversation flows on PostgreSQL", () => {
     });
 
     it("applies Mine / Unassigned / Archived filters, search, status, priority and tags together", async () => {
-      const a = await create(uid(100), uid(7), "Maya Chen");
-      const b = await create(uid(101), uid(8), "Sokha Lim");
+      const a = await create(uid(100), 7, "Maya Chen");
+      const b = await create(uid(101), 8, "Sokha Lim");
       await assignments.assign(agent1, a.id, {});
       const tag = await db.tag.create({ data: { name: "vip" } });
       await db.conversationTag.create({ data: { conversationId: b.id, tagId: tag.id } });
@@ -153,7 +153,7 @@ describe.skipIf(!url)("conversation flows on PostgreSQL", () => {
 
     it("orders by recent activity and paginates", async () => {
       const made = [];
-      for (let n = 0; n < 3; n++) made.push(await create(uid(100 + n), uid(7 + n)));
+      for (let n = 0; n < 3; n++) made.push(await create(uid(100 + n), 7 + n));
       const [first, second, third] = made as [(typeof made)[number], (typeof made)[number], (typeof made)[number]];
       await db.conversation.update({ where: { id: first.id }, data: { lastMessageAt: new Date(Date.now() + 60_000) } });
       const page1 = await conversations.list(agent1, { filter: "all", page: 1, size: 2 });
@@ -291,7 +291,7 @@ describe.skipIf(!url)("conversation flows on PostgreSQL", () => {
       await conversations.changeStatus(supervisor, first.id, "CLOSED");
       const second = await conversations.create(agent1, {
         customerId: uid(100),
-        applicationId: uid(7),
+        applicationId: 7,
         priority: "MEDIUM",
       });
       expect(second.created).toBe(true);

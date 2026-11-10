@@ -196,7 +196,7 @@ Table conversations [headercolor: #0D9488] {
 
   // The customer (a chat user) and the loan application (Backend 1)
   customer_id uuid [note: 'chat_users.external_id (= users.id). Required for CUSTOMER_SUPPORT, NULL for INTERNAL (CHECK)']
-  application_id uuid [note: 'Backend 1 loan_applications.id']
+  application_id int [note: 'LOS (Backend 1) loan application id']
 
   customer_name varchar(150) [note: 'Snapshot of the Backend 1 customer name so the inbox can be searched and sorted in SQL (FR-07); refresh when Backend 1 reports a change']
   customer_identifier varchar(100) [note: 'Snapshot of a searchable identifier (customer_code, phone, application_number)']
@@ -1045,7 +1045,7 @@ Table los_agents [headercolor: #94A3B8] {
 }
 
 Table loan_applications [headercolor: #94A3B8] {
-  id uuid [pk, default: `gen_random_uuid()`]
+  id int [pk]
   customer_id uuid [not null]
   application_number varchar(100)
   loan_type varchar(100)

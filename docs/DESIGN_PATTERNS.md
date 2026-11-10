@@ -97,20 +97,25 @@ Used for mobile sidebars and detail views. Core elements:
 
 ### 2.5 Modal / Overlay Pattern
 
-Used for dialogs (e.g., Message Settings).
+Used for dialogs (e.g., Message Settings). Build them on the shadcn `Dialog` from `@/shared/ui` (Base UI underneath),
+which owns the overlay, focus trap, scroll lock, focus restore and close triggers; do not hand-roll them.
 
 ```tsx
-<div className="settings-overlay" role="presentation"
-     onMouseDown={(e) => e.target === e.currentTarget && close()}>
-  <section className="message-settings" role="dialog" aria-modal="true" aria-labelledby="...">
+<Dialog open={open} onOpenChange={setOpen}>
+  <DialogContent showCloseButton={false} className="message-settings ...">
+    <header>
+      <DialogTitle>Message setting</DialogTitle>
+      <DialogClose render={<Button variant="ghost" size="icon-sm" />} aria-label="Close message settings">×</DialogClose>
+    </header>
     ...
-  </section>
-</div>
+  </DialogContent>
+</Dialog>
 ```
 
-- Overlay: `position: fixed; inset: 0; z-index: 70; background: rgba(17, 24, 39, 0.28); backdrop-filter: blur(3px)`.
-- Dialog: centered via `display: grid; place-items: center`, with `max-height` constraint and internal scroll.
-- **Close triggers:** click-outside, Escape key, dedicated close button.
+- Overlay (in `shared/ui/dialog.tsx`): `z-50`, `rgba(17, 24, 39, 0.28)`, `backdrop-blur(3px)`.
+- Dialog: centered by `DialogContent`; the Figma size, radius and shadow stay in the feature's CSS class, with `max-height`
+  and internal scroll.
+- **Close triggers:** click-outside, Escape key, dedicated close button (all from `Dialog`).
 
 ### 2.6 Floating Window Pattern (Expanded Chat)
 
@@ -127,6 +132,16 @@ A circular floating action button (`.compose-fab`) positioned fixed at `right: 2
 ---
 
 ## 3. Component Patterns
+
+### 3.0 shadcn/ui primitives
+
+shadcn/ui (`base-nova` style, Base UI primitives) is set up in `frontend/components.json` and installs into
+`src/shared/ui/` (utility `cn()` in `src/shared/lib/utils.ts`). Installed: `Button`, `Input`, `Textarea`, `Dialog`,
+`DropdownMenu`, `Tooltip`, exported from `@/shared/ui`. Add more from `frontend/` with `npx shadcn@latest add <name>`,
+then fix any `import { cn } from "cn"` to `@/shared/lib/utils`. Its theme tokens (`--primary`, `--border`, ...) are mapped
+to the palette in §5 at the top of `app/styles/index.css`. Prefer these primitives for new UI; existing components move
+over one at a time (Message Settings is migrated). The app has its own toast (`notify`), so shadcn's `toast` is not
+installed. Using `Tooltip` needs a `TooltipProvider` around the app.
 
 ### 3.1 Icon Button (`IconButton`)
 

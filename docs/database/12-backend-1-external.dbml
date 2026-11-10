@@ -35,7 +35,7 @@ Table los_agents [headercolor: #94A3B8] {
 }
 
 Table loan_applications [headercolor: #94A3B8] {
-  id uuid [pk, default: `gen_random_uuid()`]
+  id int [pk]
   customer_id uuid [not null]
   application_number varchar(100)
   loan_type varchar(100)

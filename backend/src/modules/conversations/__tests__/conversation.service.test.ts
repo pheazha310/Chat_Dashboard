@@ -212,7 +212,7 @@ describe("get", () => {
 });
 
 describe("create", () => {
-  const input = { customerId: uid(100), applicationId: uid(7), priority: "MEDIUM" as const };
+  const input = { customerId: uid(100), applicationId: 7, priority: "MEDIUM" as const };
 
   it("creates a queued human conversation with a customer participant", async () => {
     repo.findByApplication.mockResolvedValue(null);
@@ -232,6 +232,17 @@ describe("create", () => {
     );
     expect(repo.addCustomerParticipant).toHaveBeenCalledWith(uid(10), uid(100));
     expect(realtime.conversationEvent).toHaveBeenCalledWith(uid(10), "created");
+  });
+
+  it("uses the customer's display name when the agent sends none, and keeps the one sent", async () => {
+    repo.findByApplication.mockResolvedValue(null);
+    repo.create.mockResolvedValue(row());
+    repo.findForAccess.mockResolvedValue(row());
+    directory.getCustomer.mockResolvedValue({ id: uid(100), name: "Dara Sok" });
+    await service.create(agent, input);
+    expect(repo.create).toHaveBeenLastCalledWith(expect.objectContaining({ customerName: "Dara Sok" }));
+    await service.create(agent, { ...input, customerName: "Maya Chen" });
+    expect(repo.create).toHaveBeenLastCalledWith(expect.objectContaining({ customerName: "Maya Chen" }));
   });
 
   it("notifies online AVAILABLE agents, except the one who opened it", async () => {
@@ -406,12 +417,12 @@ describe("joinForCustomer", () => {
   });
 
   it("creates a customer-owned conversation that waits for a human, and tells the available agents", async () => {
-    const result = await service.joinForCustomer(customer, { applicationId: uid(200), subject: "Loan" });
+    const result = await service.joinForCustomer(customer, { applicationId: 200, subject: "Loan" });
     expect(result.created).toBe(true);
     expect(repo.create).toHaveBeenCalledWith(
       expect.objectContaining({
         customerId: customer,
-        applicationId: uid(200),
+        applicationId: 200,
         createdByType: "CUSTOMER",
         createdById: customer,
         conversationMode: "HUMAN",
@@ -422,6 +433,18 @@ describe("joinForCustomer", () => {
     expect(notifications.notifyAgent).toHaveBeenCalledWith(
       expect.objectContaining({ agentId: uid(1), type: "NEW_CONVERSATION" }),
     );
+  });
+
+  it("saves the customer's display name on the new conversation so the inbox shows it", async () => {
+    directory.getCustomer.mockResolvedValue({ id: customer, name: "Dara Sok" });
+    await service.joinForCustomer(customer, {});
+    expect(repo.create).toHaveBeenCalledWith(expect.objectContaining({ customerName: "Dara Sok" }));
+  });
+
+  it("still creates the conversation, without a name, when the name lookup fails", async () => {
+    directory.getCustomer.mockRejectedValue(new Error("down"));
+    expect((await service.joinForCustomer(customer, {})).created).toBe(true);
+    expect(repo.create).toHaveBeenCalledWith(expect.objectContaining({ customerName: null }));
   });
 
   it("returns the customer-safe shape: no agent id, priority or tags", async () => {
@@ -442,7 +465,7 @@ describe("joinForCustomer", () => {
   it("joins the existing conversation of the application instead of creating another", async () => {
     repo.findByApplication.mockResolvedValue(row({ id: uid(12), customerId: customer }));
     repo.findForAccess.mockResolvedValue(row({ id: uid(12), customerId: customer }));
-    const result = await service.joinForCustomer(customer, { applicationId: uid(200) });
+    const result = await service.joinForCustomer(customer, { applicationId: 200 });
     expect(result).toMatchObject({ created: false, conversation: { id: uid(12), agentAssigned: true } });
     expect(repo.create).not.toHaveBeenCalled();
     expect(notifications.notifyAgent).not.toHaveBeenCalled();
@@ -457,7 +480,7 @@ describe("joinForCustomer", () => {
 
   it("does not reveal that an application belongs to another customer", async () => {
     repo.findByApplication.mockResolvedValue(row({ customerId: uid(999) }));
-    await expect(service.joinForCustomer(customer, { applicationId: uid(200) })).rejects.toBeInstanceOf(NotFoundError);
+    await expect(service.joinForCustomer(customer, { applicationId: 200 })).rejects.toBeInstanceOf(NotFoundError);
     expect(repo.create).not.toHaveBeenCalled();
   });
 });

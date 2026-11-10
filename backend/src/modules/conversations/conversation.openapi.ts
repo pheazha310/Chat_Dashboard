@@ -33,7 +33,7 @@ const summaryShape = {
   customerId: nullableString,
   customerName: nullableString,
   customerIdentifier: nullableString,
-  applicationId: nullableString,
+  applicationId: z.number().int().nullable(),
   subject: nullableString,
   status: z.enum(["OPEN", "RESOLVED", "CLOSED"]),
   priority: z.enum(["HIGH", "MEDIUM", "LOW"]),

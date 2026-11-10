@@ -1040,7 +1040,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"applicationId\": \"{{$guid}}\",\n  \"subject\": \"When will my loan be approved?\"\n}"
+                  "raw": "{\n  \"applicationId\": {{$randomInt}},\n  \"subject\": \"When will my loan be approved?\"\n}"
                 }
               },
               "event": [
@@ -1145,7 +1145,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"customerId\": \"{{customerId}}\",\n  \"applicationId\": \"{{$guid}}\",\n  \"customerName\": \"Dara\",\n  \"subject\": \"Documents for your second application\"\n}",
+                  "raw": "{\n  \"customerId\": \"{{customerId}}\",\n  \"applicationId\": {{$randomInt}},\n  \"customerName\": \"Dara\",\n  \"subject\": \"Documents for your second application\"\n}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -4618,7 +4618,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"applicationId\": \"{{$guid}}\",\n  \"subject\": \"Changing my repayment date\"\n}"
+                  "raw": "{\n  \"applicationId\": {{$randomInt}},\n  \"subject\": \"Changing my repayment date\"\n}"
                 }
               },
               "event": [

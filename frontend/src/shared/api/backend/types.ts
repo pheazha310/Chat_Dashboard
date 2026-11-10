@@ -7,7 +7,7 @@ export type BackendConversation = {
   customerId: string | null;
   customerName: string | null;
   customerIdentifier: string | null;
-  applicationId: string | null;
+  applicationId: number | null;
   subject: string | null;
   status: "OPEN" | "RESOLVED" | "CLOSED";
   priority: "HIGH" | "MEDIUM" | "LOW";

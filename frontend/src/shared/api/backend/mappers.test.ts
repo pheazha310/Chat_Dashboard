@@ -8,7 +8,7 @@ const conversation: BackendConversation = {
   customerId: "100",
   customerName: "Maya Chen",
   customerIdentifier: "C-100",
-  applicationId: "7",
+  applicationId: 7,
   subject: null,
   status: "OPEN",
   priority: "HIGH",

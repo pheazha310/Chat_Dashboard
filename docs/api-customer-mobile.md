@@ -45,12 +45,13 @@ with the same bearer token.
 
 A "room" is a conversation. With `applicationId`, the customer has one open conversation per loan application; without
 it, their latest conversation that is not closed is reused. A new conversation starts in `HUMAN` mode waiting for an
-agent (the AI worker is not built), and available agents are notified.
+agent (the AI worker is not built), and available agents are notified. `applicationId` is the LOS loan application id, a
+positive integer. The conversation stores the customer's display name so the dashboard inbox can show it.
 
 ```json
 {
   "id": "…",
-  "applicationId": "…",
+  "applicationId": 12345,
   "subject": null,
   "status": "OPEN",
   "agentAssigned": false,

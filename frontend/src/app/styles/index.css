@@ -1,4 +1,8 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
 
 @font-face {
   font-family: "Inter:Bold";
@@ -36,6 +40,39 @@
   color: rgba(0, 0, 0, 0.85);
   background: #f4f5f7;
   font-synthesis: none;
+  /* shadcn tokens, mapped to the palette in docs/DESIGN_PATTERNS.md §5 */
+  --background: #f4f5f7;
+  --foreground: rgba(0, 0, 0, 0.85);
+  --card: #ffffff;
+  --card-foreground: #111827;
+  --popover: #ffffff;
+  --popover-foreground: #111827;
+  --primary: #053cc7;
+  --primary-foreground: #ffffff;
+  --secondary: #f3f4f6;
+  --secondary-foreground: #111827;
+  --muted: #f3f4f6;
+  --muted-foreground: #6b7280;
+  --accent: #eff6ff;
+  --accent-foreground: #053cc7;
+  --destructive: #f5222d;
+  --border: #e5e7eb;
+  --input: #e5e7eb;
+  --ring: #93b4fc;
+  --chart-1: #2563eb;
+  --chart-2: #722ed1;
+  --chart-3: #16a34a;
+  --chart-4: #f59e0b;
+  --chart-5: #f5222d;
+  --radius: 0.5rem;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #111827;
+  --sidebar-primary: #053cc7;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #eff6ff;
+  --sidebar-accent-foreground: #053cc7;
+  --sidebar-border: #e5e7eb;
+  --sidebar-ring: #93b4fc;
 }
 
 * {
@@ -1732,16 +1769,6 @@ button {
   }
 }
 
-.settings-overlay {
-  position: fixed;
-  z-index: 70;
-  inset: 0;
-  padding: 24px;
-  background: rgba(17, 24, 39, 0.28);
-  backdrop-filter: blur(3px);
-  display: grid;
-  place-items: center;
-}
 .message-settings {
   width: min(410px, 100%);
   max-height: min(712px, calc(100vh - 48px));
@@ -1752,7 +1779,6 @@ button {
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
   display: flex;
   flex-direction: column;
-  animation: settings-in 0.2s ease-out;
 }
 .message-settings > header {
   height: 49px;
@@ -1934,17 +1960,6 @@ button {
   flex: 0 0 auto;
   display: block;
 }
-@keyframes settings-in {
-  from {
-    opacity: 0;
-    transform: translateY(10px) scale(0.985);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
 .expanded-applications {
   width: 100%;
   height: 100vh;
@@ -4132,4 +4147,59 @@ button {
 .profile-menu-account small {
   color: #6b7280;
   overflow-wrap: anywhere;
+}
+
+@theme inline {
+  --font-heading: var(--font-sans);
+  --font-sans: "Inter:Regular", Arial, sans-serif;
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
 }
