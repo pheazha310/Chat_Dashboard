@@ -2,6 +2,8 @@ import { Router } from "express";
 import { validate } from "@shared/middleware/validate.middleware.js";
 import { container } from "../../app-container.js";
 import { MessageActionController } from "./message-action.controller.js";
+import { MessageController } from "./message.controller.js";
+import { searchAllQuery } from "./message.schema.js";
 import {
   editBody,
   forwardBody,
@@ -12,9 +14,12 @@ import {
 } from "./message-action.schema.js";
 
 const controller = new MessageActionController(container.messageActions);
+const messages = new MessageController(container.messages);
 
 /** Mounted at /api/v1/admin/messages (authentication is applied at the mount). */
 export const messageActionRoutes = Router();
+
+messageActionRoutes.get("/search", validate({ query: searchAllQuery }), messages.searchAll);
 
 messageActionRoutes.post(
   "/:messageId/replies",
@@ -34,6 +39,8 @@ messageActionRoutes.delete(
   validate({ params: reactionParams }),
   controller.unreact,
 );
+messageActionRoutes.put("/:messageId/pin", validate({ params: messageIdParams }), controller.pin);
+messageActionRoutes.delete("/:messageId/pin", validate({ params: messageIdParams }), controller.unpin);
 messageActionRoutes.post(
   "/:messageId/forwards",
   validate({ params: messageIdParams, body: forwardBody }),

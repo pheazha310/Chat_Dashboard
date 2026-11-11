@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { canReply, useSelectedConversation } from "@/entities/conversation";
 import {
+  dayKey,
+  dayLabel,
   MessageBubble,
   TypingBubble,
   loadOlderMessages,
@@ -10,13 +12,19 @@ import {
 } from "@/entities/message";
 import { escalateConversation } from "@/features/escalate-conversation";
 import { ChatTabs } from "@/features/chat-tabs";
-import { MessageActions, MessageEditor, useEditingStore } from "@/features/message-actions";
+import {
+  MessageActions,
+  MessageEditor,
+  PinBar,
+  useConversationPins,
+  useEditingStore,
+} from "@/features/message-actions";
 import { selectConversation } from "@/features/select-conversation";
 import { archiveConversation, restoreConversation } from "@/features/archive-conversation";
 import { markConversationUnread } from "@/features/mark-unread";
 import { takeOverConversation, TakeOverButton } from "@/features/take-over-conversation";
 import { useSessionStore } from "@/shared/api/session";
-import { ChatSearchBar, filterByQuery, useChatSearchStore } from "@/features/search-in-chat";
+import { ChatSearchBar, JumpToDateButton, showMessage, useChatSearchStore } from "@/features/search-in-chat";
 import { blockConversationCustomerAction, reportSpamAction } from "@/features/moderate-conversation";
 import { TemplatePicker } from "@/features/canned-responses";
 import { insertIntoDraft, MessageComposer, retryMessage, useComposerStore } from "@/features/send-message";
@@ -49,20 +57,45 @@ export default function ChatWindow({
   const typing = useMessageStore((state) => (conversation ? state.typing[conversation.id] : undefined));
   const history = useHistory(conversation?.id ?? null);
   const me = useSessionStore((state) => state.userId);
-  const { query, toggle } = useChatSearchStore();
+  const searchOpen = useChatSearchStore((state) => state.open);
+  const searchQuery = useChatSearchStore((state) => state.query);
+  const searchFocus = useChatSearchStore((state) => state.focus);
+  const pins = useConversationPins(conversation?.id ?? "");
+  const toggleSearch = useChatSearchStore((state) => state.toggle);
   const editingId = useEditingStore((state) => state.editingId);
   const setDraft = useComposerStore((state) => state.setDraft);
   const [showMore, setShowMore] = useState(false);
+  const [flashId, setFlashId] = useState<string>();
   const endRef = useRef<HTMLDivElement>(null);
+  const streamRef = useRef<HTMLDivElement>(null);
   const actionsRef = useRef<HTMLDivElement>(null);
 
-  const trimmedQuery = query.trim();
-  const hasQuery = trimmedQuery.length > 0;
-  const visible = useMemo(() => filterByQuery(messages, query, (message) => message.text), [messages, query]);
+  // Follow the newest message, but not while the agent is searching back in time, and not when older pages load.
+  const newestId = messages.at(-1)?.id;
+  useEffect(() => {
+    if (!searchOpen) endRef.current?.scrollIntoView({ block: "end" });
+  }, [newestId, typing, conversation?.id, searchOpen]);
+
+  // Search belongs to one conversation: switching customers closes it.
+  useEffect(() => {
+    useChatSearchStore.getState().close();
+  }, [conversation?.id]);
+
+  const jumpTo = (messageId: string) => {
+    const element = streamRef.current?.querySelector(`[data-message-id="${CSS.escape(messageId)}"]`);
+    element?.scrollIntoView({ block: "center", behavior: "smooth" });
+    setFlashId(messageId);
+  };
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ block: "end" });
-  }, [visible.length, typing, conversation?.id]);
+    if (searchFocus && searchFocus.conversationId === conversation?.id) jumpTo(searchFocus.id);
+  }, [searchFocus]);
+
+  useEffect(() => {
+    if (!flashId) return;
+    const timer = setTimeout(() => setFlashId(undefined), 1600);
+    return () => clearTimeout(timer);
+  }, [flashId]);
 
   useEffect(() => {
     if (!showMore) return;
@@ -111,7 +144,12 @@ export default function ChatWindow({
           </div>
         </div>
         <div className="chat-actions" ref={actionsRef}>
-          <IconButton icon={assets.icons.chatSearch} size={24} label="Search conversation" onClick={toggle} />
+          <IconButton
+            icon={assets.icons.chatSearch}
+            size={24}
+            label="Search conversation (Ctrl+F)"
+            onClick={toggleSearch}
+          />
           <button
             onClick={() => useCustomerCallStore.getState().start(conversation)}
             aria-label={`Call ${conversation.name}`}
@@ -265,8 +303,12 @@ export default function ChatWindow({
         </div>
       </header>
 
-      <ChatSearchBar />
-      <div className="chat-stream" aria-live="polite">
+      <ChatSearchBar conversationId={conversation.id} />
+      <PinBar
+        conversationId={conversation.id}
+        onOpen={(pin) => void showMessage(conversation.id, { id: pin.messageId, sequence: pin.sequence })}
+      />
+      <div className="chat-stream" aria-live="polite" ref={streamRef}>
         {history?.hasMore && (
           <button
             type="button"
@@ -277,18 +319,30 @@ export default function ChatWindow({
             {history.loading ? "Loading…" : "Load earlier messages"}
           </button>
         )}
-        <div className="today-pill">Today</div>
-        {hasQuery && visible.length === 0 && <div className="empty-search">No messages match “{trimmedQuery}”</div>}
-        {visible.map((message) => (
-          <MessageBubble
-            key={message.id}
-            message={message}
-            showReadReceipts
-            onRetry={(failed) => retryMessage(failed.conversationId, failed.id)}
-            {...(message.replyToId ? { replyTo: messages.find((m) => m.id === message.replyToId) } : {})}
-            actions={<MessageActions message={message} />}
-            {...(editingId === message.id ? { body: <MessageEditor message={message} /> } : {})}
-          />
+        {messages.map((message, index) => (
+          <Fragment key={message.id}>
+            {dayKey(message.createdAt) !== dayKey(messages[index - 1]?.createdAt ?? "") && (
+              <JumpToDateButton
+                conversationId={conversation.id}
+                className="today-pill"
+                label={`${dayLabel(message.createdAt)}: jump to another date`}
+              >
+                {dayLabel(message.createdAt)}
+              </JumpToDateButton>
+            )}
+            <MessageBubble
+              message={message}
+              showReadReceipts
+              onRetry={(failed) => retryMessage(failed.conversationId, failed.id)}
+              {...(message.replyToId ? { replyTo: messages.find((m) => m.id === message.replyToId) } : {})}
+              {...(searchOpen && searchQuery.trim() ? { highlight: searchQuery } : {})}
+              focused={flashId === message.id}
+              pinned={pins.some((pin) => pin.messageId === message.id)}
+              onQuoteClick={(original) => jumpTo(original.id)}
+              actions={<MessageActions message={message} />}
+              {...(editingId === message.id ? { body: <MessageEditor message={message} /> } : {})}
+            />
+          </Fragment>
         ))}
         {typing === "customer" && <TypingBubble />}
         <div ref={endRef} />

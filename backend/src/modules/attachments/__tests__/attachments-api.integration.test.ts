@@ -252,7 +252,7 @@ describe.skipIf(!url)("attachments over HTTP", () => {
     expect(await stored()).toEqual([]);
   });
 
-  it("deletes a file: gone from lists and downloads, bytes removed, record kept; only uploader or supervisor", async () => {
+  it("deletes a file: gone from lists and downloads, bytes and record kept; only uploader or supervisor", async () => {
     const id = (await sendFile(agent1)).body.data.attachments[0].id;
     expect((await json(`/attachments/${id}`, agent2, "DELETE")).status).toBe(404);
     expect((await json(`/attachments/${id}`, agent1, "DELETE")).status).toBe(200);
@@ -262,7 +262,7 @@ describe.skipIf(!url)("attachments over HTTP", () => {
       (await fetch(`${base}/attachments/${id}/download`, { headers: { authorization: `Bearer ${agent1}` } })).status,
     ).toBe(404);
     expect((await json(`/conversations/${cid}/attachments`, agent1)).body.data).toEqual([]);
-    expect(await stored()).toEqual([]);
+    expect((await stored()).length).toBe(1);
     expect((await db.attachment.findUniqueOrThrow({ where: { id } })).deletedAt).not.toBeNull();
     expect((await json(`/attachments/${id}`, agent1, "DELETE")).status).toBe(404);
   });

@@ -28,21 +28,37 @@ see is always `404`. Each conversation detail includes `permissions` flags compu
 
 ### Messages and read state
 
-| Method | Path                                 | Body / query                                    | Notes                                                                                       |
-| ------ | ------------------------------------ | ----------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| POST   | `/:id/messages`                      | `{ clientId, text (≤4000), replyToMessageId? }` | Owner only, open conversation. 201 created; **200 with the original message on a retry**.   |
-| GET    | `/:id/messages`                      | `limit` (≤100, default 50), `before` or `after` | Oldest to newest. See cursors below.                                                        |
-| POST   | `/:id/messages/:messageId/delivered` |                                                 | Delivery receipt for a customer message, recorded for the caller only.                      |
-| POST   | `/:id/read`                          | `{ messageId? }`                                | Moves the caller's read position to that message (default: latest). Returns the read state. |
-| POST   | `/:id/unread`                        |                                                 | Flags the conversation unread (count is at least 1) without moving the read position.       |
+| Method | Path                                 | Body / query                                            | Notes                                                                                       |
+| ------ | ------------------------------------ | ------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| POST   | `/:id/messages`                      | `{ clientId, text (≤4000), replyToMessageId? }`         | Owner only, open conversation. 201 created; **200 with the original message on a retry**.   |
+| GET    | `/:id/messages`                      | `limit` (≤100, default 50), `before`, `after` or `from` | Oldest to newest. See cursors below.                                                        |
+| GET    | `/:id/messages/search`               | `q` (1–200 chars), `limit` (≤100, default 50)           | Text search, newest first. See search below.                                                |
+| POST   | `/:id/messages/:messageId/delivered` |                                                         | Delivery receipt for a customer message, recorded for the caller only.                      |
+| POST   | `/:id/read`                          | `{ messageId? }`                                        | Moves the caller's read position to that message (default: latest). Returns the read state. |
+| POST   | `/:id/unread`                        |                                                         | Flags the conversation unread (count is at least 1) without moving the read position.       |
 
 Reply, edit, delete, reactions and forward are in [api-message-actions.md](api-message-actions.md); the `Message` now also
 carries `forwardedFromMessageId`, `isEdited`, `editedAt`, `reactions` and `attachments` (see [api-attachments.md](api-attachments.md)).
 
 **Cursors.** `sequenceNumber` is strictly increasing per conversation. No cursor returns the newest page; `before=N`
-returns the page of older messages; `after=N` returns what was missed since N (reconnect sync). `meta` has `hasMore`,
+returns the page of older messages; `after=N` returns what was missed since N (reconnect sync); `from=<ISO 8601 time
+with offset>` returns the page starting at the first message on or after that time (jump to a day; empty when there is
+none). Only one cursor per request. `meta` has `hasMore`,
 `direction`, `oldestSequence` and `newestSequence`. Soft-deleted messages stay in place as placeholders: `deletedAt` is
 set and `content`, `metadata`, `reactions` and `attachments` are empty (show "This message was deleted").
+
+**Search.** `q` matches anywhere in the message text, ignoring case (`%` and `_` are literal). Deleted and SYSTEM
+messages never match. Hits are `Message`s with empty `reactions` and `attachments`; `meta` is `{ limit, hasMore }`.
+To show a hit in context, load history with `after = sequenceNumber - 1`: the page starts at the hit. File names are not
+searched yet.
+
+**Search in every conversation** (the inbox search): `GET /api/v1/admin/messages/search?q=&limit=` (`limit` ≤50,
+default 20). It uses the `messages_content_fts` full-text index, so each word matches a whole word or the start of one
+(`sal` finds `salary`, `ary` does not), ignoring case, and all words must match. Only conversations the caller may open
+are searched (same rule as `canView`). Newest first; deleted and SYSTEM messages never match. Each item is
+`{ message, conversation: { id, customerName, customerIdentifier } }`; `meta` is `{ limit, hasMore }`. Text written
+without spaces between words (Khmer, for example) is one "word" to the index, so only its beginning matches; the
+in-conversation search above has no such limit.
 
 **Message `status`** (sender-facing): `SENT` → `DELIVERED` → `READ`, never backwards. `SENDING` and `FAILED` exist in
 the schema but nothing sets them yet (they belong to the client and the unbuilt customer channel).

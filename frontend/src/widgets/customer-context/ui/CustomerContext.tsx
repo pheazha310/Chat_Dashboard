@@ -4,6 +4,7 @@ import { CallbacksPanel } from "@/features/request-callback";
 import { OrganizePanel } from "@/features/organize-conversation";
 import { NotesPanel } from "@/features/internal-notes";
 import { MediaFilesPanel } from "@/features/share-files";
+import { showMessage } from "@/features/search-in-chat";
 import { assets } from "@/shared/config";
 import { Icon } from "@/shared/ui";
 
@@ -42,6 +43,11 @@ export default function CustomerContext({
           appId={application.appId}
           conversationId={conversation.id}
           onBack={() => onViewChange(null)}
+          onShowInChat={(messageId) => {
+            onViewChange(null);
+            onClose();
+            void showMessage(conversation.id, { id: messageId });
+          }}
         />
       ) : (
         <>

@@ -43,9 +43,20 @@ const schema = z.object({
   AUTH_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(0).default(20),
   // Express `trust proxy` hop count, so the client IP is read from X-Forwarded-For behind a load balancer. 0 = direct.
   TRUST_PROXY: z.coerce.number().int().min(0).max(10).default(0),
-  // Uploaded files. "local" keeps them on this server's disk under STORAGE_DIR (object storage can be added as a driver).
-  STORAGE_DRIVER: z.enum(["local"]).default("local"),
+  // Uploaded files. "local" keeps them on this server's disk under STORAGE_DIR (one server); "s3" keeps them in an S3
+  // bucket, or an S3-compatible store such as MinIO or R2 through S3_ENDPOINT, so several API servers share them.
+  STORAGE_DRIVER: z.enum(["local", "s3"]).default("local"),
   STORAGE_DIR: z.string().min(1).default("./storage"),
+  // Required with STORAGE_DRIVER=s3. Credentials come from the standard AWS chain (AWS_ACCESS_KEY_ID and
+  // AWS_SECRET_ACCESS_KEY, a shared profile, or the server's IAM role), never from this file.
+  S3_BUCKET: z.string().min(1).optional(),
+  S3_REGION: z.string().min(1).optional(),
+  // Only for S3-compatible stores; MinIO also needs S3_FORCE_PATH_STYLE=true (bucket in the path, not the host name).
+  S3_ENDPOINT: z.url().optional(),
+  S3_FORCE_PATH_STYLE: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((value) => value === "true"),
   // Callbacks (FR-25). The job runs inside the API process; 0 turns it off (tests, or a dedicated worker later).
   CALLBACK_JOB_INTERVAL_SECONDS: z.coerce.number().int().min(0).default(30),
   // How long before the scheduled time the assignee is reminded.
@@ -85,6 +96,14 @@ export const env = schema
   .refine((value) => !value.LOS_ISSUER || Boolean(value.LOS_JWKS_URL ?? value.LOS_PUBLIC_KEY), {
     message: "LOS_ISSUER needs LOS_JWKS_URL or LOS_PUBLIC_KEY",
     path: ["LOS_ISSUER"],
+  })
+  .refine((value) => value.STORAGE_DRIVER !== "s3" || Boolean(value.S3_BUCKET), {
+    message: "STORAGE_DRIVER=s3 needs S3_BUCKET",
+    path: ["S3_BUCKET"],
+  })
+  .refine((value) => value.STORAGE_DRIVER !== "s3" || Boolean(value.S3_REGION), {
+    message: "STORAGE_DRIVER=s3 needs S3_REGION",
+    path: ["S3_REGION"],
   })
   .refine((value) => !(value.NODE_ENV === "production" && value.BACKEND1_MODE === "dev"), {
     message: "BACKEND1_MODE=dev is not allowed in production",

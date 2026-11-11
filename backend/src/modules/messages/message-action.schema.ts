@@ -6,6 +6,8 @@ export const messageIdParams = z.object({ messageId: idSchema });
 export const reactionParams = z.object({ messageId: idSchema, reactionId: idSchema });
 
 export const MAX_REACTIONS_PER_USER = 10;
+/** Pins per conversation: a short list of key facts, not a second history. */
+export const MAX_PINS = 10;
 
 export const replyBody = z.object({
   /** Client-generated id; resending it returns the original reply instead of a duplicate. */

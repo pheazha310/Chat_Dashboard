@@ -21,6 +21,8 @@ const repo = {
   reopen: vi.fn(),
   addActivity: vi.fn(),
   history: vi.fn(),
+  search: vi.fn(),
+  searchAll: vi.fn(),
   reactionsFor: vi.fn(),
   attachmentsFor: vi.fn(),
   addAttachment: vi.fn(),
@@ -294,6 +296,52 @@ describe("history", () => {
       oldestSequence: null,
       newestSequence: null,
     });
+  });
+});
+
+describe("search", () => {
+  it("returns the matches as messages, newest first, and says when there are more", async () => {
+    repo.search.mockResolvedValue([msg({ id: uid(52), sequenceNumber: 9n }), msg({ id: uid(51), sequenceNumber: 4n })]);
+    const result = await service.search(owner, uid(10), { q: "salary", limit: 1 });
+    expect(repo.search).toHaveBeenCalledWith(uid(10), "salary", 2);
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]).toMatchObject({ id: uid(52), sequenceNumber: "9" });
+    expect(result.meta).toEqual({ limit: 1, hasMore: true });
+  });
+
+  it("hides the conversation from agents who cannot see it", async () => {
+    await expect(service.search(other, uid(10), { q: "salary", limit: 5 })).rejects.toBeInstanceOf(NotFoundError);
+    expect(repo.search).not.toHaveBeenCalled();
+  });
+});
+
+describe("searchAll", () => {
+  it("turns the words into a word-start query and returns each hit with its customer", async () => {
+    repo.searchAll.mockResolvedValue([
+      { ...msg({ id: uid(52) }), conversation: { id: uid(10), customerName: "Sok Dara", customerIdentifier: "012" } },
+      { ...msg({ id: uid(51) }), conversation: { id: uid(11), customerName: null, customerIdentifier: null } },
+    ]);
+    const result = await service.searchAll(owner, { q: "Salary, slip!", limit: 1 });
+    expect(repo.searchAll).toHaveBeenCalledWith(owner, "salary:* & slip:*", 2);
+    expect(result.items).toEqual([
+      {
+        message: expect.objectContaining({ id: uid(52) }),
+        conversation: { id: uid(10), customerName: "Sok Dara", customerIdentifier: "012" },
+      },
+    ]);
+    expect(result.meta).toEqual({ limit: 1, hasMore: true });
+  });
+
+  it("keeps letters and numbers of any script and finds nothing for punctuation alone", async () => {
+    repo.searchAll.mockResolvedValue([]);
+    await service.searchAll(owner, { q: "ប្រាក់ខែ 1200", limit: 5 });
+    expect(repo.searchAll).toHaveBeenCalledWith(owner, "ប្រាក់ខែ:* & 1200:*", 6);
+    repo.searchAll.mockClear();
+    expect(await service.searchAll(owner, { q: "%&!", limit: 5 })).toEqual({
+      items: [],
+      meta: { limit: 5, hasMore: false },
+    });
+    expect(repo.searchAll).not.toHaveBeenCalled();
   });
 });
 

@@ -20,6 +20,13 @@ describe("pagination", () => {
     expect(() => cursorQuery.parse({ before: "5", after: "2" })).toThrow();
     expect(cursorQuery.parse({ before: "5" }).before).toBe(5n);
   });
+
+  it("accepts `from` (a time, to jump to a day) alone, never with another cursor", () => {
+    expect(cursorQuery.parse({ from: "2026-10-03T00:00:00+07:00" }).from).toEqual(new Date("2026-10-02T17:00:00Z"));
+    expect(() => cursorQuery.parse({ from: "2026-10-03T00:00:00Z", after: "2" })).toThrow();
+    expect(() => cursorQuery.parse({ from: "2026-10-03T00:00:00Z", before: "2" })).toThrow();
+    expect(() => cursorQuery.parse({ from: "yesterday" })).toThrow();
+  });
 });
 
 describe("idSchema", () => {

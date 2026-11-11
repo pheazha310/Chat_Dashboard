@@ -21,7 +21,8 @@ describe("getAuthToken", () => {
     vi.stubGlobal("localStorage", { getItem: (key: string) => entries[key] ?? null });
   afterEach(() => vi.unstubAllGlobals());
 
-  it("reads the signed-in session first, then the legacy key", () => {
+  // A fixed VITE_AUTH_TOKEN (set for the live E2E run) always wins, so this only holds without one.
+  it.skipIf(Boolean(import.meta.env.VITE_AUTH_TOKEN))("reads the signed-in session first, then the legacy key", () => {
     stub({ "auth.session": JSON.stringify({ accessToken: "jwt" }), "auth.token": "legacy" });
     expect(getAuthToken()).toBe("jwt");
     stub({ "auth.token": "legacy" });

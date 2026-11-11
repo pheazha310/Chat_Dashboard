@@ -5,8 +5,12 @@ export {
   getConversation,
   getMessages,
   listConversations,
+  listConversationsPage,
   restoreConversationRequest,
+  searchAllMessages,
+  searchMessages,
   type MessagePageMeta,
+  type MessageSearchHit,
 } from "./conversations";
 export {
   clearDraftRequest,
@@ -56,8 +60,12 @@ export {
   editMessageRequest,
   forwardRequest,
   getEditHistory,
+  listPinsRequest,
+  pinRequest,
   reactRequest,
+  unpinRequest,
   unreactRequest,
+  type BackendPin,
   type EditHistory,
 } from "./messages";
 export {

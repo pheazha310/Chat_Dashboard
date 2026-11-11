@@ -10,7 +10,7 @@ vi.mock("@/shared/api/ws", () => ({
 vi.mock("@/shared/ui", () => ({ notify: vi.fn() }));
 
 import { notify } from "@/shared/ui";
-import { catchUp, loadHistory, loadOlderMessages } from "./history";
+import { catchUp, loadHistory, loadOlderMessages, loadUntil, loadUntilMessage } from "./history";
 import { useMessageStore } from "./store";
 
 const backendMessage = (sequence: number) => ({
@@ -54,14 +54,15 @@ describe("loadHistory", () => {
     expect(api.getMessages).toHaveBeenCalledTimes(1);
   });
 
-  it("does not start a second request while one is running", async () => {
+  it("does not start a second request while one is running; both callers finish with it", async () => {
     let finish!: (value: ReturnType<typeof page>) => void;
     api.getMessages.mockReturnValue(new Promise((resolve) => (finish = resolve)));
     const first = loadHistory("a");
-    await loadHistory("a");
+    const second = loadHistory("a");
     expect(api.getMessages).toHaveBeenCalledTimes(1);
     finish(page([1], false));
-    await first;
+    await Promise.all([first, second]);
+    expect(ids()).toEqual(["1"]);
   });
 
   it("keeps live messages that arrived while the page was loading", async () => {
@@ -106,6 +107,61 @@ describe("loadOlderMessages", () => {
   it("does nothing before the first page has loaded", async () => {
     await loadOlderMessages("a");
     expect(api.getMessages).not.toHaveBeenCalled();
+  });
+});
+
+describe("loadUntil", () => {
+  it("pages back in large steps until the message is held, without gaps", async () => {
+    api.getMessages
+      .mockResolvedValueOnce(page([8, 9, 10], true))
+      .mockResolvedValueOnce(page([5, 6, 7], true))
+      .mockResolvedValueOnce(page([2, 3, 4], true));
+    await loadHistory("a");
+    await expect(loadUntil("a", "3")).resolves.toBe(true);
+    expect(api.getMessages).toHaveBeenNthCalledWith(2, "a", { before: "8", limit: 100 });
+    expect(api.getMessages).toHaveBeenNthCalledWith(3, "a", { before: "5", limit: 100 });
+    expect(ids()).toEqual(["2", "3", "4", "5", "6", "7", "8", "9", "10"]);
+    expect(useMessageStore.getState().history.a).toMatchObject({ hasMore: true, oldest: "2", loading: false });
+  });
+
+  it("makes no request when the message is already held", async () => {
+    api.getMessages.mockResolvedValueOnce(page([8, 9, 10], true));
+    await loadHistory("a");
+    await expect(loadUntil("a", "9")).resolves.toBe(true);
+    expect(api.getMessages).toHaveBeenCalledTimes(1);
+  });
+
+  it("waits for a first page that is already loading (opening a chat from a search result)", async () => {
+    let finish!: (value: ReturnType<typeof page>) => void;
+    api.getMessages
+      .mockReturnValueOnce(new Promise((resolve) => (finish = resolve)))
+      .mockResolvedValueOnce(page([2, 3, 4], true));
+    const opening = loadHistory("a");
+    const jumping = loadUntil("a", "3");
+    finish(page([8, 9, 10], true));
+    await opening;
+    await expect(jumping).resolves.toBe(true);
+    expect(ids()).toEqual(["2", "3", "4", "8", "9", "10"]);
+  });
+
+  it("loads the first page itself, and says false when the history ends or fails first", async () => {
+    api.getMessages.mockResolvedValueOnce(page([8, 9, 10], true)).mockRejectedValueOnce(new Error("down"));
+    await expect(loadUntil("a", "3")).resolves.toBe(false);
+    expect(api.getMessages).toHaveBeenNthCalledWith(1, "a", { limit: 50 });
+    expect(notify).toHaveBeenCalledWith("Could not load earlier messages");
+  });
+});
+
+describe("loadUntilMessage", () => {
+  it("pages back until a message id is held, or says false when the history ends without it", async () => {
+    api.getMessages
+      .mockResolvedValueOnce(page([8, 9, 10], true))
+      .mockResolvedValueOnce(page([5, 6, 7], true))
+      .mockResolvedValueOnce(page([1, 2, 3, 4], false));
+    await expect(loadUntilMessage("a", "6")).resolves.toBe(true);
+    expect(api.getMessages).toHaveBeenCalledTimes(2);
+    await expect(loadUntilMessage("a", "missing")).resolves.toBe(false);
+    expect(ids()).toHaveLength(10);
   });
 });
 

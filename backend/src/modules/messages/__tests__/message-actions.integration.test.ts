@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { assertTestDatabase, createTestContainer } from "../../../__tests__/support/container.js";
 import type { AuthContext } from "@shared/auth/auth.types.js";
-import { ConflictError, ForbiddenError, NotFoundError } from "@shared/errors/AppError.js";
+import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "@shared/errors/AppError.js";
 import { uid } from "../../../__tests__/support/ids.js";
 
 /** Real repositories and services on PostgreSQL. Needs TEST_DATABASE_URL (see conversation-flow.integration.test.ts). */
@@ -230,6 +230,55 @@ describe.skipIf(!url)("message actions on PostgreSQL", () => {
       await expect(
         c.messageActions.forward(agent1, m2.id, { targetConversationId: other, clientId: "same" }),
       ).rejects.toBeInstanceOf(ConflictError);
+    });
+  });
+
+  describe("pins", () => {
+    const pinned = async (auth: AuthContext = supervisor) =>
+      (await c.messages.listPins(auth, cid)).map((pin) => pin.message.content);
+
+    it("pins for everyone who opens the chat, newest pin first; unpinning hides it and pinning again revives the row", async () => {
+      const salary = await send("Salary confirmed: 1,200 USD");
+      const date = await send("Callback on Oct 3");
+      const pin = await c.messageActions.pin(agent1, salary.id);
+      expect(pin).toMatchObject({ messageId: salary.id, conversationId: cid, pinnedBy: uid(1) });
+      await c.messageActions.pin(agent1, date.id);
+      await c.messageActions.pin(agent1, date.id); // already pinned: no error, no second row
+      expect(await pinned()).toEqual(["Callback on Oct 3", "Salary confirmed: 1,200 USD"]);
+
+      await c.messageActions.unpin(agent1, salary.id);
+      expect(await pinned(agent1)).toEqual(["Callback on Oct 3"]);
+      await c.messageActions.pin(supervisor, salary.id);
+      expect(await pinned()).toEqual(["Salary confirmed: 1,200 USD", "Callback on Oct 3"]);
+      expect(await db.messagePin.count()).toBe(2);
+    });
+
+    it("hides pins from agents outside the chat and refuses system, deleted and an 11th message", async () => {
+      const m = await send("key fact");
+      await expect(c.messageActions.pin(agent2, m.id)).rejects.toBeInstanceOf(NotFoundError);
+      await expect(c.messages.listPins(agent2, cid)).rejects.toBeInstanceOf(NotFoundError);
+
+      const system = await db.message.findFirstOrThrow({ where: { conversationId: cid, senderType: "SYSTEM" } });
+      await expect(c.messageActions.pin(agent1, system.id)).rejects.toBeInstanceOf(BadRequestError);
+
+      await c.messageActions.pin(agent1, m.id);
+      await c.messageActions.remove(agent1, m.id);
+      expect(await pinned()).toEqual([]); // a deleted message drops out of the pin bar
+      await expect(c.messageActions.pin(agent1, m.id)).rejects.toBeInstanceOf(NotFoundError);
+
+      for (let n = 1; n <= 10; n++) await c.messageActions.pin(agent1, (await send(`fact ${n}`)).id);
+      await expect(c.messageActions.pin(agent1, (await send("one too many")).id)).rejects.toBeInstanceOf(ConflictError);
+    });
+
+    it("lets a viewer see the pins but only the owner or a supervisor change them", async () => {
+      const m = await send("fact");
+      await db.conversationAssignment.create({
+        data: { conversationId: cid, agentId: uid(2), assignedBy: uid(9), assignmentType: "VIEWER" },
+      });
+      await expect(c.messageActions.pin(agent2, m.id)).rejects.toBeInstanceOf(ForbiddenError);
+      await c.messageActions.pin(agent1, m.id);
+      expect(await pinned(agent2)).toEqual(["fact"]);
+      await expect(c.messageActions.unpin(agent2, m.id)).rejects.toBeInstanceOf(ForbiddenError);
     });
   });
 });

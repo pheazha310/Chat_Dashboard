@@ -2,6 +2,7 @@ import type {
   Attachment,
   Message,
   MessageEditHistory,
+  MessagePin,
   MessageReaction,
 } from "../../../prisma/generated/prisma/client.js";
 import type { PolicyInput } from "@shared/policy/conversation-access.js";
@@ -10,6 +11,14 @@ export type MessageRow = Message;
 export type ReactionRow = MessageReaction;
 export type AttachmentRow = Attachment;
 export type EditHistoryRow = MessageEditHistory;
+
+/** Which customer a cross-conversation search hit belongs to (the inbox shows hits under the customer). */
+export interface SearchHitConversation {
+  id: string;
+  customerName: string | null;
+  customerIdentifier: string | null;
+}
+export type SearchAllRow = MessageRow & { conversation: SearchHitConversation };
 
 export interface MessageDto {
   id: string;
@@ -56,6 +65,18 @@ export interface AttachmentDto {
   createdAt: string;
   /** Path under the API base URL, e.g. `/attachments/<id>/download`. Needs the bearer token. */
   downloadPath: string;
+}
+
+export type PinRow = MessagePin & { message: MessageRow };
+
+/** A message pinned to the top of the conversation for every agent (staff only). */
+export interface PinDto {
+  id: string;
+  conversationId: string;
+  messageId: string;
+  pinnedBy: string;
+  pinnedAt: string;
+  message: MessageDto;
 }
 
 export interface ReactionDto {

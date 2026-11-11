@@ -10,7 +10,7 @@ import {
   reactionParams,
   replyBody,
 } from "./message-action.schema.js";
-import { message, reaction } from "./message.openapi.js";
+import { message, pin, reaction } from "./message.openapi.js";
 import type { MessageHistoryDto } from "./message.types.js";
 
 const history = z
@@ -41,6 +41,27 @@ const tags = ["Message actions"];
 const failures = { 400: errors[400], 401: errors[401], 403: errors[403], 404: errors[404] };
 
 export function registerMessageActionOpenApi(registry: OpenAPIRegistry) {
+  registry.registerPath({
+    method: "put",
+    path: "/messages/{messageId}/pin",
+    tags,
+    security,
+    summary: "Pin a message",
+    description:
+      "Pins the message to the top of its conversation for every agent. Allowed for the owner or a supervisor, or anyone while nobody owns the conversation. Pinning a pinned message changes nothing. SYSTEM messages cannot be pinned; at most 10 pins per conversation (409).",
+    request: { params: messageIdParams },
+    responses: { 200: ok("The pin", successOf(pin)), ...failures, 409: errors[409] },
+  });
+  registry.registerPath({
+    method: "delete",
+    path: "/messages/{messageId}/pin",
+    tags,
+    security,
+    summary: "Unpin a message",
+    description: "Same permission as pinning. Unpinning a message that is not pinned changes nothing.",
+    request: { params: messageIdParams },
+    responses: { 200: ok("Unpinned", successOf(z.null())), ...failures },
+  });
   registry.registerPath({
     method: "post",
     path: "/messages/{messageId}/replies",

@@ -1,6 +1,9 @@
 import { create } from "zustand";
 import type { ConversationDto } from "@/shared/api/ws";
 
+/** Page size of the socket sync (backend `SYNC_INBOX_SIZE`) and of the follow-up REST pages. */
+export const INBOX_PAGE_SIZE = 100;
+
 export type Conversation = ConversationDto;
 
 export type PriorityFilter = "all" | "HIGH" | "MEDIUM" | "LOW";
@@ -11,6 +14,10 @@ export type ConversationFilter = "all" | "mine" | "unread" | "unassigned" | "arc
 type ConversationState = {
   byId: Record<string, Conversation>;
   order: string[];
+  /** Last inbox page loaded (the socket sync is page 1) and whether the server has more. */
+  inboxPage: number;
+  inboxHasMore: boolean;
+  inboxLoading: boolean;
   selectedId: string | null;
   query: string;
   filter: ConversationFilter;
@@ -22,6 +29,7 @@ type ConversationState = {
   setTagFilter: (value: string | null) => void;
   setSort: (value: ConversationSort) => void;
   setAll: (conversations: Conversation[]) => void;
+  appendPage: (conversations: Conversation[], page: number, hasMore: boolean) => void;
   upsert: (conversation: Conversation) => void;
   select: (id: string) => void;
   setQuery: (query: string) => void;
@@ -41,6 +49,9 @@ type ConversationState = {
 export const useConversationStore = create<ConversationState>((set) => ({
   byId: {},
   order: [],
+  inboxPage: 1,
+  inboxHasMore: false,
+  inboxLoading: false,
   selectedId: null,
   query: "",
   filter: "all",
@@ -56,8 +67,20 @@ export const useConversationStore = create<ConversationState>((set) => ({
       return {
         byId: Object.fromEntries(conversations.map((conversation) => [conversation.id, conversation])),
         order: conversations.map(({ id }) => id),
+        inboxPage: 1,
+        inboxHasMore: conversations.length >= INBOX_PAGE_SIZE,
         // Keep the current selection if it survives the refresh; otherwise fall back to the first conversation.
         selectedId: stillExists ? state.selectedId : (conversations[0]?.id ?? null),
+      };
+    }),
+  appendPage: (conversations, page, hasMore) =>
+    set((state) => {
+      const fresh = conversations.filter(({ id }) => !state.byId[id]);
+      return {
+        byId: { ...state.byId, ...Object.fromEntries(fresh.map((conversation) => [conversation.id, conversation])) },
+        order: [...state.order, ...fresh.map(({ id }) => id)],
+        inboxPage: page,
+        inboxHasMore: hasMore,
       };
     }),
   upsert: (conversation) =>

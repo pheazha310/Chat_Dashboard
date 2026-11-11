@@ -424,6 +424,23 @@ Table message_reactions [headercolor: #7C3AED] {
   }
 }
 
+Table message_pins [headercolor: #7C3AED] {
+  id uuid [pk, default: `gen_random_uuid()`]
+  conversation_id uuid [not null]
+  message_id uuid [not null, unique]
+
+  pinned_by uuid [not null, note: 'users.id of the staff member who pinned it (last pin wins)']
+  pinned_at timestamptz [not null, default: `now()`]
+  unpinned_at timestamptz [note: 'Soft delete; pinning again revives the row']
+  unpinned_by uuid
+
+  indexes {
+    (conversation_id, pinned_at)
+  }
+
+  Note: 'Messages pinned to the top of a conversation for every agent (staff only, max 10 per conversation)'
+}
+
 // Relations of messages
 Ref: conversations.id < messages.conversation_id [delete: restrict]
 Ref: chat_users.external_id < messages.sender_id [delete: restrict]
@@ -434,6 +451,8 @@ Ref: conversations.id < conversation_reads.conversation_id [delete: cascade]
 Ref: messages.(id, conversation_id) < conversation_reads.(last_read_message_id, conversation_id) [delete: restrict]
 Ref: messages.id < message_edit_history.message_id [delete: cascade]
 Ref: messages.id < message_reactions.message_id [delete: cascade]
+Ref: conversations.id < message_pins.conversation_id [delete: restrict]
+Ref: messages.(id, conversation_id) < message_pins.(message_id, conversation_id) [delete: restrict]
 
 // ==============================================================================================================
 // 04. ATTACHMENTS

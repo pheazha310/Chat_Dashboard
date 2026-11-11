@@ -7,6 +7,7 @@ export {
   type PriorityFilter,
 } from "./model/store";
 export { FILTERS, filterConversations } from "./model/filter";
-export { loadArchived, loadDetails } from "./model/details";
+export { ensureConversation, loadArchived, loadDetails, loadMoreConversations } from "./model/details";
+export { paginate } from "./model/paginate";
 export { canReply } from "./model/reply";
 export { default as ConversationItem } from "./ui/ConversationItem";

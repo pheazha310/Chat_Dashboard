@@ -1,5 +1,7 @@
 import { prisma, runInTransaction, type Db } from "@config/database.js";
-import type { Prisma } from "../../../prisma/generated/prisma/client.js";
+import { Prisma } from "../../../prisma/generated/prisma/client.js";
+import type { AuthContext } from "@shared/auth/auth.types.js";
+import { can } from "@shared/auth/permissions.js";
 import type { CursorQuery } from "@shared/utils/pagination.js";
 import type {
   AttachmentRow,
@@ -7,7 +9,9 @@ import type {
   LockedConversation,
   MessagePage,
   MessageRow,
+  PinRow,
   ReactionRow,
+  SearchAllRow,
 } from "./message.types.js";
 
 interface AppendInput {
@@ -124,9 +128,12 @@ export class MessageRepository {
       conversationId,
       ...(options.excludeSystem ? { senderType: { not: "SYSTEM" } } : {}),
     };
-    if (query.after !== undefined) {
+    if (query.after !== undefined || query.from !== undefined) {
       const rows = await this.db.message.findMany({
-        where: { ...base, sequenceNumber: { gt: query.after } },
+        where: {
+          ...base,
+          ...(query.after === undefined ? { createdAt: { gte: query.from } } : { sequenceNumber: { gt: query.after } }),
+        },
         orderBy: { sequenceNumber: "asc" },
         take: query.limit + 1,
       });
@@ -138,6 +145,78 @@ export class MessageRepository {
       take: query.limit + 1,
     });
     return { items: rows.slice(0, query.limit).reverse(), hasMore: rows.length > query.limit };
+  }
+
+  /** Messages whose text contains `text` (any case), newest first. Deleted and SYSTEM messages are left out. */
+  search(conversationId: string, text: string, take: number): Promise<MessageRow[]> {
+    return this.db.message.findMany({
+      where: {
+        conversationId,
+        deletedAt: null,
+        senderType: { not: "SYSTEM" },
+        // Prisma passes `contains` to ILIKE as-is; escape its wildcards so "100%" means the literal text.
+        content: { contains: text.replace(/[\\%_]/g, "\\$&"), mode: "insensitive" },
+      },
+      orderBy: { sequenceNumber: "desc" },
+      take,
+    });
+  }
+
+  /**
+   * Messages matching a `to_tsquery('simple', …)` across the conversations `auth` may open, newest first, each with
+   * its customer. Matching runs on the `messages_content_fts` index (constraints.sql), which Prisma cannot query.
+   */
+  async searchAll(auth: AuthContext, tsQuery: string, take: number): Promise<SearchAllRow[]> {
+    // SQL form of `canView` (shared/policy/conversation-access.ts); keep the two in step.
+    const visible = can(auth, "conversations.view_all")
+      ? Prisma.sql`TRUE`
+      : Prisma.sql`(c.handoff_status <> 'ASSIGNED' OR c.assigned_agent_id = ${auth.userId}::uuid OR EXISTS (
+          SELECT 1 FROM conversation_assignments a
+           WHERE a.conversation_id = c.id AND a.agent_id = ${auth.userId}::uuid
+             AND a.ended_at IS NULL AND a.assignment_type = 'VIEWER'))`;
+    const hits = await this.db.$queryRaw<{ id: string }[]>`
+      SELECT m.id FROM messages m JOIN conversations c ON c.id = m.conversation_id
+       WHERE to_tsvector('simple', coalesce(m.content, '')) @@ to_tsquery('simple', ${tsQuery})
+         AND m.deleted_at IS NULL AND m.sender_type <> 'SYSTEM' AND ${visible}
+       ORDER BY m.created_at DESC, m.id DESC
+       LIMIT ${take}`;
+    const rows = await this.db.message.findMany({
+      where: { id: { in: hits.map((hit) => hit.id) } },
+      include: { conversation: { select: { id: true, customerName: true, customerIdentifier: true } } },
+    });
+    const order = new Map(hits.map((hit, index) => [hit.id, index]));
+    return rows.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
+  }
+
+  /** Pins shown in the pin bar, newest first. A deleted message drops out (its pin row stays for audit). */
+  activePins(conversationId: string): Promise<PinRow[]> {
+    return this.db.messagePin.findMany({
+      where: { conversationId, unpinnedAt: null, message: { deletedAt: null } },
+      include: { message: true },
+      orderBy: [{ pinnedAt: "desc" }, { id: "desc" }],
+    });
+  }
+
+  findPin(messageId: string) {
+    return this.db.messagePin.findUnique({ where: { messageId }, include: { message: true } });
+  }
+
+  /** Pins a message, reviving its row if it was pinned before (one row per message). */
+  pin(conversationId: string, messageId: string, by: string): Promise<PinRow> {
+    const pinned = { pinnedBy: by, pinnedAt: new Date(), unpinnedAt: null, unpinnedBy: null };
+    return this.db.messagePin.upsert({
+      where: { messageId },
+      create: { conversationId, messageId, ...pinned },
+      update: pinned,
+      include: { message: true },
+    });
+  }
+
+  async unpin(messageId: string, by: string): Promise<void> {
+    await this.db.messagePin.updateMany({
+      where: { messageId, unpinnedAt: null },
+      data: { unpinnedAt: new Date(), unpinnedBy: by },
+    });
   }
 
   /** The newest message at or before a sequence number (the read marker target). */

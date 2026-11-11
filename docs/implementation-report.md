@@ -34,7 +34,7 @@ Layering follows `routes → controller → service → repository → Prisma` i
 | FR-04 | Delivery and read status | Done    |                                                                                                  |
 | FR-05 | Unread                   | Done    | Mark unread supported                                                                            |
 | FR-06 | Typing and presence      | Done    | Backend and protocol complete. **No UI** for typing or presence                                  |
-| FR-07 | Search and filters       | Done    | Server-side `q`. The UI still filters locally                                                    |
+| FR-07 | Search and filters       | Done    | Server-side `q`; message search in a chat and across chats. Inbox list still filters locally     |
 | FR-08 | Assignment and transfer  | Done    | Backend complete. **No transfer dialog** in the UI                                               |
 | FR-09 | Workspace APIs           | Done    |                                                                                                  |
 | FR-10 | History and sync         | Done    | Cursor history; reconnect sync reports `incomplete` when a gap is too large to replay            |
@@ -83,7 +83,7 @@ product behaviour is correct (the notification was stored and delivered); the te
    rejects the send with 403).
 4. **Auto-assign setting** is now saved per agent (FR-24) but nothing assigns automatically yet, so it still has no effect.
 5. **Loan fields** in the customer panel show "—"/"Unknown".
-6. ~~Attachments and storage are not implemented~~ Done in the FR-17/18 work (section 8): local-disk storage behind a `Storage` port; the production storage decision is still open.
+6. ~~Attachments and storage are not implemented~~ Done in the FR-17/18 work (section 8): local-disk storage behind a `Storage` port, plus an S3 driver (`STORAGE_DRIVER=s3`, 2026-11-10) for several servers; which store production uses is still a deployment decision.
 7. **Swagger UI** is not served; the OpenAPI document is generated but not exposed through a UI. Decision pending.
 
 ## 6. Decisions needed from the team
@@ -103,7 +103,7 @@ pnpm check
 TEST_DATABASE_URL=postgresql://USER@HOST:PORT/chat_test TEST_REDIS_URL=redis://HOST:PORT pnpm --filter @chat-dashboard/backend test:coverage
 
 # Frontend against a running backend (see frontend-integration.md, "Verifying against the backend")
-VITE_WS_URL=ws://127.0.0.1:4555/ws VITE_AUTH_TOKEN=dev:00000000-0000-4000-8000-000000000003:AGENT LIVE_API_URL=http://127.0.0.1:4555/api \
+VITE_WS_URL=ws://127.0.0.1:4555/ws VITE_AUTH_TOKEN=dev:00000000-0000-4000-8000-000000000003:AGENT LIVE_API_URL=http://127.0.0.1:4555/api/v1/admin \
   pnpm --filter @chat-dashboard/frontend test
 ```
 

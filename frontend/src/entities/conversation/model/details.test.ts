@@ -4,12 +4,14 @@ const api = vi.hoisted(() => ({
   getConversation: vi.fn(),
   getActivities: vi.fn(),
   listConversations: vi.fn(),
+  listConversationsPage: vi.fn(),
   mock: { value: false },
 }));
 vi.mock("@/shared/api/rest", () => ({
   getConversation: api.getConversation,
   getActivities: api.getActivities,
   listConversations: api.listConversations,
+  listConversationsPage: api.listConversationsPage,
 }));
 vi.mock("@/shared/api/ws", () => ({
   get isMockTransport() {
@@ -19,7 +21,7 @@ vi.mock("@/shared/api/ws", () => ({
 vi.mock("@/shared/ui", () => ({ notify: vi.fn() }));
 
 import { notify } from "@/shared/ui";
-import { loadArchived, loadDetails } from "./details";
+import { ensureConversation, loadArchived, loadDetails, loadMoreConversations } from "./details";
 import { useConversationStore, type Conversation } from "./store";
 
 const backendConversation = (id: string, patch: Record<string, unknown> = {}) => ({
@@ -84,6 +86,23 @@ describe("loadDetails", () => {
   });
 });
 
+describe("ensureConversation", () => {
+  it("fetches a conversation the inbox has not loaded (opened from a search hit)", async () => {
+    api.getConversation.mockResolvedValue(backendConversation("z", { unreadCount: 2 }));
+    await expect(ensureConversation("z")).resolves.toBe(true);
+    expect(api.getConversation).toHaveBeenCalledWith("z");
+    expect(useConversationStore.getState().byId.z).toMatchObject({ id: "z", name: "Maya Chen", unread: 2 });
+  });
+
+  it("does not fetch one it already holds, and reports one it cannot load", async () => {
+    await expect(ensureConversation("a")).resolves.toBe(true);
+    expect(api.getConversation).not.toHaveBeenCalled();
+    api.getConversation.mockRejectedValue(new Error("gone"));
+    await expect(ensureConversation("y")).resolves.toBe(false);
+    expect(notify).toHaveBeenCalledWith("Could not open that conversation");
+  });
+});
+
 describe("loadArchived", () => {
   it("adds the archived conversations to the store, flagged archived", async () => {
     api.listConversations.mockResolvedValue([backendConversation("z", { isArchived: true, unreadCount: 1 })]);
@@ -96,5 +115,39 @@ describe("loadArchived", () => {
     api.listConversations.mockRejectedValue(new Error("down"));
     await loadArchived();
     expect(notify).toHaveBeenCalledWith("Could not load archived conversations");
+  });
+});
+
+describe("loadMoreConversations", () => {
+  beforeEach(() => useConversationStore.setState({ inboxPage: 1, inboxHasMore: true, inboxLoading: false }));
+
+  it("appends the next page below the loaded ones and tracks whether more remain", async () => {
+    api.listConversationsPage.mockResolvedValue({
+      data: [backendConversation("old", { unreadCount: 2 })],
+      meta: { page: 2, totalPages: 3 },
+    });
+    await loadMoreConversations();
+    expect(api.listConversationsPage).toHaveBeenCalledWith({ filter: "all", page: 2, size: 100 });
+    const state = useConversationStore.getState();
+    expect(state.order).toEqual(["a", "old"]);
+    expect(state.byId.old).toMatchObject({ unread: 2 });
+    expect(state.inboxPage).toBe(2);
+    expect(state.inboxHasMore).toBe(true);
+  });
+
+  it("stops offering more on the last page, and does nothing without more pages", async () => {
+    api.listConversationsPage.mockResolvedValue({ data: [], meta: { page: 2, totalPages: 2 } });
+    await loadMoreConversations();
+    expect(useConversationStore.getState().inboxHasMore).toBe(false);
+    api.listConversationsPage.mockClear();
+    await loadMoreConversations();
+    expect(api.listConversationsPage).not.toHaveBeenCalled();
+  });
+
+  it("tells the agent when it fails and allows a retry", async () => {
+    api.listConversationsPage.mockRejectedValue(new Error("down"));
+    await loadMoreConversations();
+    expect(notify).toHaveBeenCalledWith("Could not load more conversations");
+    expect(useConversationStore.getState()).toMatchObject({ inboxHasMore: true, inboxLoading: false });
   });
 });

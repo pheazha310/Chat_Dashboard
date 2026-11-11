@@ -31,6 +31,7 @@ model Message {
   conversationReads      ConversationRead[]
   messageEditHistories   MessageEditHistory[]
   messageReactions       MessageReaction[]
+  messagePins            MessagePin[]
   messageAttachments     MessageAttachment[]
   notifications          Notification[]
   automationLogs         AutomationLog[]
@@ -91,6 +92,23 @@ model MessageEditHistory {
 
   @@index([messageId, editedAt])
   @@map("message_edit_history")
+}
+
+/// Messages pinned to the top of a conversation for every agent who opens it (key facts such as a confirmed salary).
+/// Staff-only: customers never see pins. One row per message; unpinning soft-deletes it and pinning again revives it.
+model MessagePin {
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conversationId String       @map("conversation_id") @db.Uuid
+  messageId      String       @unique @map("message_id") @db.Uuid
+  pinnedBy       String       @map("pinned_by") @db.Uuid /// users.id of the staff member who pinned it (last pin wins)
+  pinnedAt       DateTime     @default(now()) @map("pinned_at") @db.Timestamptz(6)
+  unpinnedAt     DateTime?    @map("unpinned_at") @db.Timestamptz(6) /// Soft delete: set while the message is not pinned
+  unpinnedBy     String?      @map("unpinned_by") @db.Uuid
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Restrict)
+  message        Message      @relation(fields: [messageId, conversationId], references: [id, conversationId], onDelete: Restrict) /// Composite FK: the message belongs to this conversation
+
+  @@index([conversationId, pinnedAt])
+  @@map("message_pins")
 }
 
 model MessageReaction {

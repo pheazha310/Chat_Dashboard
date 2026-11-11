@@ -3,7 +3,7 @@ import { getAuth } from "@shared/middleware/auth.middleware.js";
 import { parsed } from "@shared/middleware/validate.middleware.js";
 import { idParams } from "@shared/utils/ids.js";
 import { cursorQuery } from "@shared/utils/pagination.js";
-import { messageParams, readBody, sendBody } from "./message.schema.js";
+import { messageParams, readBody, searchAllQuery, searchQuery, sendBody } from "./message.schema.js";
 import type { MessageService } from "./message.service.js";
 
 export class MessageController {
@@ -24,6 +24,25 @@ export class MessageController {
       parsed(req, "params", idParams).id,
       parsed(req, "query", cursorQuery),
     );
+    res.json({ status: "success", data: items, meta });
+  };
+
+  search = async (req: Request, res: Response) => {
+    const { items, meta } = await this.service.search(
+      getAuth(req),
+      parsed(req, "params", idParams).id,
+      parsed(req, "query", searchQuery),
+    );
+    res.json({ status: "success", data: items, meta });
+  };
+
+  pins = async (req: Request, res: Response) => {
+    const data = await this.service.listPins(getAuth(req), parsed(req, "params", idParams).id);
+    res.json({ status: "success", data });
+  };
+
+  searchAll = async (req: Request, res: Response) => {
+    const { items, meta } = await this.service.searchAll(getAuth(req), parsed(req, "query", searchAllQuery));
     res.json({ status: "success", data: items, meta });
   };
 

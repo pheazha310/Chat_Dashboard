@@ -118,6 +118,11 @@ status change) render as quiet notes in the thread.
 - AI features (draft regeneration, summaries, AI replies) are out of scope.
 - No UI yet for resolve / close / reopen, transfer, typing indicators from the composer, presence, notification
   preferences, mute, or server-side search (the endpoints exist; see `docs/api-conversations.md`).
+- **Forward has no valid target in practice.** The server forwards only into an open conversation the agent owns of the
+  same customer, or into an `INTERNAL` one; a customer now has at most one open conversation and nothing creates internal
+  ones, so the menu shows "Forward (no other chat)". Needs a product decision (see `api-message-actions.md`).
+- Mentions: the note form offers the agents named on loaded conversations, but the server refuses anyone who cannot see
+  the conversation ("Some mentioned agents cannot see this conversation"), so for an agent most choices fail.
 - Sending is not disabled for conversations the agent does not own; the server refuses and the message is marked failed
   with the reason. `permissions` flags from the REST detail could drive the composer later.
 
@@ -125,12 +130,16 @@ status change) render as quiet notes in the thread.
 
 `frontend/src/__e2e__/live-backend.test.ts` drives the frontend's real stack (BackendSocket, WsClient, `startRealtime`,
 stores, feature actions) against a running backend: inbox mapping, takeover, optimistic send and ack, history paging,
-failed sends, unread, transfer-away, claim races, archive/restore, notifications and reconnect catch-up. It is skipped
-unless configured:
+failed sends, unread, transfer-away, claim races, archive/restore, notifications and reconnect catch-up.
+`frontend/src/__e2e__/live-features.test.ts` does the same for FR-14 to FR-27 through the feature actions the screens
+call: reply/edit/react/delete (and their realtime echoes), file and voice uploads, the files panel, notes and mentions,
+escalation, tags and priority, saved replies, chat settings, callbacks, call control, spam reports and blocking, tabs and
+drafts. Both are skipped unless configured, and run one file at a time when `LIVE_API_URL` is set (`vite.config.ts`):
 
 ```bash
-# backend on a THROWAWAY database (EVENT_BUS=memory is enough for one instance)
-DATABASE_URL=postgresql://…/chat_test REDIS_URL=redis://127.0.0.1:6379 EVENT_BUS=memory PORT=4555 pnpm dev:backend
+# backend on a THROWAWAY database (EVENT_BUS=memory is enough for one instance). The tests use dev tokens and expect
+# the dev directory's "Agent <id>" names, so AUTH_MODE and BACKEND1_MODE must be dev even if your .env says otherwise.
+DATABASE_URL=postgresql://…/chat_test REDIS_URL=redis://127.0.0.1:6379 EVENT_BUS=memory AUTH_MODE=dev BACKEND1_MODE=dev PORT=4555 pnpm dev:backend
 
 cd frontend
 VITE_WS_URL=ws://127.0.0.1:4555/ws VITE_AUTH_TOKEN=dev:00000000-0000-4000-8000-000000000003:AGENT LIVE_API_URL=http://127.0.0.1:4555/api/v1/admin pnpm test

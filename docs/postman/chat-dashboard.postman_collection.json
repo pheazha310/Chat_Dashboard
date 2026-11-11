@@ -1585,6 +1585,50 @@
               }
             },
             {
+              "name": "Search messages",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/messages/search?q=salary&limit=50",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "admin", "conversations", "{{convId}}", "messages", "search"],
+                  "query": [
+                    {
+                      "key": "q",
+                      "value": "salary"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "50"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Search messages in all conversations",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/admin/messages/search?q=salary&limit=20",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "admin", "messages", "search"],
+                  "query": [
+                    {
+                      "key": "q",
+                      "value": "salary"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "20"
+                    }
+                  ]
+                }
+              }
+            },
+            {
               "name": "Mark delivered",
               "request": {
                 "method": "POST",
@@ -1749,6 +1793,48 @@
                   "query": []
                 },
                 "description": "Earlier versions, newest edit first. Only the author and supervisors may read it."
+              }
+            },
+            {
+              "name": "Pin a message",
+              "request": {
+                "method": "PUT",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/admin/messages/{{msgId}}/pin",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "admin", "messages", "{{msgId}}", "pin"],
+                  "query": []
+                },
+                "description": "Pins the message for every agent who opens the conversation. Owner or supervisor (anyone while nobody owns it). At most 10 pins (409)."
+              }
+            },
+            {
+              "name": "Pinned messages",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/pins",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "admin", "conversations", "{{convId}}", "pins"],
+                  "query": []
+                },
+                "description": "The pin bar, newest pin first."
+              }
+            },
+            {
+              "name": "Unpin a message",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/admin/messages/{{msgId}}/pin",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "admin", "messages", "{{msgId}}", "pin"],
+                  "query": []
+                },
+                "description": "200 with data null. Same permission as pinning."
               }
             },
             {

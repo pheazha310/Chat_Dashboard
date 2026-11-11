@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { assets } from "@/shared/config";
 import { formatClock } from "@/shared/lib/format-time";
+import { splitMatches } from "../lib/highlight";
 import type { ChatMessage } from "../model/store";
 import AttachmentView from "./AttachmentView";
 
@@ -19,6 +20,10 @@ export default function MessageBubble({
   replyTo,
   actions,
   body,
+  highlight,
+  focused = false,
+  pinned = false,
+  onQuoteClick,
 }: {
   message: ChatMessage;
   showReadReceipts?: boolean;
@@ -29,10 +34,19 @@ export default function MessageBubble({
   actions?: ReactNode;
   /** Replaces the text, e.g. with an inline editor. */
   body?: ReactNode;
+  /** Search text to mark in the message. */
+  highlight?: string;
+  /** Briefly flashes the bubble after the chat jumped to it. */
+  focused?: boolean;
+  /** Pinned to the top of the conversation (shown in the caption). */
+  pinned?: boolean;
+  /** Called when the quoted message is clicked (to jump to it). */
+  onQuoteClick?: (message: ChatMessage) => void;
 }) {
   const { side } = message;
   const status = message.status === "read" && !showReadReceipts ? "delivered" : message.status;
   const caption = [
+    pinned ? "📌 Pinned" : null,
     formatClock(message.createdAt),
     message.edited ? "Edited" : null,
     status && side !== "assistant" ? STATUS_LABEL[status] : null,
@@ -52,7 +66,7 @@ export default function MessageBubble({
 
   if (message.deleted) {
     return (
-      <div className={`message-block ${side}`}>
+      <div className={`message-block ${side}`} data-message-id={message.id}>
         <div className="message-line">
           <div className="message-bubble">
             <p className="message-deleted">This message was deleted</p>
@@ -64,20 +78,46 @@ export default function MessageBubble({
   }
 
   return (
-    <div className={`message-block ${side} ${status === "failed" ? "failed" : ""}`}>
+    <div
+      className={`message-block ${side} ${status === "failed" ? "failed" : ""} ${focused ? "focused" : ""}`}
+      data-message-id={message.id}
+    >
       <div className="message-line">
         <div className="message-bubble">
           {side !== "customer" && <strong>{side === "assistant" ? "AI ASSISTANT" : "SUPPORT AGENT"}</strong>}
           {message.forwarded && <small className="message-forwarded">Forwarded</small>}
-          {message.replyToId && (
-            <blockquote className="message-quote">
-              {replyTo?.deleted ? "Original message deleted" : replyTo ? replyTo.text : "Original message unavailable"}
-            </blockquote>
-          )}
+          {message.replyToId &&
+            (replyTo && !replyTo.deleted && onQuoteClick ? (
+              <button
+                type="button"
+                className="message-quote message-quote-link"
+                onClick={() => onQuoteClick(replyTo)}
+                title="Go to the original message"
+              >
+                {replyTo.text}
+              </button>
+            ) : (
+              <blockquote className="message-quote">
+                {replyTo?.deleted
+                  ? "Original message deleted"
+                  : replyTo
+                    ? replyTo.text
+                    : "Original message unavailable"}
+              </blockquote>
+            ))}
           {message.attachments?.map((attachment) => (
             <AttachmentView key={attachment.id} attachment={attachment} />
           ))}
-          {body ?? (message.text && !isFileLabel(message) && <p>{message.text}</p>)}
+          {body ??
+            (message.text && !isFileLabel(message) && (
+              <p>
+                {highlight
+                  ? splitMatches(message.text, highlight).map((part, i) =>
+                      part.match ? <mark key={i}>{part.text}</mark> : part.text,
+                    )
+                  : message.text}
+              </p>
+            ))}
           {message.reactions && message.reactions.length > 0 && (
             <ul className="message-reactions" aria-label="Reactions">
               {groupReactions(message.reactions).map(({ emoji, count }) => (

@@ -4,7 +4,7 @@ import { idParams } from "@shared/utils/ids.js";
 import { cursorQuery } from "@shared/utils/pagination.js";
 import { container } from "../../app-container.js";
 import { MessageController } from "./message.controller.js";
-import { messageParams, readBody, sendBody } from "./message.schema.js";
+import { messageParams, readBody, searchQuery, sendBody } from "./message.schema.js";
 
 const controller = new MessageController(container.messages);
 
@@ -13,6 +13,8 @@ export const messageRoutes = Router();
 
 messageRoutes.post("/:id/messages", validate({ params: idParams, body: sendBody }), controller.send);
 messageRoutes.get("/:id/messages", validate({ params: idParams, query: cursorQuery }), controller.history);
+messageRoutes.get("/:id/messages/search", validate({ params: idParams, query: searchQuery }), controller.search);
 messageRoutes.post("/:id/messages/:messageId/delivered", validate({ params: messageParams }), controller.markDelivered);
+messageRoutes.get("/:id/pins", validate({ params: idParams }), controller.pins);
 messageRoutes.post("/:id/read", validate({ params: idParams, body: readBody }), controller.markRead);
 messageRoutes.post("/:id/unread", validate({ params: idParams }), controller.markUnread);

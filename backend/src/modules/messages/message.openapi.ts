@@ -4,8 +4,8 @@ import { BEARER_AUTH } from "@shared/openapi/registry.js";
 import { cursorPagedOf, errors, jsonBody, ok, successOf } from "@shared/openapi/envelopes.js";
 import { idParams } from "@shared/utils/ids.js";
 import { cursorQuery } from "@shared/utils/pagination.js";
-import { messageParams, readBody, sendBody } from "./message.schema.js";
-import type { AttachmentDto, MessageDto, ReactionDto, ReadState } from "./message.types.js";
+import { messageParams, readBody, searchAllQuery, searchQuery, sendBody } from "./message.schema.js";
+import type { AttachmentDto, MessageDto, PinDto, ReactionDto, ReadState } from "./message.types.js";
 
 const nullableString = z.string().nullable();
 
@@ -57,6 +57,17 @@ export const message = z
   })
   .openapi("Message") satisfies z.ZodType<MessageDto>;
 
+export const pin = z
+  .object({
+    id: z.string(),
+    conversationId: z.string(),
+    messageId: z.string(),
+    pinnedBy: z.string(),
+    pinnedAt: z.string(),
+    message,
+  })
+  .openapi("MessagePin") satisfies z.ZodType<PinDto>;
+
 const readState = z
   .object({
     conversationId: z.string(),
@@ -94,9 +105,72 @@ export function registerMessageOpenApi(registry: OpenAPIRegistry) {
     security,
     summary: "Message history and reconnect sync",
     description:
-      "Oldest to newest. No cursor returns the newest page; `before` pages back; `after` returns what was missed since a known `sequenceNumber`. Soft-deleted messages are excluded.",
+      "Oldest to newest. No cursor returns the newest page; `before` pages back; `after` returns what was missed since a known `sequenceNumber`; `from` (a time) starts at the first message on or after it. Soft-deleted messages are excluded.",
     request: { params: idParams, query: cursorQuery },
     responses: { 200: ok("A page of messages", cursorPagedOf(message)), ...failures },
+  });
+  registry.registerPath({
+    method: "get",
+    path: "/conversations/{id}/messages/search",
+    tags,
+    security,
+    summary: "Search messages in a conversation",
+    description:
+      "Case-insensitive text match, newest first. Deleted and SYSTEM messages never match; `reactions` and `attachments` are empty. Load the history around a hit with `after = sequenceNumber - 1`.",
+    request: { params: idParams, query: searchQuery },
+    responses: {
+      200: ok(
+        "Matching messages",
+        z.object({
+          status: z.literal("success"),
+          data: z.array(message),
+          meta: z.object({ limit: z.number().int(), hasMore: z.boolean() }),
+        }),
+      ),
+      ...failures,
+    },
+  });
+  registry.registerPath({
+    method: "get",
+    path: "/conversations/{id}/pins",
+    tags,
+    security,
+    summary: "Pinned messages",
+    description:
+      "The pin bar: messages pinned in this conversation, newest pin first, for everyone who can see it. Pinned messages that were deleted are left out. `reactions` and `attachments` of the message are empty. Staff only.",
+    request: { params: idParams },
+    responses: { 200: ok("Pins", successOf(z.array(pin))), ...failures },
+  });
+  registry.registerPath({
+    method: "get",
+    path: "/messages/search",
+    tags,
+    security,
+    summary: "Search messages in every conversation the caller may open",
+    description:
+      "The inbox search. Each word matches a whole word or the start of one (`sal` finds `salary`), ignoring case; all words must match. Newest first. Deleted and SYSTEM messages never match. Each hit carries the message (empty `reactions` and `attachments`) and its customer.",
+    request: { query: searchAllQuery },
+    responses: {
+      200: ok(
+        "Matching messages with their conversation",
+        z.object({
+          status: z.literal("success"),
+          data: z.array(
+            z.object({
+              message,
+              conversation: z.object({
+                id: z.string(),
+                customerName: nullableString,
+                customerIdentifier: nullableString,
+              }),
+            }),
+          ),
+          meta: z.object({ limit: z.number().int(), hasMore: z.boolean() }),
+        }),
+      ),
+      400: errors[400],
+      401: errors[401],
+    },
   });
   registry.registerPath({
     method: "post",

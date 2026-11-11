@@ -220,6 +220,28 @@ describe.skipIf(!url)("messaging on PostgreSQL", () => {
       ).toEqual([]);
     });
 
+    it("`from` starts the page at the first message on or after a time (jump to a day)", async () => {
+      await seed(4);
+      const day = (text: string, iso: string) =>
+        db.message.updateMany({ where: { conversationId: cid, content: text }, data: { createdAt: new Date(iso) } });
+      // Times rise with sequence numbers in real data, so the takeover note goes first too.
+      await db.message.updateMany({
+        where: { conversationId: cid, senderType: "SYSTEM" },
+        data: { createdAt: new Date("2026-09-30T10:00:00Z") },
+      });
+      await day("t1", "2026-10-01T10:00:00Z");
+      await day("t2", "2026-10-03T08:00:00Z");
+      await day("t3", "2026-10-03T09:00:00Z");
+      await day("t4", "2026-10-05T09:00:00Z");
+
+      const page = await messages.history(agent1, cid, { limit: 2, from: new Date("2026-10-02T00:00:00Z") });
+      expect(texts(page.items)).toEqual(["t2", "t3"]);
+      expect(page.meta).toMatchObject({ hasMore: true, direction: "newer" });
+      expect((await messages.history(agent1, cid, { limit: 2, from: new Date("2026-11-01T00:00:00Z") })).items).toEqual(
+        [],
+      );
+    });
+
     it("keeps soft-deleted messages as placeholders and hides the thread from agents who cannot see it", async () => {
       await seed(2);
       await db.message.updateMany({ where: { content: "t1" }, data: { deletedAt: new Date(), deletedBy: uid(1) } });
@@ -228,6 +250,87 @@ describe.skipIf(!url)("messaging on PostgreSQL", () => {
       expect(items.filter((m) => m.deletedAt !== null)).toHaveLength(1);
       expect(items.find((m) => m.deletedAt !== null)?.content).toBeNull();
       await expect(messages.history(agent2, cid, { limit: 50 })).rejects.toBeInstanceOf(NotFoundError);
+    });
+  });
+
+  describe("search across conversations", () => {
+    const supervisor: AuthContext = { userId: uid(9), role: "SUPERVISOR" };
+    const openChat = async (customerId: string, applicationId: number, customerName: string) =>
+      (await conversations.create(agent1, { customerId, applicationId, customerName, priority: "MEDIUM" })).conversation
+        .id;
+    const found = async (auth: AuthContext, q: string) =>
+      (await messages.searchAll(auth, { q, limit: 20 })).items.map((hit) => [
+        hit.conversation.customerName,
+        hit.message.content,
+      ]);
+
+    it("finds word starts in any case, newest first, only in chats the caller may open", async () => {
+      await takeOver();
+      await messages.send(agent1, cid, { clientId: "a1", text: "Your SALARY slip is attached" });
+      const other = await openChat(uid(101), 8, "Sok Dara");
+      await assignments.assign(agent2, other, {});
+      await messages.send(agent2, other, { clientId: "b1", text: "salary for Dara" });
+      const waiting = await openChat(uid(102), 9, "Lim Sophea");
+      await messages.receiveFromCustomer({
+        customerId: uid(102),
+        conversationId: waiting,
+        clientId: "c1",
+        text: "my salary is late",
+      });
+      await messages.send(agent1, cid, { clientId: "a2", text: "unrelated" });
+
+      expect(await found(agent1, "sal")).toEqual([
+        ["Lim Sophea", "my salary is late"],
+        ["Maya Chen", "Your SALARY slip is attached"],
+      ]);
+      expect(await found(agent2, "Salary")).toEqual([
+        ["Lim Sophea", "my salary is late"],
+        ["Sok Dara", "salary for Dara"],
+      ]);
+      expect((await found(supervisor, "salary")).map(([name]) => name)).toEqual([
+        "Lim Sophea",
+        "Sok Dara",
+        "Maya Chen",
+      ]);
+      expect(await found(agent1, "slip sal")).toEqual([["Maya Chen", "Your SALARY slip is attached"]]);
+      expect(await found(agent1, "took over")).toEqual([]);
+
+      await db.message.updateMany({ where: { content: "my salary is late" }, data: { deletedAt: new Date() } });
+      expect(await found(agent1, "salary")).toEqual([["Maya Chen", "Your SALARY slip is attached"]]);
+    });
+  });
+
+  describe("search", () => {
+    const say = (n: number, text: string) => messages.send(agent1, cid, { clientId: `s${n}`, text });
+
+    it("finds text in any case, newest first, and the hit's sequence loads the history around it", async () => {
+      await takeOver();
+      await say(1, "My SALARY is 1,200 USD");
+      for (let n = 2; n <= 8; n++) await say(n, `filler ${n}`);
+      await say(9, "salary slip attached");
+      await db.message.updateMany({
+        where: { content: "filler 5" },
+        data: { content: "salary", deletedAt: new Date() },
+      });
+
+      const found = await messages.search(agent1, cid, { q: "salary", limit: 50 });
+      expect(found.items.map((m) => m.content)).toEqual(["salary slip attached", "My SALARY is 1,200 USD"]);
+      expect(found.meta.hasMore).toBe(false);
+
+      const oldest = found.items[1]!;
+      const around = await messages.history(agent1, cid, { limit: 3, after: BigInt(oldest.sequenceNumber) - 1n });
+      expect(around.items.map((m) => m.content)).toEqual(["My SALARY is 1,200 USD", "filler 2", "filler 3"]);
+    });
+
+    it("treats % and _ literally, skips SYSTEM messages and hides the thread from agents who cannot see it", async () => {
+      await takeOver();
+      await say(1, "rate is 100% fixed");
+      await say(2, "rate is 1000 fixed");
+      expect((await messages.search(agent1, cid, { q: "100%", limit: 50 })).items.map((m) => m.content)).toEqual([
+        "rate is 100% fixed",
+      ]);
+      expect((await messages.search(agent1, cid, { q: "took over", limit: 50 })).items).toEqual([]);
+      await expect(messages.search(agent2, cid, { q: "rate", limit: 50 })).rejects.toBeInstanceOf(NotFoundError);
     });
   });
 

@@ -6,16 +6,17 @@ import type { RealtimeNotifier } from "@shared/ports/realtime.js";
 import { bestEffort } from "@shared/utils/best-effort.js";
 import { idToString } from "@shared/utils/ids.js";
 import {
+  MAX_PINS,
   MAX_REACTIONS_PER_USER,
   type EditInput,
   type ForwardInput,
   type ReactionInput,
   type ReplyInput,
 } from "./message-action.schema.js";
-import { toEditEntry, toMessage, toReaction } from "./message.mapper.js";
+import { toEditEntry, toMessage, toPin, toReaction } from "./message.mapper.js";
 import type { MessageRepository } from "./message.repository.js";
 import type { MessageService } from "./message.service.js";
-import type { LockedConversation, MessageHistoryDto, MessageRow } from "./message.types.js";
+import type { LockedConversation, MessageHistoryDto, MessageRow, PinDto } from "./message.types.js";
 
 const PREVIEW_LENGTH = 255;
 const toPreview = (text: string) => Array.from(text).slice(0, PREVIEW_LENGTH).join("");
@@ -232,6 +233,39 @@ export class MessageActionService {
    * Finds a message and locks its conversation, hiding messages the caller cannot see (and, unless asked, deleted
    * ones) as "not found" so their existence is not revealed.
    */
+  /**
+   * Pins a message to the top of its conversation for every agent. Changing pins follows the "organize" rule (the
+   * owner or a supervisor, or anyone while nobody owns the chat); everyone who can see the chat sees them. Pinning a
+   * pinned message changes nothing. The conversation row is locked, so concurrent pins cannot pass the limit.
+   */
+  async pin(auth: AuthContext, messageId: string): Promise<PinDto> {
+    const row = await this.repository.inTransaction(async (tx) => {
+      const { message, conversation } = await this.loadVisible(tx, auth, messageId);
+      if (message.senderType === "SYSTEM") throw new BadRequestError("System messages cannot be pinned");
+      if (!permissionsFor(auth, conversation).canOrganize) {
+        throw new ForbiddenError("Only the agent handling this conversation or a supervisor can change pins");
+      }
+      const existing = await tx.findPin(message.id);
+      if (existing && existing.unpinnedAt === null) return existing;
+      if ((await tx.activePins(conversation.id)).length >= MAX_PINS) {
+        throw new ConflictError(`A conversation can have at most ${MAX_PINS} pinned messages; unpin one first`);
+      }
+      return tx.pin(conversation.id, message.id, auth.userId);
+    });
+    return toPin(row);
+  }
+
+  /** Unpins a message (same rule as pinning). Unpinning one that is not pinned changes nothing. */
+  async unpin(auth: AuthContext, messageId: string): Promise<void> {
+    await this.repository.inTransaction(async (tx) => {
+      const { message, conversation } = await this.loadVisible(tx, auth, messageId);
+      if (!permissionsFor(auth, conversation).canOrganize) {
+        throw new ForbiddenError("Only the agent handling this conversation or a supervisor can change pins");
+      }
+      await tx.unpin(message.id, auth.userId);
+    });
+  }
+
   private async loadVisible(tx: MessageRepository, auth: AuthContext, messageId: string, includeDeleted = false) {
     const found = await tx.findAnyById(messageId);
     const conversation = found ? await tx.lock(found.conversationId) : null;

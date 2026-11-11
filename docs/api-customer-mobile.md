@@ -20,23 +20,23 @@ production) a `dev:<customerUuid>:CUSTOMER` token also works for local testing.
 
 ## Endpoints
 
-| Method and path                                      | Purpose                                                                                                                                             |
-| ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `POST /conversations/join`                           | **Join room.** Body `{ applicationId?, subject? }`. Finds the customer's conversation or creates one. `201` created, `200` existing.                |
-| `GET /me`                                            | The customer's own profile from Backend 1: `userId`, `chatUserId`, `name`, `avatarUrl`, `email`, `phone` (no national id, salary or flags).         |
-| `GET /me/conversations`                              | The customer's own conversations (customer-safe shape), latest activity first. `page`, `size`.                                                      |
-| `GET /conversations/:conversationId`                 | The conversation (customer-safe shape, below).                                                                                                      |
-| `GET /conversations/:conversationId/messages`        | **Retrieve messages**, oldest to newest. No cursor: latest page. `?before=<seq>` older, `?after=<seq>` newer (catch-up). `limit` 1 to 100.          |
-| `POST /conversations/:conversationId/messages`       | **Send text.** Body `{ clientId, text }` (text up to 4000 characters).                                                                              |
-| `POST /conversations/:conversationId/files`          | **Send file** (pdf, image, ...). Multipart: `file`, `clientId`, optional `text` caption. Allowed types and size limits as in the staff file API.    |
-| `POST /conversations/:conversationId/voice-messages` | **Send voice.** Multipart: `file` (audio), `clientId`, optional `durationMs`, optional `waveform` (JSON array of up to 200 integers 0 to 255).      |
-| `GET /attachments/:attachmentId/download`            | A file's bytes (`?inline=1` for images, audio, video). One `Range` is supported (206).                                                              |
-| `GET /messages/:messageId/audio`                     | The audio of a voice message, with `Range`.                                                                                                         |
-| `POST /conversations/:conversationId/calls`          | **Call staff.** Body `{ callType? }` (`AUDIO` default, or `VIDEO`). `201`, the call `RINGING`; every agent who may see the conversation is alerted. |
-| `POST /calls/:callId/accept`                         | Answer a ringing call **an agent started** (`403` for the customer's own call).                                                                     |
-| `POST /calls/:callId/decline`                        | Decline a ringing call an agent started.                                                                                                            |
-| `POST /calls/:callId/cancel`                         | Stop a ringing call **the customer started**.                                                                                                       |
-| `POST /calls/:callId/end`                            | Hang up an answered call (`409` while it still rings: cancel it instead).                                                                           |
+| Method and path                                      | Purpose                                                                                                                                                                   |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /conversations/join`                           | **Join room.** Body `{ applicationId?, subject? }`. Finds the customer's conversation or creates one. `201` created, `200` existing.                                      |
+| `GET /me`                                            | The customer's own profile from Backend 1: `userId`, `chatUserId`, `name`, `avatarUrl`, `email`, `phone` (no national id, salary or flags).                               |
+| `GET /me/conversations`                              | The customer's own conversations (customer-safe shape), latest activity first. `page`, `size`.                                                                            |
+| `GET /conversations/:conversationId`                 | The conversation (customer-safe shape, below).                                                                                                                            |
+| `GET /conversations/:conversationId/messages`        | **Retrieve messages**, oldest to newest. No cursor: latest page. `?before=<seq>` older, `?after=<seq>` newer (catch-up), `?from=<ISO time>` from a day. `limit` 1 to 100. |
+| `POST /conversations/:conversationId/messages`       | **Send text.** Body `{ clientId, text }` (text up to 4000 characters).                                                                                                    |
+| `POST /conversations/:conversationId/files`          | **Send file** (pdf, image, ...). Multipart: `file`, `clientId`, optional `text` caption. Allowed types and size limits as in the staff file API.                          |
+| `POST /conversations/:conversationId/voice-messages` | **Send voice.** Multipart: `file` (audio), `clientId`, optional `durationMs`, optional `waveform` (JSON array of up to 200 integers 0 to 255).                            |
+| `GET /attachments/:attachmentId/download`            | A file's bytes (`?inline=1` for images, audio, video). One `Range` is supported (206).                                                                                    |
+| `GET /messages/:messageId/audio`                     | The audio of a voice message, with `Range`.                                                                                                                               |
+| `POST /conversations/:conversationId/calls`          | **Call staff.** Body `{ callType? }` (`AUDIO` default, or `VIDEO`). `201`, the call `RINGING`; every agent who may see the conversation is alerted.                       |
+| `POST /calls/:callId/accept`                         | Answer a ringing call **an agent started** (`403` for the customer's own call).                                                                                           |
+| `POST /calls/:callId/decline`                        | Decline a ringing call an agent started.                                                                                                                                  |
+| `POST /calls/:callId/cancel`                         | Stop a ringing call **the customer started**.                                                                                                                             |
+| `POST /calls/:callId/end`                            | Hang up an answered call (`409` while it still rings: cancel it instead).                                                                                                 |
 
 A message's `attachments[].downloadPath` is relative to this base (`/attachments/<id>/download`), so the app fetches it
 with the same bearer token.

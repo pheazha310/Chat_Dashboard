@@ -44,6 +44,17 @@ export class MessageActionController {
     res.json({ status: "success", data });
   };
 
+  pin = async (req: Request, res: Response) => {
+    const { messageId } = parsed(req, "params", messageIdParams);
+    res.json({ status: "success", data: await this.service.pin(getAuth(req), messageId) });
+  };
+
+  unpin = async (req: Request, res: Response) => {
+    const { messageId } = parsed(req, "params", messageIdParams);
+    await this.service.unpin(getAuth(req), messageId);
+    res.json({ status: "success", data: null });
+  };
+
   unreact = async (req: Request, res: Response) => {
     const { messageId, reactionId } = parsed(req, "params", reactionParams);
     res.json({ status: "success", data: await this.service.unreact(getAuth(req), messageId, reactionId) });

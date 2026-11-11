@@ -98,7 +98,7 @@ Built (each has its API guide, listed in [AGENTS.md](../AGENTS.md)):
 | `conversations`                                                | Conversations, status, archive, priority, activity log, inbox filters and search                   | api-conversations.md     |
 | `assignments`                                                  | Takeover, assign, transfer, unassign, assignment history                                           | api-conversations.md     |
 | `messages`                                                     | Messages, receipts, unread; message actions (reply, edit, delete, reactions, forward)              | api-message-actions.md   |
-| `attachments`                                                  | Files, images, voice messages, secured downloads (`Storage` port, local-disk driver)               | api-attachments.md       |
+| `attachments`                                                  | Files, images, voice messages, secured downloads (`Storage` port, local-disk and S3 drivers)       | api-attachments.md       |
 | `notes`                                                        | Internal notes and agent mentions                                                                  | api-notes-escalations.md |
 | `escalations`                                                  | Escalation to a supervisor                                                                         | api-notes-escalations.md |
 | `tags`                                                         | Tag catalog and tagging of conversations                                                           | api-tags-priority.md     |

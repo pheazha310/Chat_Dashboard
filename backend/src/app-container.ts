@@ -1,8 +1,11 @@
 import { randomBytes } from "node:crypto";
+import { S3Client } from "@aws-sdk/client-s3";
 import { env } from "@config/env.js";
 import { logger } from "@config/logger.js";
 import { redis } from "@config/redis.js";
 import { LocalStorage } from "@shared/storage/local-storage.js";
+import { S3Storage } from "@shared/storage/s3-storage.js";
+import type { Storage } from "@shared/storage/storage.js";
 import { DevAuthClient } from "@shared/auth/dev-auth-client.js";
 import { MappedAuthClient } from "@shared/auth/mapped-auth-client.js";
 import { MemoryRateLimitStore, RedisRateLimitStore } from "@shared/middleware/rate-limit.middleware.js";
@@ -25,6 +28,15 @@ const csv = (value: string) =>
     .split(",")
     .map((part) => part.trim())
     .filter(Boolean);
+
+/** Where uploaded files live (STORAGE_DRIVER). env.ts refuses to start "s3" without S3_BUCKET and S3_REGION. */
+const storage: Storage =
+  env.STORAGE_DRIVER === "s3"
+    ? new S3Storage(
+        new S3Client({ region: env.S3_REGION, endpoint: env.S3_ENDPOINT, forcePathStyle: env.S3_FORCE_PATH_STYLE }),
+        env.S3_BUCKET as string,
+      )
+    : new LocalStorage(env.STORAGE_DIR);
 
 const identities = new ChatIdentityService(new ChatIdentityRepository());
 const authRepository = new AuthRepository();
@@ -72,7 +84,7 @@ export const container = createContainer(
   env.EVENT_BUS === "redis" ? new RedisEventBus(env.REDIS_URL) : new MemoryEventBus(),
   redis,
   createDirectory(() => new UserDirectory(userService)),
-  new LocalStorage(env.STORAGE_DIR),
+  storage,
   {
     reminderLeadMs: env.CALLBACK_REMINDER_MINUTES * 60_000,
     missedAfterMs: env.CALLBACK_MISSED_AFTER_MINUTES * 60_000,

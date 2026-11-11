@@ -6,6 +6,8 @@ import type {
   EditHistoryRow,
   MessageDto,
   MessageRow,
+  PinDto,
+  PinRow,
   ReactionDto,
   ReactionRow,
 } from "./message.types.js";
@@ -33,6 +35,15 @@ export const toAttachment = (row: AttachmentRow, messageId: string | null = null
   uploadedById: idToString(row.uploadedById),
   createdAt: row.createdAt.toISOString(),
   downloadPath: `/attachments/${idToString(row.id)}/download`,
+});
+
+export const toPin = (row: PinRow): PinDto => ({
+  id: idToString(row.id),
+  conversationId: idToString(row.conversationId),
+  messageId: idToString(row.messageId),
+  pinnedBy: idToString(row.pinnedBy),
+  pinnedAt: row.pinnedAt.toISOString(),
+  message: toMessage(row.message),
 });
 
 export const toReaction = (row: ReactionRow): ReactionDto => ({

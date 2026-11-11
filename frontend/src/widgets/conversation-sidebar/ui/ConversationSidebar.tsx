@@ -1,18 +1,24 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ConversationItem,
+  ensureConversation,
   FILTERS,
   filterConversations,
   loadArchived,
+  loadMoreConversations,
+  paginate,
   useConversationStore,
   type ConversationSort,
   type PriorityFilter,
 } from "@/entities/conversation";
 import { selectConversation } from "@/features/select-conversation";
+import { InboxMessageResults, showMessage } from "@/features/search-in-chat";
 import { useMessageSettingsStore } from "@/features/message-settings";
 import { useSessionStore } from "@/shared/api/session";
 import { API_URL, assets } from "@/shared/config";
 import { AssetIcon, IconPill } from "@/shared/ui";
+
+const PAGE_SIZE = 10;
 
 type Props = { open: boolean; onClose: () => void; onExpand: () => void };
 
@@ -30,6 +36,8 @@ export default function ConversationSidebar({ open, onClose, onExpand }: Props) 
   const setTagFilter = useConversationStore((state) => state.setTagFilter);
   const sort = useConversationStore((state) => state.sort);
   const setSort = useConversationStore((state) => state.setSort);
+  const hasMore = useConversationStore((state) => state.inboxHasMore);
+  const loadingMore = useConversationStore((state) => state.inboxLoading);
   const me = useSessionStore((state) => state.userId);
   const openSettings = useMessageSettingsStore((state) => state.setOpen);
   const visible = useMemo(
@@ -40,6 +48,16 @@ export default function ConversationSidebar({ open, onClose, onExpand }: Props) 
       ),
     [byId, order, filter, query, me, priorityFilter, tagFilter, sort],
   );
+  const [requestedPage, setPage] = useState(1);
+  useEffect(() => setPage(1), [filter, query, priorityFilter, tagFilter, sort]);
+  const { items: pageItems, page, totalPages } = paginate(visible, requestedPage, PAGE_SIZE);
+  const canGoNext = page < totalPages || (hasMore && filter !== "archived");
+  const goNext = async () => {
+    if (page < totalPages) return setPage(page + 1);
+    const before = useConversationStore.getState().order.length;
+    await loadMoreConversations();
+    if (useConversationStore.getState().order.length > before) setPage(page + 1);
+  };
   // Only tags that some loaded conversation carries can narrow the list.
   const tagOptions = useMemo(() => {
     const seen = new Map<string, string>();
@@ -124,8 +142,9 @@ export default function ConversationSidebar({ open, onClose, onExpand }: Props) 
         </div>
       )}
       <div className="conversation-list">
+        {query.trim() && <h2 className="inbox-results-heading">Customers</h2>}
         {visible.length === 0 && <div className="empty-search">No conversations found</div>}
-        {visible.map((conversation) => (
+        {pageItems.map((conversation) => (
           <ConversationItem
             key={conversation.id}
             conversation={conversation}
@@ -136,7 +155,39 @@ export default function ConversationSidebar({ open, onClose, onExpand }: Props) 
             }}
           />
         ))}
+        <InboxMessageResults
+          query={query}
+          onOpen={async (hit) => {
+            // Open the chat (fetching it if the inbox has not loaded it), then load back to the message and scroll there.
+            if (!(await ensureConversation(hit.conversationId))) return;
+            selectConversation(hit.conversationId);
+            onClose();
+            await showMessage(hit.conversationId, {
+              id: hit.messageId,
+              ...(hit.sequence === undefined ? {} : { sequence: hit.sequence }),
+            });
+          }}
+        />
       </div>
+      {(totalPages > 1 || canGoNext) && (
+        <nav className="conversation-pager" aria-label="Conversation pages">
+          <button type="button" disabled={page <= 1} onClick={() => setPage(page - 1)} aria-label="Previous page">
+            ‹ Prev
+          </button>
+          <span>
+            Page {page} of {totalPages}
+            {hasMore && filter !== "archived" ? "+" : ""}
+          </span>
+          <button
+            type="button"
+            disabled={!canGoNext || loadingMore}
+            onClick={() => void goNext()}
+            aria-label="Next page"
+          >
+            {loadingMore ? "Loading…" : "Next ›"}
+          </button>
+        </nav>
+      )}
     </aside>
   );
 }

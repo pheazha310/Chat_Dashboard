@@ -11,6 +11,8 @@ export type SharedFile = {
   added: string;
   /** Set for files from the server; the bytes need the bearer token. */
   downloadPath?: string;
+  /** The message the file was sent with (files from the server), so the chat can show it in context. */
+  messageId?: string;
 };
 export type MediaFilter = "All" | "Documents" | "Images";
 
@@ -71,6 +73,7 @@ export const useSharedFilesStore = create<FilesState>((set) => ({
             minute: "2-digit",
           }),
           downloadPath: item.downloadPath,
+          ...(item.messageId ? { messageId: item.messageId } : {}),
         })),
       });
     } catch {

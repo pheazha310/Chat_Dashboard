@@ -358,6 +358,29 @@ button {
 .conversation-list::-webkit-scrollbar {
   display: none;
 }
+.conversation-pager {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 4px 12px;
+  font-size: 13px;
+  color: #6b7280;
+}
+.conversation-pager button {
+  padding: 6px 14px;
+  border: 1px solid #d9dee8;
+  border-radius: 999px;
+  background: #fff;
+  color: #3a64e4;
+  font-weight: 600;
+  cursor: pointer;
+}
+.conversation-pager button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
 .conversation-item {
   flex: 0 0 auto;
   width: 100%;
@@ -600,6 +623,184 @@ button {
   border-radius: 50%;
   background: #f3f4f6;
   color: #6b7280;
+}
+.chat-searchbar button:disabled {
+  opacity: 0.4;
+}
+.chat-search-count {
+  flex-shrink: 0;
+  color: #6b7280;
+  font-size: 12px;
+  white-space: nowrap;
+}
+/* Search matches in the thread, yellow like browser find. */
+.message-bubble mark {
+  border-radius: 2px;
+  background: #fde68a;
+  color: inherit;
+}
+/* The message the chat just jumped to (search hit or quoted reply). */
+.message-block.focused .message-bubble {
+  animation: message-flash 1.6s ease-out;
+}
+/* Pinned messages of the conversation, one at a time; clicking jumps there and moves to the next. */
+.pin-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 16px 0;
+  padding: 8px 12px;
+  border: 1px solid #dbe1ea;
+  border-left: 3px solid #053cc7;
+  border-radius: 10px;
+  background: white;
+  text-align: left;
+  cursor: pointer;
+}
+.pin-bar:hover {
+  background: #f7f8fa;
+}
+.pin-bar-text {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  font-size: 12px;
+}
+.pin-bar-text strong {
+  color: #053cc7;
+  font-size: 11px;
+}
+.pin-bar-text span {
+  overflow: hidden;
+  color: #111827;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Day dividers and the 📅 button: a button that opens the browser's calendar (the date input stays invisible). */
+.jump-to-date {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+  align-self: center;
+}
+.jump-to-date input {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+button.today-pill {
+  border: 0;
+  cursor: pointer;
+}
+button.today-pill:hover {
+  color: rgba(0, 0, 0, 0.7);
+}
+.chat-searchbar {
+  flex-wrap: wrap;
+}
+.chat-search-recent {
+  display: flex;
+  flex-basis: 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  color: #6b7280;
+  font-size: 11px;
+}
+.chat-searchbar .chat-search-recent button {
+  width: auto;
+  height: auto;
+  padding: 2px 10px;
+  border-radius: 100px;
+  color: #111827;
+  font-size: 12px;
+}
+/* Inbox search: "Customers" above the conversation list, "Messages" with what was said below it. */
+.inbox-results-heading,
+.inbox-message-results h2 {
+  margin: 4px 4px 0;
+  color: #6b7280;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.inbox-message-results {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid #edf0f5;
+}
+.inbox-message-results .empty-search {
+  padding: 12px 0;
+}
+.inbox-message-hit {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid #edf0f5;
+  border-radius: 10px;
+  background: white;
+  text-align: left;
+  cursor: pointer;
+}
+.inbox-message-hit:hover,
+.inbox-message-hit:focus-visible {
+  border-color: #9db4ff;
+}
+.inbox-message-hit-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: #111827;
+  font-size: 13px;
+}
+.inbox-message-hit-head time {
+  flex-shrink: 0;
+  color: #6b7280;
+  font-size: 11px;
+}
+.inbox-message-hit-text {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  color: #4b5563;
+  font-size: 12px;
+}
+.inbox-message-hit mark {
+  border-radius: 2px;
+  background: #fde68a;
+  color: inherit;
+}
+.inbox-message-more {
+  color: #6b7280;
+  font-size: 11px;
+  text-align: center;
+}
+/* Media & files: find by name, and jump to the message a file came with. */
+.media-name-search {
+  width: 100%;
+  margin-top: 8px;
+  padding: 8px 12px;
+  border: 1px solid #dbe1ea;
+  border-radius: 10px;
+  font-size: 13px;
+}
+@keyframes message-flash {
+  0%,
+  40% {
+    box-shadow: 0 0 0 3px #facc15;
+  }
+  100% {
+    box-shadow: 0 0 0 3px transparent;
+  }
 }
 
 .chat-stream {

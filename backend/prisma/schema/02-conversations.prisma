@@ -34,6 +34,7 @@ model Conversation {
   conversationAssignments          ConversationAssignment[]
   conversationActivities           ConversationActivity[]
   messages                         Message[]
+  messagePins                      MessagePin[]
   conversationReads                ConversationRead[]
   attachments                      Attachment[]
   internalNotes                    InternalNote[]

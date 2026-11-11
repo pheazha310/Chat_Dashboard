@@ -16,12 +16,22 @@ export const pageMeta = (total: number, { page, size }: PageQuery) => ({
   totalPages: Math.max(1, Math.ceil(total / size)),
 });
 
-/** Cursor pagination for message history: `before`/`after` are message sequence numbers. */
+/**
+ * Cursor pagination for message history: `before`/`after` are message sequence numbers; `from` is a time (ISO 8601
+ * with offset) and starts the page at the first message on or after it, to jump to a day.
+ */
 export const cursorQuery = z
   .object({
     before: z.coerce.bigint().positive().optional(),
     after: z.coerce.bigint().nonnegative().optional(),
+    from: z.iso
+      .datetime({ offset: true })
+      .transform((value) => new Date(value))
+      .optional(),
     limit: z.coerce.number().int().min(1).max(100).default(50),
   })
-  .refine((q) => q.before === undefined || q.after === undefined, "Use either before or after, not both");
+  .refine(
+    (q) => [q.before, q.after, q.from].filter((cursor) => cursor !== undefined).length <= 1,
+    "Use only one of before, after or from",
+  );
 export type CursorQuery = z.infer<typeof cursorQuery>;

@@ -13,6 +13,7 @@ import {
   toggleReaction,
   useEditingStore,
 } from "../model/actions";
+import { togglePin, useConversationPins } from "../model/pins";
 
 const EMOJI = ["👍", "❤️", "😂", "🙏", "✅"];
 
@@ -21,6 +22,7 @@ export default function MessageActions({ message }: { message: ChatMessage }) {
   const [open, setOpen] = useState(false);
   const [forwarding, setForwarding] = useState(false);
   const conversations = useConversationStore((state) => state.byId);
+  const pinned = useConversationPins(message.conversationId).some((pin) => pin.messageId === message.id);
   if (!API_URL) return null;
 
   const can = availableActions(message);
@@ -67,6 +69,11 @@ export default function MessageActions({ message }: { message: ChatMessage }) {
           {can.reply && (
             <button type="button" role="menuitem" onClick={() => (replyTo(message), close())}>
               Reply
+            </button>
+          )}
+          {can.react && (
+            <button type="button" role="menuitem" onClick={() => (void togglePin(message), close())}>
+              {pinned ? "Unpin" : "Pin for everyone"}
             </button>
           )}
           {can.copy && (

@@ -34,6 +34,9 @@ Sender information is `senderType` and `senderId` (a Backend 1 id); names and av
 | `PUT /messages/:messageId/reactions`                | `{ emoji }`                          | Anyone who can see the conversation. Idempotent. Not on SYSTEM messages. Max 10 different emojis per user and message (409).                                |
 | `DELETE /messages/:messageId/reactions/:reactionId` |                                      | The reaction's owner only (403 otherwise; 404 if it belongs to another message). Soft delete (`deleted_at`); reacting again with the same emoji revives it. |
 | `POST /messages/:messageId/forwards`                | `{ targetConversationId, clientId }` | See the rules below. 201, or 200 with the existing copy on a retry.                                                                                         |
+| `PUT /messages/:messageId/pin`                      |                                      | Owner or supervisor, or anyone while nobody owns the conversation (`canOrganize`). Idempotent. Not on SYSTEM messages. Max 10 pins per conversation (409).  |
+| `DELETE /messages/:messageId/pin`                   |                                      | Same as pinning. 200 with `data: null`. Soft delete (`unpinned_at`); pinning again revives the row.                                                         |
+| `GET /conversations/:id/pins`                       |                                      | Anyone who can see the conversation. The pin bar, newest pin first; deleted messages drop out. Staff only: customers never see pins.                        |
 
 ### Rules
 

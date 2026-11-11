@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { API_URL } from "@/shared/config";
 import { saveAttachment } from "@/shared/lib/use-attachment-url";
 import { notify } from "@/shared/ui";
@@ -29,6 +29,7 @@ export default function MediaFilesPanel({
   conversationId,
   onBack,
   backLabel = "Back to customer details",
+  onShowInChat,
 }: {
   customer: string;
   appId: string;
@@ -36,20 +37,24 @@ export default function MediaFilesPanel({
   conversationId?: string;
   onBack: () => void;
   backLabel?: string;
+  /** Jump to the message a file was sent with (like "Show in chat" in messaging apps). */
+  onShowInChat?: (messageId: string) => void;
 }) {
   const { files, filter, setFilter, add, load, loading, error } = useSharedFilesStore();
+  const [name, setName] = useState("");
   const server = !!API_URL && conversationId !== undefined;
   useEffect(() => {
     if (server) void load(conversationId);
   }, [server, conversationId, load]);
   const inputRef = useRef<HTMLInputElement>(null);
-  const visible = useMemo(
-    () =>
-      files.filter(
-        (file) => filter === "All" || (filter === "Documents" ? file.kind === "Document" : file.kind === "Image"),
-      ),
-    [files, filter],
-  );
+  const visible = useMemo(() => {
+    const needle = name.trim().toLowerCase();
+    return files.filter(
+      (file) =>
+        (filter === "All" || (filter === "Documents" ? file.kind === "Document" : file.kind === "Image")) &&
+        file.name.toLowerCase().includes(needle),
+    );
+  }, [files, filter, name]);
 
   return (
     <section className="context-detail-panel">
@@ -83,6 +88,14 @@ export default function MediaFilesPanel({
           </button>
         ))}
       </div>
+      <input
+        className="media-name-search"
+        type="search"
+        value={name}
+        onChange={(event) => setName(event.target.value)}
+        placeholder="Find a file by name"
+        aria-label="Find a file by name"
+      />
       {!server && (
         <button type="button" className="upload-file" onClick={() => inputRef.current?.click()}>
           <span>＋</span>
@@ -115,6 +128,17 @@ export default function MediaFilesPanel({
                 {file.size} · {file.added}
               </small>
             </div>
+            {onShowInChat && file.messageId && (
+              <button
+                type="button"
+                className="show-in-chat"
+                onClick={() => onShowInChat(file.messageId as string)}
+                aria-label={`Show ${file.name} in chat`}
+                title="Show in chat"
+              >
+                ⤴
+              </button>
+            )}
             <button
               type="button"
               onClick={() => downloadFile(file, customer, appId)}
@@ -126,7 +150,11 @@ export default function MediaFilesPanel({
         ))}
         {loading && <p className="empty-files">Loading files…</p>}
         {error && <p className="empty-files">Could not load the files.</p>}
-        {!loading && !error && visible.length === 0 && <p className="empty-files">No files in this category.</p>}
+        {!loading && !error && visible.length === 0 && (
+          <p className="empty-files">
+            {name.trim() ? `No files named “${name.trim()}”.` : "No files in this category."}
+          </p>
+        )}
       </div>
     </section>
   );

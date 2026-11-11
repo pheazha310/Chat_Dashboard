@@ -9,9 +9,9 @@ import { idToString } from "@shared/utils/ids.js";
 import type { CursorQuery } from "@shared/utils/pagination.js";
 import type { NotificationService } from "@modules/notifications/index.js";
 import type { MessageRepository, NewAttachment } from "./message.repository.js";
-import type { SendInput } from "./message.schema.js";
-import { toAttachment, toMessage } from "./message.mapper.js";
-import type { LockedConversation, MessageRow, ReadState } from "./message.types.js";
+import type { SearchAllQuery, SearchQuery, SendInput } from "./message.schema.js";
+import { toAttachment, toMessage, toPin } from "./message.mapper.js";
+import type { LockedConversation, MessageRow, PinDto, ReadState } from "./message.types.js";
 
 const PREVIEW_LENGTH = 255;
 /** Cut by code points: a split surrogate pair would be rejected by PostgreSQL. */
@@ -369,10 +369,43 @@ export class MessageService implements SystemMessagePort, MessageLookup {
       meta: {
         limit: query.limit,
         hasMore,
-        direction: query.after === undefined ? "older" : "newer",
+        direction: query.after === undefined && query.from === undefined ? "older" : "newer",
         oldestSequence: items[0] ? items[0].sequenceNumber.toString() : null,
         newestSequence: items.at(-1) ? items.at(-1)!.sequenceNumber.toString() : null,
       },
+    };
+  }
+
+  /**
+   * Text search in one conversation, newest match first. Each hit carries its `sequenceNumber`, so the client can
+   * load the history around it with the normal cursors. Deleted and SYSTEM messages never match.
+   */
+  async search(auth: AuthContext, conversationId: string, query: SearchQuery) {
+    await this.requireVisible(auth, conversationId);
+    const rows = await this.repository.search(conversationId, query.q, query.limit + 1);
+    return {
+      items: rows.slice(0, query.limit).map((row) => toMessage(row)),
+      meta: { limit: query.limit, hasMore: rows.length > query.limit },
+    };
+  }
+
+  /** The pin bar: messages pinned in this conversation, newest pin first. Everyone who can see the chat sees them. */
+  async listPins(auth: AuthContext, conversationId: string): Promise<PinDto[]> {
+    await this.requireVisible(auth, conversationId);
+    return (await this.repository.activePins(conversationId)).map(toPin);
+  }
+
+  /**
+   * Search across every conversation the caller may open (the inbox search), newest first. Each word matches a whole
+   * word or the start of one ("sal" finds "salary"), using the full-text index on message content.
+   */
+  async searchAll(auth: AuthContext, query: SearchAllQuery) {
+    const words = (query.q.toLowerCase().match(/[\p{L}\p{M}\p{N}]+/gu) ?? []).slice(0, 8);
+    if (words.length === 0) return { items: [], meta: { limit: query.limit, hasMore: false } };
+    const rows = await this.repository.searchAll(auth, words.map((word) => `${word}:*`).join(" & "), query.limit + 1);
+    return {
+      items: rows.slice(0, query.limit).map(({ conversation, ...row }) => ({ message: toMessage(row), conversation })),
+      meta: { limit: query.limit, hasMore: rows.length > query.limit },
     };
   }
 
