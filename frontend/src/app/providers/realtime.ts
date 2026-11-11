@@ -1,5 +1,6 @@
 import { loadDetails, useConversationStore } from "@/entities/conversation";
 import { catchUp, loadHistory, newestSequences, useMessageStore } from "@/entities/message";
+import { loadNotifications, useNotificationStore } from "@/entities/notification";
 import { useSessionStore } from "@/shared/api/session";
 import { isMockTransport, wsClient } from "@/shared/api/ws";
 import { useNotesStore } from "@/features/internal-notes";
@@ -107,6 +108,7 @@ export function startRealtime() {
       payload.incomplete?.forEach((id) => void catchUp(id));
       loadWorkspace();
       loadChatSettings();
+      void loadNotifications();
     }),
     // Another window of this agent changed the workspace.
     wsClient.on("workspace.tab_opened", ({ conversationId }) => useChatTabsStore.getState().add(conversationId)),
@@ -131,9 +133,13 @@ export function startRealtime() {
       conversations.getState().setUnread(conversationId, unread),
     ),
     wsClient.on("notification", ({ notification }) => {
+      useNotificationStore.getState().add(notification);
       notify(notification.text);
       showBrowserNotification("Chat Dashboard", notification.text);
     }),
+    wsClient.on("notification.read", ({ notificationId, unreadCount }) =>
+      useNotificationStore.getState().applyRead(notificationId, unreadCount),
+    ),
     wsClient.on("message.new", ({ message }) => messages.getState().upsert(message)),
     wsClient.on("message.ack", ({ message }) => messages.getState().upsert(message)),
     wsClient.on("message.updated", ({ message }) => messages.getState().upsert(message)),

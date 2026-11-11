@@ -154,10 +154,10 @@ export class ConversationRepository {
     return { items, total };
   }
 
-  /** The customer's most recently active conversation that is not closed (support conversations only). */
+  /** The customer's most recently active conversation that is not closed, archived or not (support conversations only). */
   findOpenForCustomer(customerId: string): Promise<ConversationWithTags | null> {
     return this.db.conversation.findFirst({
-      where: { customerId, conversationType: "CUSTOMER_SUPPORT", status: { not: "CLOSED" }, isArchived: false },
+      where: { customerId, conversationType: "CUSTOMER_SUPPORT", status: { not: "CLOSED" } },
       orderBy: { lastMessageAt: "desc" },
       include: withTags,
     });

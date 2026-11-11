@@ -22,6 +22,10 @@ import { NoteRepository } from "@modules/notes/note.repository.js";
 import { NoteService } from "@modules/notes/note.service.js";
 import { TagRepository } from "@modules/tags/tag.repository.js";
 import { TagService } from "@modules/tags/tag.service.js";
+import { AutoResponseRepository } from "@modules/automation/auto-response.repository.js";
+import { AutoResponseService } from "@modules/automation/auto-response.service.js";
+import { AutomationRepository } from "@modules/automation/automation.repository.js";
+import { AutomationService } from "@modules/automation/automation.service.js";
 import { CannedResponseRepository } from "@modules/canned-responses/canned-response.repository.js";
 import { CannedResponseService } from "@modules/canned-responses/canned-response.service.js";
 import { PresenceRepository } from "@modules/presence/presence.repository.js";
@@ -65,7 +69,14 @@ export function createContainer(
   const notifications = new NotificationService(new NotificationRepository(), realtime, () => conversations);
   const messageRepository = new MessageRepository();
   let moderation!: ModerationService;
-  const messages = new MessageService(messageRepository, notifications, realtime, () => moderation);
+  let autoResponses!: AutoResponseService;
+  const messages = new MessageService(
+    messageRepository,
+    notifications,
+    realtime,
+    () => moderation,
+    () => autoResponses,
+  );
   const messageActions = new MessageActionService(messageRepository, messages, realtime);
   conversations = new ConversationService(
     new ConversationRepository(),
@@ -75,7 +86,10 @@ export function createContainer(
     notifications,
     presence,
     new ChatIdentityService(new ChatIdentityRepository()),
+    () => autoResponses,
   );
+  autoResponses = new AutoResponseService(new AutoResponseRepository(), () => messages, presence);
+  const automation = new AutomationService(new AutomationRepository());
   const assignments = new AssignmentService(new AssignmentRepository(), notifications, messages, realtime);
   const attachments = new AttachmentService(
     new AttachmentRepository(),
@@ -139,6 +153,7 @@ export function createContainer(
     callbacks,
     calls,
     moderation,
+    automation,
   };
 }
 

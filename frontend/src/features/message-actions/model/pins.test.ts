@@ -6,7 +6,7 @@ vi.mock("@/shared/ui", () => ({ notify: vi.fn() }));
 
 import type { ChatMessage } from "@/entities/message";
 import { notify } from "@/shared/ui";
-import { loadPins, togglePin, usePinStore } from "./pins";
+import { loadPins, togglePin, unpinMessage, usePinStore } from "./pins";
 
 const backendPin = (messageId: string, content: string, sequence = "5") => ({
   id: `p-${messageId}`,
@@ -70,5 +70,30 @@ describe("togglePin", () => {
     await togglePin(message("m7", "x"));
     expect(notify).toHaveBeenCalledWith("A conversation can have at most 10 pinned messages; unpin one first");
     expect(pins() ?? []).toEqual([]);
+  });
+});
+
+describe("unpinMessage", () => {
+  it("removes a pin straight from the pin bar", async () => {
+    usePinStore.setState({
+      byConversation: {
+        a: [
+          { messageId: "m2", sequence: "9", text: "x" },
+          { messageId: "m1", sequence: "5", text: "y" },
+        ],
+      },
+    });
+    rest.unpinRequest.mockResolvedValue(null);
+    await unpinMessage("a", "m2");
+    expect(rest.unpinRequest).toHaveBeenCalledWith("m2");
+    expect(pins()?.map((p) => p.messageId)).toEqual(["m1"]);
+  });
+
+  it("keeps the pin and shows the reason when the server refuses", async () => {
+    usePinStore.setState({ byConversation: { a: [{ messageId: "m1", sequence: "5", text: "y" }] } });
+    rest.unpinRequest.mockRejectedValue(new Error("Not allowed"));
+    await unpinMessage("a", "m1");
+    expect(notify).toHaveBeenCalledWith("Not allowed");
+    expect(pins()?.map((p) => p.messageId)).toEqual(["m1"]);
   });
 });

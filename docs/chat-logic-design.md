@@ -78,7 +78,7 @@ NONE --(escalate / callback / customer asks)--> NEEDS_HUMAN --(takeover)--> ASSI
    - `UPDATE conversations SET last_sequence_number = last_sequence_number + 1, last_message_at = now(),
 last_message_preview = ... RETURNING last_sequence_number` (the row lock serializes senders);
    - insert the message with that `sequence_number` (`sender_type = CUSTOMER`, idempotent on `client_id`);
-   - if the conversation was `RESOLVED` or `CLOSED`, reopen it.
+   - if the conversation was `RESOLVED` or `CLOSED`, reopen it; if it was archived, restore it (activity `RESTORED`).
 2. Emit `message.new` and `conversation.updated` to the sockets allowed to see it.
 3. Branch on `conversation_mode` and `handoff_status`:
    - `AI`: enqueue the AI job.

@@ -13,6 +13,7 @@ import { registerCustomerOpenApi } from "@modules/customers/customer.openapi.js"
 import { registerNotificationOpenApi } from "@modules/notifications/notification.openapi.js";
 import { registerMessageActionOpenApi } from "@modules/messages/message-action.openapi.js";
 import { registerMessageOpenApi } from "@modules/messages/message.openapi.js";
+import { registerAutomationOpenApi } from "@modules/automation/automation.openapi.js";
 import { registerModerationOpenApi } from "@modules/moderation/moderation.openapi.js";
 import { registerCallOpenApi } from "@modules/calls/call.openapi.js";
 import { registerCallbackOpenApi } from "@modules/callbacks/callback.openapi.js";
@@ -45,5 +46,6 @@ export function buildOpenApiDocument() {
   registerCallbackOpenApi(registry);
   registerCallOpenApi(registry);
   registerModerationOpenApi(registry);
+  registerAutomationOpenApi(registry);
   return generateDocument(registry);
 }

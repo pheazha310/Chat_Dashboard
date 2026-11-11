@@ -107,7 +107,7 @@ export default function MessageSettingsDialog() {
                 <SettingsRow
                   icon={assets.settings.minus}
                   title="Spam & abuse controls"
-                  description="Review flagged messages and blocked keywords."
+                  description="Manage blocked keywords that flag customer messages."
                   chevron={assets.settings.chevronAlt}
                   onOpen={() => setPage("spam")}
                   last

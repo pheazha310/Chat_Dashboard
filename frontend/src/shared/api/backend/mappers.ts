@@ -169,6 +169,7 @@ export function toNotification(source: BackendNotification, agentId: string): No
     agentId,
     type: NOTIFICATION_TYPE[source.type] ?? "system",
     text: source.body ? `${source.title}: ${source.body}` : source.title,
+    conversationId: source.conversationId,
     read: source.read,
     createdAt: source.createdAt,
   };

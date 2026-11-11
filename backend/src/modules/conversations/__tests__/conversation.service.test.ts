@@ -39,6 +39,7 @@ const repo = {
   inTransaction: vi.fn(),
 };
 const identities = { ensureCustomer: vi.fn(async () => {}) };
+const autoResponder = { conversationStarted: vi.fn(), customerMessaged: vi.fn() };
 const service = new ConversationService(
   fromPartial<ConversationRepository>(repo),
   systemMessages,
@@ -47,6 +48,7 @@ const service = new ConversationService(
   fromPartial<NotificationService>(notifications),
   availableAgents,
   identities,
+  () => autoResponder,
 );
 
 const agent: AuthContext = { userId: uid(1), role: "AGENT" };
@@ -436,6 +438,21 @@ describe("joinForCustomer", () => {
     );
   });
 
+  it("lets the automatic replies send the first response for a new conversation, but not for an existing one", async () => {
+    await service.joinForCustomer(customer, {});
+    expect(autoResponder.conversationStarted).toHaveBeenCalledWith(uid(11));
+
+    autoResponder.conversationStarted.mockClear();
+    repo.findOpenForCustomer.mockResolvedValue(row({ id: uid(12) }));
+    await service.joinForCustomer(customer, {});
+    expect(autoResponder.conversationStarted).not.toHaveBeenCalled();
+  });
+
+  it("still creates the conversation when the first response fails", async () => {
+    autoResponder.conversationStarted.mockRejectedValue(new Error("boom"));
+    expect((await service.joinForCustomer(customer, {})).created).toBe(true);
+  });
+
   it("saves the customer's display name on the new conversation so the inbox shows it", async () => {
     directory.getCustomer.mockResolvedValue({ id: customer, name: "Dara Sok" });
     await service.joinForCustomer(customer, {});
@@ -486,6 +503,28 @@ describe("joinForCustomer", () => {
     expect(result.created).toBe(false);
     expect(repo.create).not.toHaveBeenCalled();
     expect(repo.setApplication).toHaveBeenCalledWith(uid(14), 200);
+  });
+
+  it("one chat per customer: joining an archived conversation restores it instead of creating another", async () => {
+    repo.findOpenForCustomer.mockResolvedValue(row({ id: uid(15), customerId: customer, isArchived: true }));
+    repo.findForAccess.mockResolvedValue(row({ id: uid(15), customerId: customer }));
+    const result = await service.joinForCustomer(customer, {});
+    expect(result.created).toBe(false);
+    expect(repo.create).not.toHaveBeenCalled();
+    expect(repo.setArchived).toHaveBeenCalledWith(uid(15), false);
+    expect(repo.addActivity).toHaveBeenCalledWith(
+      expect.objectContaining({ conversationId: uid(15), activityType: "RESTORED" }),
+    );
+  });
+
+  it("restores the application's archived conversation too, and leaves an active one alone", async () => {
+    repo.findByApplication.mockResolvedValue(row({ id: uid(12), customerId: customer, isArchived: true }));
+    await service.joinForCustomer(customer, { applicationId: 200 });
+    expect(repo.setArchived).toHaveBeenCalledWith(uid(12), false);
+    repo.setArchived.mockClear();
+    repo.findByApplication.mockResolvedValue(row({ id: uid(12), customerId: customer, isArchived: false }));
+    await service.joinForCustomer(customer, { applicationId: 200 });
+    expect(repo.setArchived).not.toHaveBeenCalled();
   });
 
   it("does not touch the application when the open conversation already has it", async () => {

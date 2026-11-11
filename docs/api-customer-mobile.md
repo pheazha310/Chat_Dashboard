@@ -45,7 +45,8 @@ with the same bearer token.
 
 A "room" is a conversation. A customer has **one open conversation**: joining reuses it whatever the `applicationId`,
 and a different `applicationId` becomes the conversation's current application (a conversation that already belongs to
-that application is reused first, which keeps older per-application chats working). A closed conversation is not
+that application is reused first, which keeps older per-application chats working). An **archived** conversation is
+reused too and restored to the inbox (activity `RESTORED`), so archiving never splits a customer into two chats. A closed conversation is not
 reused, so the next join starts a new one, in `HUMAN` mode waiting for an agent (the AI worker is not built); available
 agents are notified. `applicationId` is the LOS loan application id, a positive integer. The conversation stores the customer's display name so the dashboard inbox can show it.
 
@@ -70,14 +71,14 @@ unknown), as for the staff API.
 
 - Generate a `clientId` per message (a UUID). Resending the same `clientId` after a timeout returns the **original**
   message with `200` instead of creating a duplicate; the same holds for files and voice.
-- A resolved or closed conversation is **reopened** by a new customer message, and the owning agent is notified.
+- A resolved or closed conversation is **reopened** by a new customer message, an archived one is **restored** to the inbox, and the owning agent is notified.
 - A **blocked** customer gets `403`. A message with a blocked keyword is kept and flagged for agents (see
   [api-moderation.md](api-moderation.md)).
 - Uploads: `413` over the size limit, `400` for a disallowed type, mismatched extension or content.
 
 ## Retrieving
 
-`data` is an array of messages (`id`, `sequenceNumber`, `senderType` `CUSTOMER`/`AGENT`/`ASSISTANT`, `type`, `content`,
+`data` is an array of messages (`id`, `sequenceNumber`, `senderType` `CUSTOMER`/`AGENT`/`ASSISTANT` (an automatic first response or away message is an `ASSISTANT` message; `docs/api-automation.md`), `type`, `content`,
 `attachments`, `createdAt`, ...); `meta` holds `hasMore`, `oldestSequence`, `newestSequence`. Internal `SYSTEM` messages
 (takeover, transfer, status changes) are left out and `metadata` is always `null`. A deleted message stays in place
 with `deletedAt` set and no `content` or `attachments`: show "This message was deleted". To stay up to date, call

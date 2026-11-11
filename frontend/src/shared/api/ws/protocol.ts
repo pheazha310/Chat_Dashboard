@@ -141,6 +141,8 @@ export type NotificationDto = {
   agentId: string;
   type: NotificationType;
   text: string;
+  /** The conversation the notification is about, when it has one. */
+  conversationId?: string | null;
   read: boolean;
   createdAt: string;
 };
@@ -189,6 +191,8 @@ export type ServerEventMap = {
   typing: { conversationId: string; side: MessageSide; active: boolean };
   notice: { text: string };
   notification: { notification: NotificationDto };
+  /** Another session of this agent read one notification (`notificationId` null: all), with the new unread total. */
+  "notification.read": { notificationId: string | null; unreadCount: number };
   /** An existing message changed (edit). Replaces the held copy. */
   "message.updated": { message: ChatMessageDto };
   "message.deleted": { conversationId: string; messageId: string };
@@ -387,6 +391,10 @@ export function isServerEvent(type: string, payload: unknown): payload is Server
       return isString(payload.text);
     case "notification":
       return isNotification(payload.notification);
+    case "notification.read":
+      return (
+        (payload.notificationId === null || isString(payload.notificationId)) && typeof payload.unreadCount === "number"
+      );
     case "workspace.tab_opened":
       return (
         isString(payload.conversationId) && typeof payload.sortOrder === "number" && isString(payload.lastOpenedAt)

@@ -280,3 +280,8 @@ ALTER TABLE permissions ADD CONSTRAINT permissions_action_check CHECK (action ~ 
 -- account and a customer row to a CUSTOMER account is checked by the application.
 ALTER TABLE staff ADD CONSTRAINT staff_max_concurrent_chats_positive CHECK (max_concurrent_chats > 0);
 ALTER TABLE customers ADD CONSTRAINT customers_phone_e164 CHECK (phone ~ '^\+[1-9][0-9]{6,14}$');
+
+-- Automatic replies and AI training examples (migration 20261121000000_automation_settings).
+ALTER TABLE ai_training_examples ADD CONSTRAINT ai_training_examples_status_check CHECK (status IN ('PENDING', 'APPROVED'));
+ALTER TABLE ai_training_examples ADD CONSTRAINT ai_training_examples_approval_check CHECK ((status = 'APPROVED') = (approved_by IS NOT NULL AND approved_at IS NOT NULL));
+CREATE UNIQUE INDEX automation_rules_one_auto_reply_per_trigger ON automation_rules (trigger_type) WHERE trigger_type IN ('FIRST_RESPONSE', 'AWAY');

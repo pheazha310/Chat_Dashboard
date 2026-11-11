@@ -54,6 +54,15 @@ export {
   type CustomerBlock,
   type SpamReport,
 } from "./moderation";
+export {
+  createTrainingExampleRequest,
+  getAutoResponses,
+  listTrainingExamples,
+  saveAutoResponsesRequest,
+  setTrainingApprovalRequest,
+  type AutoResponses,
+  type TrainingExample,
+} from "./automation";
 export { getChatSettings, updateChatSettings, type ChatSettings } from "./chat-settings";
 export {
   deleteMessageRequest,
@@ -85,6 +94,12 @@ export {
   updateNoteRequest,
   type Escalation,
 } from "./notes";
+export {
+  listNotifications,
+  markAllNotificationsRead,
+  markNotificationRead,
+  type NotificationPage,
+} from "./notifications";
 export { createTagRequest, listTags, setConversationTagsRequest, setPriorityRequest } from "./tags";
 export {
   createTemplateRequest,

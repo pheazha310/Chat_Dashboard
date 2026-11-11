@@ -81,8 +81,9 @@ already used by the notification service, and are not part of this API.
 - `app/providers/realtime.ts` calls `GET /agents/me/chat-settings` after the first `sync` and applies
   `chat_settings.updated` from the agent's other windows. This runs only against the real backend; with the mock
   transport the dialog stays browser-local as before.
-- "New conversation alerts" has no backend counterpart and stays in this browser only. The response templates, training
-  examples and the blocked customers/keywords lists in the same dialog are untouched (blocking is FR-27, a later phase).
+- "New conversation alerts" has no backend counterpart and stays in this browser only. The response templates and training
+  examples in the same dialog are team-wide and live in the automation API (`docs/api-automation.md`); the blocked
+  customers and keywords come from the moderation API (`docs/api-moderation.md`).
 - Because the backend is now the source of truth, **auto-assign shows as off** for an agent who never saved it (the
   dialog's old local default was on).
 

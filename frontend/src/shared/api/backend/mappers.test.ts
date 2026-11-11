@@ -154,6 +154,7 @@ describe("toActivity / toNotification", () => {
       agentId: "3",
       type: "new-conversation",
       text: "New conversation: Maya waits",
+      conversationId: "12",
       read: false,
       createdAt: "2026-01-01T09:12:00.000Z",
     });

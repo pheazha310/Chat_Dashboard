@@ -41,6 +41,11 @@ vi.mock("@/entities/conversation", async (importOriginal) => ({
   loadDetails: history.loadDetails,
 }));
 const browser = vi.hoisted(() => ({ show: vi.fn(), request: vi.fn() }));
+const notifications = vi.hoisted(() => ({ load: vi.fn() }));
+vi.mock("@/entities/notification", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/entities/notification")>()),
+  loadNotifications: notifications.load,
+}));
 vi.mock("@/shared/lib/browser-notification", () => ({
   showBrowserNotification: browser.show,
   requestBrowserNotificationPermission: browser.request,
@@ -49,6 +54,7 @@ vi.mock("@/shared/ui", () => ({ notify: vi.fn() }));
 
 import { useConversationStore, type Conversation } from "@/entities/conversation";
 import { useMessageStore } from "@/entities/message";
+import { useNotificationStore } from "@/entities/notification";
 import { useSessionStore } from "@/shared/api/session";
 import { notify } from "@/shared/ui";
 import { startRealtime } from "./realtime";
@@ -66,8 +72,39 @@ beforeEach(() => {
   ws.handlers.clear();
   useConversationStore.setState({ byId: {}, order: [], selectedId: null, query: "" });
   useMessageStore.setState({ byConversation: {}, typing: {}, history: {} });
+  useNotificationStore.setState({ items: [], unreadCount: 0 });
   stop?.();
   stop = startRealtime();
+});
+
+describe("notifications", () => {
+  const incoming = (id: string, read = false) => ({
+    id,
+    agentId: "3",
+    type: "system",
+    text: `text ${id}`,
+    read,
+    createdAt: "2026-01-01T09:00:00Z",
+  });
+
+  it("keeps a live notification for the bell and still alerts", () => {
+    emit("notification", { notification: incoming("n1") });
+    expect(useNotificationStore.getState().items.map((item) => item.id)).toEqual(["n1"]);
+    expect(useNotificationStore.getState().unreadCount).toBe(1);
+    expect(notify).toHaveBeenCalledWith("text n1");
+  });
+
+  it("follows another window that read notifications", () => {
+    useNotificationStore.setState({ items: [incoming("n1") as never, incoming("n2") as never], unreadCount: 2 });
+    emit("notification.read", { notificationId: "n1", unreadCount: 1 });
+    expect(useNotificationStore.getState().unreadCount).toBe(1);
+    expect(useNotificationStore.getState().items.map((item) => item.read)).toEqual([true, false]);
+  });
+
+  it("loads the list after a sync", () => {
+    emit("sync", { conversations: [], messages: {} });
+    expect(notifications.load).toHaveBeenCalled();
+  });
 });
 
 describe("startRealtime", () => {

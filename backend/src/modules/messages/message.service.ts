@@ -1,6 +1,7 @@
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "@shared/errors/AppError.js";
 import type { AuthContext } from "@shared/auth/auth.types.js";
 import { canView, permissionsFor } from "@shared/policy/conversation-access.js";
+import type { AutoResponder, AutomaticMessagePort } from "@shared/ports/auto-response.js";
 import type { CustomerGuard, MessageLookup } from "@shared/ports/moderation.js";
 import type { RealtimeNotifier } from "@shared/ports/realtime.js";
 import type { SystemMessagePort } from "@shared/ports/system-message.js";
@@ -17,13 +18,15 @@ const PREVIEW_LENGTH = 255;
 /** Cut by code points: a split surrogate pair would be rejected by PostgreSQL. */
 const toPreview = (text: string) => Array.from(text).slice(0, PREVIEW_LENGTH).join("");
 
-export class MessageService implements SystemMessagePort, MessageLookup {
+export class MessageService implements SystemMessagePort, AutomaticMessagePort, MessageLookup {
   constructor(
     private readonly repository: MessageRepository,
     private readonly notifications: NotificationService,
     private readonly realtime: RealtimeNotifier,
     /** Moderation, built after this service, hence a function. Absent in tests that do not need it. */
     private readonly guard?: () => CustomerGuard,
+    /** The automatic replies, built after this service, hence a function. Absent in tests that do not need it. */
+    private readonly autoResponder?: () => AutoResponder,
   ) {}
 
   async existsInConversation(conversationId: string, messageId: string): Promise<boolean> {
@@ -194,6 +197,7 @@ export class MessageService implements SystemMessagePort, MessageLookup {
         content: input.text,
         preview: toPreview(input.text),
       });
+      if (conversation.isArchived) await this.restoreArchived(tx, input.conversationId, input.customerId);
       if (conversation.status !== "OPEN") {
         await tx.reopen(input.conversationId);
         await tx.addActivity({
@@ -229,8 +233,22 @@ export class MessageService implements SystemMessagePort, MessageLookup {
         }),
       );
       await this.flagIfNeeded(input.conversationId, dto.id, input.text);
+      await this.letAutoRepliesReact(input.conversationId);
     }
     return { message: dto, created };
+  }
+
+  /** A customer message un-archives its conversation, so the agent sees it in the inbox again. */
+  private async restoreArchived(tx: MessageRepository, conversationId: string, customerId: string) {
+    await tx.restore(conversationId);
+    await tx.addActivity({
+      conversationId,
+      actorType: "CUSTOMER",
+      actorId: customerId,
+      activityType: "RESTORED",
+      description: "Restored by a new customer message",
+      metadata: { reason: "customer_message" },
+    });
   }
 
   /**
@@ -277,6 +295,7 @@ export class MessageService implements SystemMessagePort, MessageLookup {
         uploadedById: input.customerId,
         uploadedByType: "CUSTOMER",
       });
+      if (conversation.isArchived) await this.restoreArchived(tx, input.conversationId, input.customerId);
       if (conversation.status !== "OPEN") {
         await tx.reopen(input.conversationId);
         await tx.addActivity({
@@ -311,8 +330,16 @@ export class MessageService implements SystemMessagePort, MessageLookup {
       }
       await bestEffort("realtime", () => this.realtime.messageCreated(dto, { conversationUpdated: true }));
       if (input.text) await this.flagIfNeeded(input.conversationId, dto.id, input.text);
+      await this.letAutoRepliesReact(input.conversationId);
     }
     return { message: dto, created };
+  }
+
+  /** After a new customer message: the away message may be due. Never fails the customer's own request. */
+  private async letAutoRepliesReact(conversationId: string) {
+    await bestEffort("automatic reply", async () => {
+      await this.autoResponder?.().customerMessaged(conversationId);
+    });
   }
 
   /** SYSTEM message (takeover, transfer, status change). Does not change the inbox preview or last-activity time. */
@@ -331,6 +358,30 @@ export class MessageService implements SystemMessagePort, MessageLookup {
       });
     });
     if (stored) await bestEffort("realtime", () => this.realtime.messageCreated(toMessage(stored)));
+  }
+
+  /**
+   * An automatic reply (first response, away message). An ASSISTANT message, so the customer sees it (SYSTEM messages
+   * are internal), marked `automatic` in its metadata. Like a SYSTEM message it does not change the inbox preview or
+   * last-activity time: an automatic text must not look like an agent answered.
+   */
+  async postAutomatic(conversationId: string, text: string, metadata: Record<string, unknown>) {
+    const stored = await this.repository.inTransaction(async (tx) => {
+      if (!(await tx.lock(conversationId))) return null;
+      return tx.append({
+        conversationId,
+        clientId: null,
+        senderType: "ASSISTANT",
+        senderId: null,
+        messageType: "TEXT",
+        content: text,
+        metadata: metadata as never,
+        preview: null,
+      });
+    });
+    if (!stored) return null;
+    await bestEffort("realtime", () => this.realtime.messageCreated(toMessage(stored)));
+    return stored.id;
   }
 
   /**

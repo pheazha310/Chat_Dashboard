@@ -82,9 +82,10 @@ widgets ─ features ─ entities ──► wsClient (WsClient: reconnect, queue
 | `conversation.created/updated/assigned/transferred/status_changed` | `conversation.updated`           | upsert; unread comes from a per-conversation counter (the gateway omits it)              |
 | `conversation.hidden`                                              | `conversation.removed`           | removed from the inbox                                                                   |
 | `conversation.read`                                                | `conversation.unread`            | authoritative unread count (read or marked unread in another tab)                        |
-| `notification.new`                                                 | `notification`                   | toast, plus a desktop notification when the tab is in the background                     |
+| `notification.new`                                                 | `notification`                   | added to the bell list and badge, toast, plus a desktop notification in the background   |
+| `notification.read`                                                | `notification.read`              | another window read one (or all): the bell marks them read and takes the server's count  |
 | `error`                                                            | `notice`                         | toast                                                                                    |
-| `presence.updated`, `notification.read`                            | —                                | no UI yet                                                                                |
+| `presence.updated`                                                 | —                                | no UI yet                                                                                |
 
 An update saying _someone else now owns it_ removes the conversation for agents (the backend hides it from them);
 supervisors keep seeing it.
@@ -186,3 +187,10 @@ mock transport the old preview dialog stays. Details and limits (no customer cha
 (`shared/api/rest/chat-settings.ts`); a failed save puts the switch back. `app/providers/realtime.ts` loads the values
 after the first `sync` and applies `chat_settings.updated` from the agent's other windows. "New conversation alerts"
 stays browser-local. Details: [api-chat-settings.md](api-chat-settings.md).
+
+### Automatic replies and AI training examples
+
+Against the real backend the "Auto-response settings" and "AI training data" pages read and write the team's data
+(`features/message-settings/model/automation.ts`, `shared/api/rest/automation.ts`); only supervisors and admins can save
+the replies or approve an example, and agents see them read-only. With the mock transport they stay in the browser.
+Details: [api-automation.md](api-automation.md).

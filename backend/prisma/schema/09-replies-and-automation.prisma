@@ -53,3 +53,18 @@ model AutomationLog {
   @@index([messageId])
   @@map("automation_logs")
 }
+
+model AiTrainingExample {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  customerMessage String   @map("customer_message") @db.Text
+  suggestedReply String    @map("suggested_reply") @db.Text
+  status         String    @default("PENDING") @db.VarChar(20) /// PENDING (waiting for a supervisor) or APPROVED (CHECK)
+  createdBy      String    @map("created_by") @db.Uuid /// chat_users.external_id (= users.id) of the agent who proposed it
+  approvedBy     String?   @map("approved_by") @db.Uuid /// Who approved it; set exactly when status = APPROVED (CHECK)
+  approvedAt     DateTime? @map("approved_at") @db.Timestamptz(6)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([status, createdAt])
+  @@map("ai_training_examples")
+}

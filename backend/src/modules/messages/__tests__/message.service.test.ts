@@ -19,6 +19,7 @@ const repo = {
   findById: vi.fn(),
   append: vi.fn(),
   reopen: vi.fn(),
+  restore: vi.fn(),
   addActivity: vi.fn(),
   history: vi.fn(),
   search: vi.fn(),
@@ -37,11 +38,13 @@ const repo = {
 const notifications = { notifyAgent: vi.fn() };
 const realtime = fakeRealtime();
 const guard = { isBlocked: vi.fn(), matchedKeywords: vi.fn() };
+const autoResponder = { conversationStarted: vi.fn(), customerMessaged: vi.fn() };
 const service = new MessageService(
   fromPartial<MessageRepository>(repo),
   fromPartial<NotificationService>(notifications),
   realtime,
   () => guard,
+  () => autoResponder,
 );
 
 const owner: AuthContext = { userId: uid(1), role: "AGENT" };
@@ -197,6 +200,23 @@ describe("receiveFromCustomer", () => {
     expect(notifications.notifyAgent).not.toHaveBeenCalled(); // nobody owns it
   });
 
+  it("restores an archived conversation so it shows in the inbox again, and records why", async () => {
+    repo.lock.mockResolvedValue(conv({ isArchived: true }));
+    await service.receiveFromCustomer(input);
+    expect(repo.restore).toHaveBeenCalledWith(uid(10));
+    expect(repo.addActivity).toHaveBeenCalledWith(
+      expect.objectContaining({
+        activityType: "RESTORED",
+        metadata: expect.objectContaining({ reason: "customer_message" }),
+      }),
+    );
+  });
+
+  it("does not restore a conversation that is not archived", async () => {
+    await service.receiveFromCustomer(input);
+    expect(repo.restore).not.toHaveBeenCalled();
+  });
+
   it("is idempotent, and rejects another customer's conversation", async () => {
     repo.findByClientId.mockResolvedValue(msg({ senderType: "CUSTOMER", senderId: uid(100) }));
     expect((await service.receiveFromCustomer(input)).created).toBe(false);
@@ -215,6 +235,52 @@ describe("receiveFromCustomer", () => {
   it("still succeeds when the notification fails", async () => {
     notifications.notifyAgent.mockRejectedValue(new Error("down"));
     await expect(service.receiveFromCustomer(input)).resolves.toMatchObject({ created: true });
+  });
+});
+
+describe("automatic replies", () => {
+  const textInput = { customerId: uid(100), conversationId: uid(10), clientId: "cc9", text: "help" };
+
+  it("a new customer text message lets the automatic replies react", async () => {
+    repo.append.mockResolvedValue(msg({ senderType: "CUSTOMER", senderId: uid(100), clientId: "cc9" }));
+    await service.receiveFromCustomer(textInput);
+    expect(autoResponder.customerMessaged).toHaveBeenCalledWith(uid(10));
+  });
+
+  it("a retried customer message does not trigger them again", async () => {
+    repo.findByClientId.mockResolvedValue(msg({ senderType: "CUSTOMER", senderId: uid(100) }));
+    await service.receiveFromCustomer(textInput);
+    expect(autoResponder.customerMessaged).not.toHaveBeenCalled();
+  });
+
+  it("a failing automatic reply never fails the customer's message", async () => {
+    repo.append.mockResolvedValue(msg({ senderType: "CUSTOMER", senderId: uid(100), clientId: "cc9" }));
+    autoResponder.customerMessaged.mockRejectedValue(new Error("boom"));
+    await expect(service.receiveFromCustomer(textInput)).resolves.toMatchObject({ created: true });
+  });
+
+  it("postAutomatic stores a customer-visible ASSISTANT message marked automatic, without touching the preview", async () => {
+    repo.append.mockResolvedValue(msg({ id: uid(77), senderType: "ASSISTANT", senderId: null }));
+    const id = await service.postAutomatic(uid(10), "We are away", { automatic: true, trigger: "AWAY" });
+    expect(id).toBe(uid(77));
+    expect(repo.append).toHaveBeenCalledWith(
+      expect.objectContaining({
+        senderType: "ASSISTANT",
+        senderId: null,
+        messageType: "TEXT",
+        clientId: null,
+        content: "We are away",
+        metadata: { automatic: true, trigger: "AWAY" },
+        preview: null,
+      }),
+    );
+    expect(realtime.messageCreated).toHaveBeenCalledWith(expect.objectContaining({ id: uid(77) }));
+  });
+
+  it("postAutomatic returns null for a conversation that no longer exists", async () => {
+    repo.lock.mockResolvedValue(null);
+    expect(await service.postAutomatic(uid(10), "x", {})).toBeNull();
+    expect(repo.append).not.toHaveBeenCalled();
   });
 });
 
@@ -425,6 +491,24 @@ describe("receiveFileFromCustomer", () => {
     },
   };
   const stored = () => msg({ senderType: "CUSTOMER", senderId: uid(100), clientId: "cf1", messageType: "IMAGE" });
+
+  it("a new customer file message lets the automatic replies react", async () => {
+    repo.append.mockResolvedValue(stored());
+    repo.addAttachment.mockResolvedValue({
+      id: uid(60),
+      conversationId: uid(10),
+      uploadedByType: "CUSTOMER",
+      uploadedById: uid(100),
+      fileName: "a.png",
+      mimeType: "image/png",
+      fileSize: 3n,
+      durationMs: null,
+      waveform: null,
+      createdAt: at,
+    });
+    await service.receiveFileFromCustomer(input);
+    expect(autoResponder.customerMessaged).toHaveBeenCalledWith(uid(10));
+  });
 
   it("stores a CUSTOMER message with the file attributed to the customer, and notifies the owner", async () => {
     repo.append.mockResolvedValue(stored());

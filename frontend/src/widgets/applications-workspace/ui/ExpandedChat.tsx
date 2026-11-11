@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type PointerEvent } from "react";
-import { useSelectedConversation } from "@/entities/conversation";
-import { useConversationMessages } from "@/entities/message";
-import { sendMessage, useComposerStore, useDraft } from "@/features/send-message";
+import { canReply, useSelectedConversation } from "@/entities/conversation";
+import { AttachmentView, useConversationMessages } from "@/entities/message";
+import { MessageComposer, updateDraft } from "@/features/send-message";
 import { useCustomerCallStore } from "@/features/customer-call";
 import { useMessageSettingsStore } from "@/features/message-settings";
 import { MediaFilesPanel } from "@/features/share-files";
@@ -9,9 +9,9 @@ import { archiveConversation, restoreConversation } from "@/features/archive-con
 import { markConversationUnread } from "@/features/mark-unread";
 import { TakeOverButton, takeOverConversation } from "@/features/take-over-conversation";
 import { useSessionStore } from "@/shared/api/session";
-import { assets } from "@/shared/config";
+import { API_URL, assets } from "@/shared/config";
 import { formatClock } from "@/shared/lib/format-time";
-import { AssetIcon, notify, Icon, IconPill } from "@/shared/ui";
+import { notify, IconPill } from "@/shared/ui";
 
 export default function ExpandedChat({ onBack }: { onBack: () => void }) {
   const aiReplies = useMessageSettingsStore((state) => state.values.aiReplies);
@@ -41,7 +41,6 @@ export default function ExpandedChat({ onBack }: { onBack: () => void }) {
     setShowActions(false);
     moreRef.current?.focus();
   };
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const chatRef = useRef<HTMLElement>(null);
   const [position, setPosition] = useState<{ left: number; top: number } | null>(null);
   const [size, setSize] = useState<{ width: number; height: number } | null>(null);
@@ -61,10 +60,6 @@ export default function ExpandedChat({ onBack }: { onBack: () => void }) {
   const conversation = useSelectedConversation();
   const conversationId = conversation?.id ?? "";
   const messages = useConversationMessages(conversation?.id ?? null);
-  const chatDraft = useDraft(conversationId);
-  const attachment = useComposerStore((state) => state.attachments[conversationId] ?? "");
-  const recording = useComposerStore((state) => state.recording);
-  const setChatDraft = (text: string) => useComposerStore.getState().setDraft(conversationId, text);
 
   const startDrag = (event: PointerEvent<HTMLElement>) => {
     if (event.button !== 0 || (event.target as HTMLElement).closest("button, input, textarea")) return;
@@ -280,11 +275,19 @@ export default function ExpandedChat({ onBack }: { onBack: () => void }) {
                 {message.side === "system" ? (
                   <p>{message.text}</p>
                 ) : message.side === "customer" ? (
-                  <p>{message.text}</p>
+                  <>
+                    {message.attachments?.map((attachment) => (
+                      <AttachmentView key={attachment.id} attachment={attachment} />
+                    ))}
+                    {message.text && <p>{message.text}</p>}
+                  </>
                 ) : (
                   <div>
                     <strong>{message.side === "assistant" ? "AI ASSISTANT" : "SUPPORT AGENT"}</strong>
-                    <p>{message.text}</p>
+                    {message.attachments?.map((attachment) => (
+                      <AttachmentView key={attachment.id} attachment={attachment} />
+                    ))}
+                    {message.text && <p>{message.text}</p>}
                   </div>
                 )}
                 <time>
@@ -321,7 +324,8 @@ export default function ExpandedChat({ onBack }: { onBack: () => void }) {
                   {aiReplies && (
                     <button
                       onClick={() =>
-                        setChatDraft(
+                        updateDraft(
+                          conversationId,
                           `Hi ${conversation?.name.split(" ")[0]}, I’m reviewing your repayment date request and will confirm the updated schedule shortly.`,
                         )
                       }
@@ -332,76 +336,13 @@ export default function ExpandedChat({ onBack }: { onBack: () => void }) {
                 </section>
               </div>
             )}
-            <form
-              onSubmit={(event) => {
-                event.preventDefault();
-                if (sendMessage(conversationId, chatDraft)) notify("Message sent");
-              }}
-            >
-              <textarea
-                value={chatDraft}
-                onChange={(event) => setChatDraft(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" && !event.shiftKey) {
-                    event.preventDefault();
-                    if (sendMessage(conversationId, chatDraft)) notify("Message sent");
-                  }
-                }}
-                placeholder="Type a message"
-                aria-label="Type a message"
-              />
-              {attachment && (
-                <div className="attachment-chip">
-                  {attachment}
-                  <button
-                    type="button"
-                    onClick={() => useComposerStore.getState().setAttachment(conversationId, "")}
-                    aria-label="Remove attachment"
-                  >
-                    ×
-                  </button>
-                </div>
-              )}
-              <div>
-                <button type="button" onClick={() => fileInputRef.current?.click()} aria-label="Add attachment">
-                  <Icon src={assets.icons.plus} alt="" />
-                </button>
-                <input
-                  ref={fileInputRef}
-                  className="file-input"
-                  type="file"
-                  accept=".pdf,.jpg,.jpeg,.png"
-                  onChange={(event) => {
-                    const file = event.target.files?.[0];
-                    if (file) {
-                      useComposerStore.getState().setAttachment(conversationId, file.name);
-                      notify("File attached");
-                    }
-                  }}
-                />
-                <div>
-                  <button
-                    className={recording ? "recording" : ""}
-                    type="button"
-                    aria-label="Record voice message"
-                    onClick={() => {
-                      useComposerStore.getState().toggleRecording();
-                      notify(recording ? "Voice recording stopped" : "Voice recording started");
-                    }}
-                  >
-                    <AssetIcon src={assets.icons.mic} size={18} />
-                  </button>
-                  <button
-                    className="submit-message"
-                    type="submit"
-                    aria-label="Send message"
-                    disabled={!chatDraft.trim()}
-                  >
-                    <span />
-                  </button>
-                </div>
+            {!API_URL || !conversation || canReply(conversation, me) ? (
+              <MessageComposer conversationId={conversationId} />
+            ) : (
+              <div className="reply-lock" role="status">
+                <span>Take over this conversation to reply.</span>
               </div>
-            </form>
+            )}
           </div>
         </>
       )}

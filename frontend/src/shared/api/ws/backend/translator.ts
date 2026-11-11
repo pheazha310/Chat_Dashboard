@@ -176,6 +176,17 @@ export class BackendTranslator {
           },
         ];
 
+      case "notification.read":
+        return [
+          {
+            type: "notification.read",
+            payload: {
+              notificationId: payload.notificationId == null ? null : String(payload.notificationId),
+              unreadCount: Number(payload.unreadCount) || 0,
+            },
+          },
+        ];
+
       // Per-agent workspace events already use the frontend's shape.
       case "workspace.tab_opened":
       case "workspace.tab_closed":
@@ -194,7 +205,7 @@ export class BackendTranslator {
       case "error":
         return [{ type: "notice", payload: { text: String(payload.message ?? "Something went wrong") } }];
 
-      // Handled by the socket (connection.*) or with no UI yet (presence.updated, notification.read).
+      // Handled by the socket (connection.*) or with no UI yet (presence.updated).
       default:
         return [];
     }

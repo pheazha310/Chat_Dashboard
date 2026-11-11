@@ -1,6 +1,7 @@
 import { logger } from "@config/logger.js";
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "@shared/errors/AppError.js";
 import type { AuthContext } from "@shared/auth/auth.types.js";
+import type { AutoResponder } from "@shared/ports/auto-response.js";
 import type { AvailableAgents } from "@shared/ports/available-agents.js";
 import type {
   AccessibleConversationState,
@@ -42,6 +43,8 @@ export class ConversationService implements ConversationAccess, CustomerConversa
     private readonly notifications: NotificationService,
     private readonly availableAgents: AvailableAgents,
     private readonly identities: CustomerIdentities = { ensureCustomer: async () => {} },
+    /** The automatic replies, built after this service, hence a function. */
+    private readonly autoResponder?: () => AutoResponder,
   ) {}
 
   async list(auth: AuthContext, query: ListQuery) {
@@ -109,7 +112,7 @@ export class ConversationService implements ConversationAccess, CustomerConversa
 
   /**
    * "Join room" for the mobile app: the customer's own conversation for the application (or, without an application,
-   * their latest conversation that is not closed), created when there is none. One open chat per customer: a new
+   * their latest conversation that is not closed, archived or not: an archived one is restored), created when there is none. One open chat per customer: a new
    * application joins the open conversation and becomes its application. Always scoped to `customerId`, which
    * comes from the verified token and never from the request body. NOTE: like `create`, the application is not
    * verified with Backend 1 (contract unknown).
@@ -126,10 +129,12 @@ export class ConversationService implements ConversationAccess, CustomerConversa
       const byApplication = input.applicationId === undefined ? null : await tx.findByApplication(input.applicationId);
       if (byApplication) {
         if (byApplication.customerId !== customerId) throw new NotFoundError("Application not found");
+        if (byApplication.isArchived) await this.restoreForCustomer(tx, byApplication.id, customerId);
         return { id: byApplication.id, created: false };
       }
       const existing = await tx.findOpenForCustomer(customerId);
       if (existing) {
+        if (existing.isArchived) await this.restoreForCustomer(tx, existing.id, customerId);
         if (input.applicationId !== undefined && existing.applicationId !== input.applicationId) {
           await tx.setApplication(existing.id, input.applicationId);
         }
@@ -155,8 +160,24 @@ export class ConversationService implements ConversationAccess, CustomerConversa
       await bestEffort("new-conversation notifications", () =>
         this.notifyAvailableAgents(undefined, id, { customerId }),
       );
+      await bestEffort("first response", async () => {
+        await this.autoResponder?.().conversationStarted(id);
+      });
     }
     return { conversation: await this.getForCustomer(customerId, id), created };
+  }
+
+  /** An archived conversation is not a reason for a second chat: the customer's return brings it back to the inbox. */
+  private async restoreForCustomer(tx: ConversationRepository, id: string, customerId: string) {
+    await tx.setArchived(id, false);
+    await tx.addActivity({
+      conversationId: id,
+      actorType: "CUSTOMER",
+      actorId: customerId,
+      activityType: "RESTORED",
+      description: "Restored because the customer joined again",
+      metadata: { reason: "customer_join" },
+    });
   }
 
   /** The customer's own conversation, in the customer-safe shape. 404 when it is not theirs. */

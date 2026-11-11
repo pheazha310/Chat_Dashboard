@@ -192,13 +192,23 @@ describe("notifications, errors and events with no UI", () => {
     });
   });
 
-  it("shows server errors as notices, and ignores presence and notification.read", () => {
+  it("passes another session's read state on, with the id as null when everything was read", () => {
+    expect(one("notification.read", { notificationId: "5", unreadCount: 2 })).toEqual({
+      type: "notification.read",
+      payload: { notificationId: "5", unreadCount: 2 },
+    });
+    expect(one("notification.read", { notificationId: null, unreadCount: 0 }).payload).toEqual({
+      notificationId: null,
+      unreadCount: 0,
+    });
+  });
+
+  it("shows server errors as notices, and ignores presence", () => {
     expect(one("error", { code: "CONFLICT", message: "Already taken" })).toEqual({
       type: "notice",
       payload: { text: "Already taken" },
     });
     expect(from("presence.updated", { userId: "1", status: "BUSY" })).toEqual([]);
-    expect(from("notification.read", { notificationId: null, unreadCount: 0 })).toEqual([]);
     expect(from("connection.authenticated", {})).toEqual([]);
   });
 });

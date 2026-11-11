@@ -113,6 +113,9 @@ button {
   align-items: center;
   justify-content: space-between;
   backdrop-filter: blur(10px);
+  /* Its dropdowns (notifications, profile) must paint over the workspace below. */
+  position: relative;
+  z-index: 30;
 }
 .global-search,
 .sidebar-search {
@@ -203,16 +206,141 @@ button {
 .notification {
   position: relative;
 }
-.notification::after {
-  content: "";
+.notification-badge {
   position: absolute;
-  width: 6px;
-  height: 6px;
-  right: 8px;
-  top: 8px;
-  border-radius: 50%;
+  top: 2px;
+  right: 2px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border: 2px solid white;
+  border-radius: 9px;
   background: #f5222d;
-  border: 1px solid white;
+  color: white;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 14px;
+  text-align: center;
+}
+.notification-menu {
+  position: relative;
+}
+.more-menu.notification-popover {
+  width: 460px;
+  max-width: calc(100vw - 32px);
+  padding: 0;
+  overflow: hidden;
+}
+.notification-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid #e5e7eb;
+  font-size: 14px;
+}
+.notification-header strong {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.notification-header .notification-count {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #fee2e2;
+  color: #b91c1c;
+  font-size: 11px;
+  font-weight: 600;
+}
+.more-menu .notification-header button {
+  width: auto;
+  flex-shrink: 0;
+  padding: 4px 8px;
+  white-space: nowrap;
+  color: #2563eb;
+  font-weight: 500;
+}
+.more-menu .notification-header button:hover:not(:disabled) {
+  background: #eff6ff;
+}
+.more-menu .notification-header button:disabled {
+  color: #9ca3af;
+  cursor: default;
+  background: transparent;
+}
+.notification-list {
+  max-height: min(560px, calc(100vh - 140px));
+  margin: 0;
+  padding: 4px 0;
+  list-style: none;
+  overflow-y: auto;
+}
+.notification-list li + li {
+  border-top: 1px solid #f3f4f6;
+}
+.more-menu .notification-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 18px;
+  border-radius: 0;
+  text-align: left;
+  font-size: 14px;
+  line-height: 1.4;
+  color: #4b5563;
+}
+.more-menu .notification-item.unread {
+  background: #f5f9ff;
+  color: #111827;
+}
+.more-menu .notification-item.unread:hover {
+  background: #eaf2ff;
+}
+.notification-icon {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #f3f4f6;
+  font-size: 15px;
+}
+.notification-body {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 2px;
+}
+.notification-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #111827;
+}
+.notification-text {
+  font-weight: 400;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.notification-body small {
+  color: #6b7280;
+  font-size: 11px;
+}
+.notification-dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: #2563eb;
+}
+.notification-empty {
+  margin: 0;
+  padding: 32px 16px;
+  text-align: center;
+  font-size: 13px;
+  color: #6b7280;
 }
 .profile-action {
   border: 0;
@@ -655,10 +783,34 @@ button {
   border-radius: 10px;
   background: white;
   text-align: left;
-  cursor: pointer;
 }
 .pin-bar:hover {
   background: #f7f8fa;
+}
+.pin-bar-main {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: 10px;
+  border: 0;
+  background: none;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+}
+.pin-bar-unpin {
+  flex: none;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  padding: 2px 6px;
+  color: #6b7280;
+  cursor: pointer;
+}
+.pin-bar-unpin:hover {
+  background: #e5e7eb;
+  color: #111827;
 }
 .pin-bar-text {
   display: flex;
@@ -2991,50 +3143,6 @@ button.today-pill:hover {
   background: transparent;
   color: #722ed1;
 }
-.expanded-composer form {
-  min-height: 96px;
-  height: auto;
-  padding: 14px 16px;
-  border: 1px solid #e5e7eb;
-  border-radius: 18px;
-  display: flex;
-  flex-direction: column;
-}
-.expanded-composer textarea {
-  min-height: 35px;
-  height: 100%;
-  flex: 1;
-  border: 0;
-  outline: 0;
-  resize: none;
-  font-size: 14px;
-}
-.expanded-composer form > div {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-.expanded-composer form button {
-  width: 30px;
-  height: 30px;
-  border: 0;
-  background: transparent;
-  display: grid;
-  place-items: center;
-}
-.expanded-composer form > div > div {
-  display: flex;
-  gap: 12px;
-}
-.expanded-composer .submit-message {
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  background: #ebebeb;
-  display: grid;
-  place-items: center;
-}
 .compose-fab {
   position: fixed;
   right: 28px;
@@ -3459,37 +3567,6 @@ button.today-pill:hover {
     padding: 10px 16px;
     border-radius: 13px;
     font-size: 16px;
-  }
-  .expanded-composer form {
-    min-height: 280px;
-    padding: 30px 42px 24px;
-    border-radius: 48px;
-    gap: 12px;
-  }
-  .expanded-composer textarea {
-    min-height: 70px;
-    font-size: 40px;
-  }
-  .expanded-composer form button {
-    width: 60px;
-    height: 60px;
-  }
-  .expanded-composer form > div > button :is(img, svg) {
-    width: 42px;
-    height: 42px;
-  }
-  .expanded-composer form > div > div {
-    gap: 30px;
-  }
-  .expanded-composer .submit-message {
-    width: 102px;
-    height: 102px;
-    flex-basis: 102px;
-  }
-  .expanded-composer .submit-message span {
-    width: 36px;
-    height: 36px;
-    border-radius: 9px;
   }
 }
 

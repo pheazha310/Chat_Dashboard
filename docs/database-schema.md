@@ -36,7 +36,7 @@ start in them.
 | [06](database/06-tags.dbml)                       | Tags                       | `tags`, `conversation_tags`                                                                                                 |
 | [07](database/07-notifications-and-presence.dbml) | Notifications and presence | `notifications`, `notification_preferences`, `conversation_notification_settings`, `push_devices`, `agent_presence_history` |
 | [08](database/08-agent-workspace.dbml)            | Agent workspace            | `workspace_preferences`, `workspace_open_conversations`, `conversation_drafts`, `user_chat_settings`                        |
-| [09](database/09-replies-and-automation.dbml)     | Replies and automation     | `canned_responses`, `automation_rules`, `automation_logs`                                                                   |
+| [09](database/09-replies-and-automation.dbml)     | Replies and automation     | `canned_responses`, `automation_rules`, `automation_logs`, `ai_training_examples`                                           |
 | [10](database/10-callbacks-and-calls.dbml)        | Callbacks and calls        | `callback_requests`, `calls`, `call_participants`                                                                           |
 | [11](database/11-moderation.dbml)                 | Moderation                 | `spam_reports`, `customer_blocks`, `blocked_keywords`, `moderation_activities`                                              |
 | [12](database/12-backend-1-external.dbml)         | Backend 1 (external)       | `los_customers`, `los_agents`, `loan_applications`: context only, not created here                                          |
@@ -121,14 +121,15 @@ sorted in SQL.
 
 ### Notifications, presence, templates, automation, AI
 
-| Table                                 | Purpose                                                                                                                      |
-| ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `notifications`                       | Per-recipient notification: `notification_type`, `title`, `body`, optional `conversation_id`/`message_id`, `read_at`.        |
-| `notification_preferences`            | One row per agent: new-message, assignment, transfer, mention, sound and browser switches.                                   |
-| `conversation_notification_settings`  | Per-agent mute: `is_muted` per `(conversation, agent)`.                                                                      |
-| `agent_presence_history`              | Agent status periods. Live presence is in Redis; this is history.                                                            |
-| `canned_responses`                    | Templates: `shortcut`, `scope` (`PERSONAL`/`SHARED`/`TEAM`), `team_id` (set exactly when `TEAM`), `created_by`, `is_active`. |
-| `automation_rules`, `automation_logs` | Auto-reply rules (`trigger_type`, `conditions`, `response_content`) and their execution log.                                 |
+| Table                                 | Purpose                                                                                                                                                                                                                                              |
+| ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `notifications`                       | Per-recipient notification: `notification_type`, `title`, `body`, optional `conversation_id`/`message_id`, `read_at`.                                                                                                                                |
+| `notification_preferences`            | One row per agent: new-message, assignment, transfer, mention, sound and browser switches.                                                                                                                                                           |
+| `conversation_notification_settings`  | Per-agent mute: `is_muted` per `(conversation, agent)`.                                                                                                                                                                                              |
+| `agent_presence_history`              | Agent status periods. Live presence is in Redis; this is history.                                                                                                                                                                                    |
+| `canned_responses`                    | Templates: `shortcut`, `scope` (`PERSONAL`/`SHARED`/`TEAM`), `team_id` (set exactly when `TEAM`), `created_by`, `is_active`.                                                                                                                         |
+| `automation_rules`, `automation_logs` | Auto-reply rules (`trigger_type`, `conditions`, `response_content`) and their execution log. The team's two automatic replies are the rules `FIRST_RESPONSE` and `AWAY` (one each); `automation_logs` remembers what was sent to which conversation. |
+| `ai_training_examples`                | Replies proposed for the future AI assistant: `status` `PENDING`/`APPROVED`, `created_by`, and `approved_by`/`approved_at` (set exactly when approved).                                                                                              |
 
 ### Callbacks, calls, moderation, mobile and workspace
 

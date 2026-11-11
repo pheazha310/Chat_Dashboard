@@ -29,6 +29,7 @@ export const PERMISSIONS = {
   "moderation.manage_keywords": "Manage blocked keywords",
   "moderation.review_reports": "See every spam report and review them",
   "moderation.view_log": "Read the moderation log",
+  "automation.manage": "Edit the automatic replies and approve AI training examples",
   "users.read": "View staff and customer accounts",
   "users.manage": "Create staff accounts, change roles and status, reset passwords",
   "roles.read": "View roles and their permissions",

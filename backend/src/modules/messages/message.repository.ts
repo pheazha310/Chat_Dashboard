@@ -111,6 +111,14 @@ export class MessageRepository {
     });
   }
 
+  /** A customer message brings an archived conversation back into the inbox. */
+  async restore(conversationId: string): Promise<void> {
+    await this.db.conversation.updateMany({
+      where: { id: conversationId, isArchived: true },
+      data: { isArchived: false, archivedAt: null },
+    });
+  }
+
   addActivity(data: Prisma.ConversationActivityUncheckedCreateInput) {
     return this.db.conversationActivity.create({ data });
   }

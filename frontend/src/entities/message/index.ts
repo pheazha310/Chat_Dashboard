@@ -8,5 +8,6 @@ export {
 } from "./model/store";
 export { catchUp, loadHistory, loadOlderMessages, loadUntil, loadUntilMessage } from "./model/history";
 export { default as MessageBubble, TypingBubble } from "./ui/MessageBubble";
+export { default as AttachmentView } from "./ui/AttachmentView";
 export { splitMatches } from "./lib/highlight";
 export { dayKey, dayLabel } from "./lib/day";

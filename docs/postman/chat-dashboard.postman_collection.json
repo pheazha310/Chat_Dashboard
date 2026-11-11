@@ -202,6 +202,10 @@
     {
       "key": "customerCallId",
       "value": ""
+    },
+    {
+      "key": "trainingExampleId",
+      "value": ""
     }
   ],
   "item": [
@@ -2631,6 +2635,165 @@
               }
             }
           ]
+        },
+        {
+          "name": "Automatic replies",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/automation/auto-responses",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "automation", "auto-responses"],
+              "query": []
+            },
+            "description": "The team's first-response and away message. A text is null until it has been saved; nothing is sent for a trigger without one.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{supervisorToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Save the automatic replies",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/automation/auto-responses",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "automation", "auto-responses"],
+              "query": []
+            },
+            "description": "Supervisors and admins only (an agent gets 403). The first response is sent once when a customer opens a conversation, the away message when a customer writes and no agent is available (at most once an hour per conversation). Both arrive as an ASSISTANT message the customer sees.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{supervisorToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstResponse\": \"Hi! Thanks for reaching out. An agent will be with you shortly.\",\n  \"awayMessage\": \"Thanks for your message. We are away right now and will reply as soon as possible.\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Propose a training example",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/automation/training-examples",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "automation", "training-examples"],
+              "query": []
+            },
+            "description": "Any dashboard user can propose one; it starts PENDING. Saves trainingExampleId.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{agentToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerMessage\": \"Can I change my repayment date?\",\n  \"suggestedReply\": \"Yes. Please share your loan number and we will check the options with you.\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "if (j.data && j.data.id) pm.collectionVariables.set('trainingExampleId', String(j.data.id));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Training examples",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/automation/training-examples",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "automation", "training-examples"],
+              "query": []
+            },
+            "description": "Newest first, pending and approved.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{supervisorToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Approve a training example",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/automation/training-examples/{{trainingExampleId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "automation", "training-examples", "{{trainingExampleId}}"],
+              "query": []
+            },
+            "description": "Supervisors and admins only. Records who approved it and when. Send approved: false to take the approval back.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{supervisorToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"approved\": true\n}"
+            }
+          }
         }
       ]
     },

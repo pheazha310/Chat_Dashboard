@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { API_URL } from "@/shared/config";
-import { loadPins, useConversationPins, type PinnedMessage } from "../model/pins";
+import { loadPins, unpinMessage, useConversationPins, type PinnedMessage } from "../model/pins";
 
 /**
  * The pinned messages of a conversation, one at a time, like the pin bar in WhatsApp or Telegram: clicking jumps to the
@@ -25,20 +25,31 @@ export default function PinBar({
   const current = pins[index % pins.length] as PinnedMessage;
 
   return (
-    <button
-      type="button"
-      className="pin-bar"
-      onClick={() => {
-        onOpen(current);
-        setIndex((index + 1) % pins.length);
-      }}
-      title="Go to the pinned message"
-    >
-      <span aria-hidden="true">📌</span>
-      <span className="pin-bar-text">
-        <strong>Pinned message{pins.length > 1 ? ` ${(index % pins.length) + 1} of ${pins.length}` : ""}</strong>
-        <span>{current.text || "File"}</span>
-      </span>
-    </button>
+    <div className="pin-bar">
+      <button
+        type="button"
+        className="pin-bar-main"
+        onClick={() => {
+          onOpen(current);
+          setIndex((index + 1) % pins.length);
+        }}
+        title="Go to the pinned message"
+      >
+        <span aria-hidden="true">📌</span>
+        <span className="pin-bar-text">
+          <strong>Pinned message{pins.length > 1 ? ` ${(index % pins.length) + 1} of ${pins.length}` : ""}</strong>
+          <span>{current.text || "File"}</span>
+        </span>
+      </button>
+      <button
+        type="button"
+        className="pin-bar-unpin"
+        onClick={() => void unpinMessage(conversationId, current.messageId)}
+        title="Unpin this message"
+        aria-label="Unpin this message"
+      >
+        ✕
+      </button>
+    </div>
   );
 }

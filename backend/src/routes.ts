@@ -12,6 +12,7 @@ import { conversationEscalationRoutes, escalationRoutes } from "@modules/escalat
 import { conversationNoteRoutes, noteRoutes } from "@modules/notes/index.js";
 import { conversationTagRoutes, tagRoutes } from "@modules/tags/index.js";
 import { cannedResponseRoutes } from "@modules/canned-responses/index.js";
+import { automationRoutes } from "@modules/automation/index.js";
 import { conversationModerationRoutes, moderationRoutes } from "@modules/moderation/index.js";
 import { callRoutes, conversationCallRoutes } from "@modules/calls/index.js";
 import { callbackRoutes, conversationCallbackRoutes } from "@modules/callbacks/index.js";
@@ -78,6 +79,7 @@ apiRouter.use("/presence", authenticate(authClient), presenceRoutes);
 apiRouter.use("/notifications", authenticate(authClient), notificationRoutes);
 apiRouter.use("/workspace", authenticate(authClient), workspaceRoutes);
 apiRouter.use("/moderation", authenticate(authClient), moderationRoutes);
+apiRouter.use("/automation", authenticate(authClient), automationRoutes);
 apiRouter.use("/calls", authenticate(authClient), callRoutes);
 apiRouter.use("/callbacks", authenticate(authClient), callbackRoutes);
 apiRouter.use("/agents", authenticate(authClient), agentProfileRoutes, chatSettingsRoutes);

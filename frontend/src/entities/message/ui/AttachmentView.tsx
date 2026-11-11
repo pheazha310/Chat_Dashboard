@@ -1,5 +1,5 @@
 import "./attachments.css";
-import { DownloadIcon } from "lucide-react";
+import { DownloadIcon, Maximize2Icon } from "lucide-react";
 import { repairFileName } from "@/shared/lib/file-name";
 import { formatDuration } from "@/shared/lib/format-size";
 import { saveAttachment, useAttachmentUrl } from "@/shared/lib/use-attachment-url";
@@ -34,6 +34,33 @@ function ImageAttachment({ attachment, url }: { attachment: AttachmentDto; url: 
   );
 }
 
+/** Video in the bubble with an expand button that opens it large in the viewer, with the download. */
+function VideoAttachment({ attachment, url }: { attachment: AttachmentDto; url: string | undefined }) {
+  return (
+    <Dialog>
+      <div className="attachment-video-wrap">
+        <video className="attachment-video" controls preload="metadata" src={url} aria-label={attachment.fileName} />
+        <DialogTrigger className="attachment-video-expand" aria-label={`View ${attachment.fileName} on screen`}>
+          <Maximize2Icon size={16} />
+        </DialogTrigger>
+      </div>
+      <DialogContent className="attachment-viewer">
+        <DialogTitle className="attachment-viewer-title">{attachment.fileName}</DialogTitle>
+        <video controls autoPlay src={url} aria-label={attachment.fileName} />
+        <Button
+          variant="secondary"
+          size="sm"
+          className="attachment-viewer-download"
+          onClick={() => void save(attachment)}
+        >
+          <DownloadIcon />
+          Download
+        </Button>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 /** One file in a message: images, audio and video are shown in place; everything else is a download button. */
 export default function AttachmentView({ attachment: raw }: { attachment: AttachmentDto }) {
   const attachment = { ...raw, fileName: repairFileName(raw.fileName) };
@@ -54,15 +81,7 @@ export default function AttachmentView({ attachment: raw }: { attachment: Attach
         </div>
       );
     case "VIDEO":
-      return (
-        <video
-          className="attachment-video"
-          controls
-          preload="metadata"
-          src={url ?? undefined}
-          aria-label={attachment.fileName}
-        />
-      );
+      return <VideoAttachment attachment={attachment} url={url ?? undefined} />;
     default:
       return <DocumentAttachment attachment={attachment} />;
   }

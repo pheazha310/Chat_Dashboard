@@ -56,7 +56,7 @@ Every send needs a `clientId` (a UUID the app generates per message). If a reque
 - **Download:** `GET /api/v1/customer` + `downloadPath` with the bearer token. `?inline=1` for images/audio/video.
   Voice playback also at `GET /messages/:messageId/audio`. Both support `Range` for seeking.
 
-Sending to a resolved or closed conversation reopens it. Blocked customers get `403`.
+Sending to a resolved or closed conversation reopens it, and sending to an archived one restores it to the agents' inbox. Blocked customers get `403`.
 
 ## Realtime (`/ws`)
 

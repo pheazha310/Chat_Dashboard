@@ -33,21 +33,27 @@ export async function loadPins(conversationId: string): Promise<void> {
   }
 }
 
+/** Unpins a message. The server decides who may; a refusal keeps the pin and is shown as a notice. */
+export async function unpinMessage(conversationId: string, messageId: string): Promise<void> {
+  try {
+    await unpinRequest(messageId);
+    const current = usePinStore.getState().byConversation[conversationId] ?? [];
+    setPins(
+      conversationId,
+      current.filter((pin) => pin.messageId !== messageId),
+    );
+  } catch (error) {
+    notify(error instanceof Error ? error.message : "Could not change the pin");
+  }
+}
+
 /** Pins a message, or unpins it if it is pinned. The server decides who may; a refusal is shown as a notice. */
 export async function togglePin(message: ChatMessage): Promise<void> {
   const current = usePinStore.getState().byConversation[message.conversationId] ?? [];
-  const pinned = current.some((pin) => pin.messageId === message.id);
+  if (current.some((pin) => pin.messageId === message.id)) return unpinMessage(message.conversationId, message.id);
   try {
-    if (pinned) {
-      await unpinRequest(message.id);
-      setPins(
-        message.conversationId,
-        current.filter((pin) => pin.messageId !== message.id),
-      );
-    } else {
-      const pin = toPinned(await pinRequest(message.id));
-      setPins(message.conversationId, [pin, ...current.filter((p) => p.messageId !== pin.messageId)]);
-    }
+    const pin = toPinned(await pinRequest(message.id));
+    setPins(message.conversationId, [pin, ...current.filter((p) => p.messageId !== pin.messageId)]);
   } catch (error) {
     notify(error instanceof Error ? error.message : "Could not change the pin");
   }
