@@ -1,14 +1,42 @@
 import "./attachments.css";
-import { formatBytes, formatDuration } from "@/shared/lib/format-size";
+import { DownloadIcon } from "lucide-react";
+import { repairFileName } from "@/shared/lib/file-name";
+import { formatDuration } from "@/shared/lib/format-size";
 import { saveAttachment, useAttachmentUrl } from "@/shared/lib/use-attachment-url";
-import { notify } from "@/shared/ui";
+import { Button, Dialog, DialogContent, DialogTitle, DialogTrigger, notify } from "@/shared/ui";
+import DocumentAttachment from "./DocumentAttachment";
 import type { AttachmentDto } from "@/shared/api/ws";
 
 const save = (file: AttachmentDto) =>
   saveAttachment(file.downloadPath, file.fileName).catch(() => notify(`Could not download ${file.fileName}`));
 
+/** Image thumbnail that opens a full-screen viewer on click; the viewer offers the download. */
+function ImageAttachment({ attachment, url }: { attachment: AttachmentDto; url: string | undefined }) {
+  return (
+    <Dialog>
+      <DialogTrigger className="attachment-image" aria-label={`View ${attachment.fileName}`}>
+        <img src={url} alt={attachment.fileName} />
+      </DialogTrigger>
+      <DialogContent className="attachment-viewer">
+        <DialogTitle className="attachment-viewer-title">{attachment.fileName}</DialogTitle>
+        <img src={url} alt={attachment.fileName} />
+        <Button
+          variant="secondary"
+          size="sm"
+          className="attachment-viewer-download"
+          onClick={() => void save(attachment)}
+        >
+          <DownloadIcon />
+          Download
+        </Button>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 /** One file in a message: images, audio and video are shown in place; everything else is a download button. */
-export default function AttachmentView({ attachment }: { attachment: AttachmentDto }) {
+export default function AttachmentView({ attachment: raw }: { attachment: AttachmentDto }) {
+  const attachment = { ...raw, fileName: repairFileName(raw.fileName) };
   const inline = attachment.kind === "IMAGE" || attachment.kind === "AUDIO" || attachment.kind === "VIDEO";
   const { url, error, loading } = useAttachmentUrl(attachment.downloadPath, inline);
 
@@ -17,16 +45,7 @@ export default function AttachmentView({ attachment }: { attachment: AttachmentD
 
   switch (attachment.kind) {
     case "IMAGE":
-      return (
-        <button
-          type="button"
-          className="attachment-image"
-          onClick={() => void save(attachment)}
-          aria-label={`Download ${attachment.fileName}`}
-        >
-          <img src={url ?? undefined} alt={attachment.fileName} />
-        </button>
-      );
+      return <ImageAttachment attachment={attachment} url={url ?? undefined} />;
     case "AUDIO":
       return (
         <div className="attachment-audio">
@@ -45,14 +64,6 @@ export default function AttachmentView({ attachment }: { attachment: AttachmentD
         />
       );
     default:
-      return (
-        <button type="button" className="attachment-file" onClick={() => void save(attachment)}>
-          <span aria-hidden>📄</span>
-          <span>
-            <strong>{attachment.fileName}</strong>
-            <small>{formatBytes(attachment.size)}</small>
-          </span>
-        </button>
-      );
+      return <DocumentAttachment attachment={attachment} />;
   }
 }

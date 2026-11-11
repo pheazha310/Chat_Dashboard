@@ -5,6 +5,8 @@ import { AppError, BadRequestError } from "@shared/errors/AppError.js";
 
 const parser = multer({
   storage: multer.memoryStorage(),
+  // Multer reads file names as Latin-1 by default, which garbles emoji, dashes and non-Latin scripts.
+  defParamCharset: "utf8",
   limits: { fileSize: env.MAX_UPLOAD_BYTES, files: 1, fields: 10, fieldSize: 64 * 1024, parts: 12 },
 });
 

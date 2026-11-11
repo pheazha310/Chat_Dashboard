@@ -4,7 +4,7 @@ import { fetchAttachmentBlob } from "@/shared/api/rest";
 type State = { url: string | null; error: boolean; loading: boolean };
 
 /** Loads an attachment with the bearer token and returns a blob URL for `<img>`, `<audio>` or `<video>`. */
-export function useAttachmentUrl(downloadPath: string | null, enabled = true): State {
+export function useAttachmentUrl(downloadPath: string | null, enabled = true, mimeType?: string): State {
   const [state, setState] = useState<State>({ url: null, error: false, loading: false });
 
   useEffect(() => {
@@ -14,7 +14,7 @@ export function useAttachmentUrl(downloadPath: string | null, enabled = true): S
     setState({ url: null, error: false, loading: true });
     fetchAttachmentBlob(downloadPath, controller.signal)
       .then((blob) => {
-        objectUrl = URL.createObjectURL(blob);
+        objectUrl = URL.createObjectURL(mimeType ? new Blob([blob], { type: mimeType }) : blob);
         setState({ url: objectUrl, error: false, loading: false });
       })
       .catch((error: unknown) => {
@@ -25,7 +25,7 @@ export function useAttachmentUrl(downloadPath: string | null, enabled = true): S
       controller.abort();
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [downloadPath, enabled]);
+  }, [downloadPath, enabled, mimeType]);
 
   return state;
 }
