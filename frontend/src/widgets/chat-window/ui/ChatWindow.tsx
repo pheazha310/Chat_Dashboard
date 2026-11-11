@@ -26,8 +26,7 @@ import { takeOverConversation, TakeOverButton } from "@/features/take-over-conve
 import { useSessionStore } from "@/shared/api/session";
 import { ChatSearchBar, JumpToDateButton, showMessage, useChatSearchStore } from "@/features/search-in-chat";
 import { blockConversationCustomerAction, reportSpamAction } from "@/features/moderate-conversation";
-import { TemplatePicker } from "@/features/canned-responses";
-import { insertIntoDraft, MessageComposer, retryMessage, useComposerStore } from "@/features/send-message";
+import { MessageComposer, retryMessage, useComposerStore } from "@/features/send-message";
 import { API_URL, assets } from "@/shared/config";
 import { AssetIcon, IconButton, notify, Icon, promptAction } from "@/shared/ui";
 import { useCustomerCallStore } from "@/features/customer-call";
@@ -366,12 +365,7 @@ export default function ChatWindow({
         {/* With the backend only the agent who handles the conversation may write (text, files or voice); the mock
             server lets anyone. Others see why, and can take it over, instead of failing after typing or recording. */}
         {!API_URL || canReply(conversation, me) ? (
-          <MessageComposer
-            conversationId={conversation.id}
-            extraControls={
-              API_URL ? <TemplatePicker onInsert={(text) => insertIntoDraft(conversation.id, text)} /> : undefined
-            }
-          />
+          <MessageComposer conversationId={conversation.id} />
         ) : (
           <div className="reply-lock" role="status">
             <span>
