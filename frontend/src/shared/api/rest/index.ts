@@ -2,6 +2,7 @@ export { ApiError, apiRequest } from "./client";
 export {
   archiveConversationRequest,
   getActivities,
+  getApplication,
   getConversation,
   getMessages,
   listConversations,

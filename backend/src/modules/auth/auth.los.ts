@@ -6,7 +6,6 @@ import {
   type JWTPayload,
   type JWTVerifyGetKey,
 } from "jose";
-import type { Redis } from "ioredis";
 import { logger } from "@config/logger.js";
 import { AppError, UnauthorizedError } from "@shared/errors/AppError.js";
 import type { Role } from "@shared/auth/auth.types.js";
@@ -21,6 +20,8 @@ export interface LosConfig {
   handoffAudience: string;
   /** `tokenType` claim of that hand-off token. */
   handoffTokenType: string;
+  /** Longest life in seconds (`exp` - `iat`) accepted for a hand-off token; a longer-lived one is refused. */
+  handoffMaxAgeSeconds?: number;
   /** LOS staff role names (lower-case) that map to a different chat role, e.g. `loan_officer` → AGENT. */
   staffRoleMap?: ReadonlyMap<string, Role>;
 }
@@ -91,16 +92,7 @@ export interface UsedTokenIds {
   claim(id: string, ttlMs: number): Promise<boolean>;
 }
 
-/** Shared by every API instance. */
-export class RedisUsedTokenIds implements UsedTokenIds {
-  constructor(private readonly redis: Redis) {}
-
-  async claim(id: string, ttlMs: number): Promise<boolean> {
-    return (await this.redis.set(`los:handoff-jti:${id}`, "1", "PX", Math.max(1, Math.ceil(ttlMs)), "NX")) === "OK";
-  }
-}
-
-/** One process only (EVENT_BUS=memory, tests). */
+/** One process only (tests). Production uses PrismaUsedTokenIds. */
 export class MemoryUsedTokenIds implements UsedTokenIds {
   private readonly ids = new Map<string, number>();
 
@@ -147,6 +139,11 @@ export class LosTokenVerifier {
     }
     const role = staffRoleOf(claims.role, this.config.staffRoleMap ?? new Map());
     if (!role) this.reject("unknown staff role");
+    const maxAge = this.config.handoffMaxAgeSeconds;
+    // `iat` is required here: without it the token's lifetime cannot be checked.
+    if (maxAge !== undefined && (typeof claims.iat !== "number" || (claims.exp ?? 0) - claims.iat > maxAge)) {
+      this.reject("hand-off token lives too long");
+    }
     const identity = this.identity(claims);
     await this.claimOnce(claims);
     return { losUserType: "STAFF", ...identity, role };
@@ -227,6 +224,7 @@ export async function losVerifierFrom(
     LOS_CUSTOMER_AUDIENCE: string;
     LOS_HANDOFF_AUDIENCE: string;
     LOS_HANDOFF_TOKEN_TYPE: string;
+    LOS_HANDOFF_TOKEN_MAX_AGE?: number | undefined;
     LOS_STAFF_ROLE_MAP?: string | undefined;
   },
   usedIds: UsedTokenIds = new MemoryUsedTokenIds(),
@@ -241,6 +239,7 @@ export async function losVerifierFrom(
       customerAudience: env.LOS_CUSTOMER_AUDIENCE,
       handoffAudience: env.LOS_HANDOFF_AUDIENCE,
       handoffTokenType: env.LOS_HANDOFF_TOKEN_TYPE,
+      ...(env.LOS_HANDOFF_TOKEN_MAX_AGE !== undefined && { handoffMaxAgeSeconds: env.LOS_HANDOFF_TOKEN_MAX_AGE }),
       staffRoleMap: parseStaffRoleMap(env.LOS_STAFF_ROLE_MAP ?? ""),
     },
     key,

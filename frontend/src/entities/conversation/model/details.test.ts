@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const api = vi.hoisted(() => ({
   getConversation: vi.fn(),
   getActivities: vi.fn(),
+  getApplication: vi.fn(),
   listConversations: vi.fn(),
   listConversationsPage: vi.fn(),
   mock: { value: false },
@@ -10,6 +11,7 @@ const api = vi.hoisted(() => ({
 vi.mock("@/shared/api/rest", () => ({
   getConversation: api.getConversation,
   getActivities: api.getActivities,
+  getApplication: api.getApplication,
   listConversations: api.listConversations,
   listConversationsPage: api.listConversationsPage,
 }));
@@ -52,6 +54,50 @@ beforeEach(() => {
     selectedId: "a",
     query: "",
     filter: "all",
+  });
+});
+
+describe("loadDetails: the loan application", () => {
+  const loaded = { id: "a", unread: 3, summary: "", activity: [], application: { appId: "731", status: "Unknown" } };
+  beforeEach(() => {
+    useConversationStore.setState({ byId: { a: loaded as unknown as Conversation } });
+    api.getConversation.mockResolvedValue(backendConversation("a", { applicationId: 731 }));
+    api.getActivities.mockResolvedValue([]);
+  });
+
+  it("shows the application LOS has for the customer in the panel", async () => {
+    api.getApplication.mockResolvedValue({
+      applicationId: 731,
+      status: "REQUEST_REVIEWING",
+      ticketNumber: "LN-000123",
+      appliedDate: "2026-11-10T14:05:00.000Z",
+      loanPurpose: "Business",
+      requestedLoanSize: 500,
+      requestedLoanTerm: 30,
+      fetchedAt: "2026-11-12T01:00:00.000Z",
+    });
+    await loadDetails("a");
+    expect(useConversationStore.getState().byId.a?.application).toMatchObject({
+      appId: "731",
+      product: "Business",
+      amount: "$500",
+      tenor: "30 days",
+      status: "Reviewing",
+      reference: "LN-000123",
+    });
+  });
+
+  it("keeps what the panel already shows when there is no application yet (null)", async () => {
+    api.getApplication.mockResolvedValue(null);
+    await loadDetails("a");
+    expect(useConversationStore.getState().byId.a?.application).toEqual(loaded.application);
+  });
+
+  it("still loads the summary and timeline when the application cannot be read", async () => {
+    api.getConversation.mockResolvedValue(backendConversation("a", { summary: "Wants a new date" }));
+    api.getApplication.mockRejectedValue(new Error("500"));
+    await loadDetails("a");
+    expect(useConversationStore.getState().byId.a?.summary).toBe("Wants a new date");
   });
 });
 

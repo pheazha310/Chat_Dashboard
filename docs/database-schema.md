@@ -39,7 +39,8 @@ start in them.
 | [09](database/09-replies-and-automation.dbml)     | Replies and automation     | `canned_responses`, `automation_rules`, `automation_logs`, `ai_training_examples`                                           |
 | [10](database/10-callbacks-and-calls.dbml)        | Callbacks and calls        | `callback_requests`, `calls`, `call_participants`                                                                           |
 | [11](database/11-moderation.dbml)                 | Moderation                 | `spam_reports`, `customer_blocks`, `blocked_keywords`, `moderation_activities`                                              |
-| [12](database/12-backend-1-external.dbml)         | Backend 1 (external)       | `los_customers`, `los_agents`, `loan_applications`: context only, not created here                                          |
+| [12](database/12-loan-application-snapshots.dbml) | Loan application snapshots | `loan_application_snapshots`: six fields of the customer's latest LOS application, read at their sign-in                    |
+| [13](database/13-backend-1-external.dbml)         | Backend 1 (external)       | `los_customers`, `los_agents`, `loan_applications`: context only, not created here                                          |
 
 A new table goes into the file of its domain (or a new numbered file, keeping Backend 1 last), with its relations next to
 it.
@@ -50,7 +51,7 @@ Two backends, each with its own PostgreSQL database:
 
 - **Backend 2 (chat, this repo):** sections 01-11. Since 2026-11-07 it also owns authentication (`users`,
   `refresh_tokens`, see `docs/api-auth.md`) and since 2026-11-09 roles and permissions (`docs/api-roles.md`).
-- **Backend 1 (loan system):** customer profiles, agent profiles and loan applications (section 12). Its API is not
+- **Backend 1 (loan system):** customer profiles, agent profiles and loan applications (section 13). Its API is not
   known yet; the chat database never has a foreign key to it.
 
 **Every person id is a `users.id`.** Columns that name a person (`customer_id`, `agent_id`, `assigned_agent_id`,

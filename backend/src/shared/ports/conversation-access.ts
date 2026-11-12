@@ -5,6 +5,8 @@ import type { PolicyInput } from "@shared/policy/conversation-access.js";
 export interface AccessibleConversationState extends PolicyInput {
   id: string;
   customerId: string | null;
+  /** The LOS loan application the conversation is about, if any. */
+  applicationId: number | null;
 }
 
 /** Lets other modules ask "may this caller see this conversation?" without touching its repository. */

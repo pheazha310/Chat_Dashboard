@@ -15,6 +15,58 @@ const noS3 = { S3_BUCKET: undefined, S3_REGION: undefined, S3_ENDPOINT: undefine
 
 afterEach(() => vi.unstubAllEnvs());
 
+const DEV_BASE = "https://api-dev.los.delightech.asia/api/v1";
+const DEV_JWKS = `${DEV_BASE}/guest/.well-known/jwks.json`;
+const UAT_JWKS = "https://api-uat.los.delightech.asia/api/v1/guest/.well-known/jwks.json";
+const noLos = {
+  LOS_ISSUER: undefined,
+  LOS_JWKS_URL: undefined,
+  LOS_PUBLIC_KEY: undefined,
+  LOS_BASE_URL: undefined,
+  LOS_HANDOFF_TOKEN_MAX_AGE: undefined,
+  LOS_WEB_ORIGIN: undefined,
+  CHAT_WEB_ORIGIN: undefined,
+  LOS_SERVICE_API_KEY: undefined,
+  LOS_SERVICE_ALLOWED_IPS: undefined,
+};
+
+describe("LOS settings", () => {
+  it("accepts a Dev set whose JWKS and API are on the same LOS host", async () => {
+    const env = await loadEnv({ ...noLos, LOS_ISSUER: "los-backend", LOS_JWKS_URL: DEV_JWKS, LOS_BASE_URL: DEV_BASE });
+
+    expect(env).toMatchObject({ LOS_BASE_URL: DEV_BASE, LOS_HANDOFF_TOKEN_MAX_AGE: 120 });
+  });
+
+  it("refuses a Staging JWKS with the Dev API (each environment signs with its own key)", async () => {
+    await expect(
+      loadEnv({ ...noLos, LOS_ISSUER: "los-backend", LOS_JWKS_URL: UAT_JWKS, LOS_BASE_URL: DEV_BASE }),
+    ).rejects.toThrow("same host");
+  });
+
+  it("limits the hand-off token age to a sensible range", async () => {
+    await expect(loadEnv({ ...noLos, LOS_HANDOFF_TOKEN_MAX_AGE: "0" })).rejects.toThrow("LOS_HANDOFF_TOKEN_MAX_AGE");
+    await expect(loadEnv({ ...noLos, LOS_HANDOFF_TOKEN_MAX_AGE: "3600" })).rejects.toThrow("LOS_HANDOFF_TOKEN_MAX_AGE");
+    expect((await loadEnv({ ...noLos, LOS_HANDOFF_TOKEN_MAX_AGE: "300" })).LOS_HANDOFF_TOKEN_MAX_AGE).toBe(300);
+  });
+
+  it("takes web origins as bare origins, never a path or a wildcard", async () => {
+    const env = await loadEnv({ ...noLos, LOS_WEB_ORIGIN: "https://cms-uat.delightech.asia/" });
+    expect(env.LOS_WEB_ORIGIN).toBe("https://cms-uat.delightech.asia");
+
+    await expect(loadEnv({ ...noLos, LOS_WEB_ORIGIN: "*" })).rejects.toThrow("LOS_WEB_ORIGIN");
+    await expect(loadEnv({ ...noLos, CHAT_WEB_ORIGIN: "https://chat.example.com/app" })).rejects.toThrow(
+      "CHAT_WEB_ORIGIN",
+    );
+  });
+
+  it("keeps the service credentials unset by default (LOS has not provided them yet)", async () => {
+    const env = await loadEnv(noLos);
+
+    expect(env.LOS_SERVICE_API_KEY).toBeUndefined();
+    expect(env.LOS_SERVICE_ALLOWED_IPS).toBe("");
+  });
+});
+
 describe("storage settings", () => {
   it("defaults to the local driver, which needs no S3 settings", async () => {
     const env = await loadEnv({ ...noS3, STORAGE_DRIVER: undefined });

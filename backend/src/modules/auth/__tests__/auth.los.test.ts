@@ -1,5 +1,7 @@
-import { createRemoteJWKSet, exportSPKI, generateKeyPair, SignJWT, type JWTPayload } from "jose";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { createRemoteJWKSet, exportJWK, exportSPKI, generateKeyPair, SignJWT, type JWTPayload } from "jose";
+import { createServer, type Server } from "node:http";
+import type { AddressInfo } from "node:net";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { logger } from "@config/logger.js";
 import { AppError, UnauthorizedError } from "@shared/errors/AppError.js";
 
@@ -101,6 +103,14 @@ describe("LosTokenVerifier", () => {
     const jti = crypto.randomUUID();
     await expect(verifier.verifyStaffHandoff(await sign(staff, { aud: "chat", jti }))).resolves.toBeDefined();
     await expect(verifier.verifyStaffHandoff(await sign(staff, { aud: "chat", jti }))).rejects.toBeInstanceOf(
+      UnauthorizedError,
+    );
+  });
+
+  it("refuses a hand-off token that lives longer than LOS_HANDOFF_TOKEN_MAX_AGE", async () => {
+    const strict = new LosTokenVerifier({ ...config, handoffMaxAgeSeconds: 120 }, publicKey);
+    await expect(strict.verifyStaffHandoff(await sign(staff, { aud: "chat", exp: "2m" }))).resolves.toBeDefined();
+    await expect(strict.verifyStaffHandoff(await sign(staff, { aud: "chat", exp: "10m" }))).rejects.toBeInstanceOf(
       UnauthorizedError,
     );
   });
@@ -246,5 +256,69 @@ describe("losVerifierFrom", () => {
     const pem = (await exportSPKI(publicKey)).replace(/\n/g, "\\n");
     const fromEnv = await losVerifierFrom({ ...base, LOS_ISSUER: config.issuer, LOS_PUBLIC_KEY: pem });
     await expect(fromEnv?.verifyCustomer(await sign(customer))).resolves.toMatchObject({ losUserId: 2 });
+  });
+});
+
+describe("LOS JWKS key refresh", () => {
+  let server: Server | undefined;
+  afterEach(async () => {
+    vi.useRealTimers();
+    await new Promise((resolve) => (server ? server.close(resolve) : resolve(undefined)));
+    server = undefined;
+  });
+
+  /** A JWKS endpoint whose key set the test can swap, like an LOS key rotation. */
+  async function jwksServer(initial: object[]) {
+    let keys = initial;
+    server = createServer((_, res) => {
+      res.setHeader("content-type", "application/json").end(JSON.stringify({ keys }));
+    });
+    await new Promise((resolve) => server?.listen(0, "127.0.0.1", () => resolve(undefined)));
+    return {
+      url: `http://127.0.0.1:${(server.address() as AddressInfo).port}/jwks.json`,
+      replace: (next: object[]) => (keys = next),
+    };
+  }
+
+  const publicJwk = async (key: CryptoKey, kid?: string) => ({
+    ...(await exportJWK(key)),
+    alg: "RS256",
+    use: "sig",
+    ...(kid && { kid }),
+  });
+  const signWith = (key: CryptoKey, kid?: string) =>
+    new SignJWT(customer)
+      .setProtectedHeader({ alg: "RS256", ...(kid && { kid }) })
+      .setIssuer(config.issuer)
+      .setAudience(config.customerAudience)
+      .setIssuedAt()
+      .setExpirationTime("5m")
+      .sign(key);
+  const env = (url: string) => ({
+    LOS_ISSUER: config.issuer,
+    LOS_JWKS_URL: url,
+    LOS_CUSTOMER_AUDIENCE: "luyleun",
+    LOS_HANDOFF_AUDIENCE: "chat",
+    LOS_HANDOFF_TOKEN_TYPE: "chat-handoff",
+  });
+
+  it("verifies a token without a kid against the one key in the JWKS", async () => {
+    const jwks = await jwksServer([await publicJwk(publicKey, "a1b2c3d4e5f60718")]);
+    const los = await losVerifierFrom(env(jwks.url));
+    await expect(los?.verifyCustomer(await signWith(privateKey))).resolves.toMatchObject({ losUserId: 2 });
+  });
+
+  it("picks up a rotated key when a token with an unknown kid arrives", async () => {
+    const rotated = await generateKeyPair("RS256");
+    const jwks = await jwksServer([await publicJwk(publicKey, "old")]);
+    const los = await losVerifierFrom(env(jwks.url));
+    await expect(los?.verifyCustomer(await signWith(privateKey, "old"))).resolves.toBeDefined();
+
+    jwks.replace([await publicJwk(rotated.publicKey, "new")]);
+    // jose waits 30 s between key fetches; the new key is accepted once that has passed.
+    vi.useFakeTimers({ toFake: ["Date"], now: Date.now() + 31_000 });
+    await expect(los?.verifyCustomer(await signWith(rotated.privateKey, "new"))).resolves.toBeDefined();
+    // The old key is gone with the rotation.
+    await expect(los?.verifyCustomer(await signWith(privateKey, "old"))).rejects.toBeInstanceOf(UnauthorizedError);
   });
 });

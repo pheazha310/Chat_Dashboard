@@ -109,6 +109,7 @@ All anchored to a conversation the caller can open, so customers cannot be looke
 | GET    | `/conversations/:id/customer`               | Profile from Backend 1, redacted by role (below). `503` if Backend 1 is unreachable.       |
 | GET    | `/conversations/:id/customer/conversations` | The customer's other conversations (archived and closed included) that the caller may see. |
 | GET    | `/conversations/:id/participants`           | Current members first, then people who left; names from Backend 1.                         |
+| GET    | `/conversations/:id/application`            | The customer's LOS loan application (six fields, `fetchedAt`), or `data: null`; see below. |
 | GET    | `/conversations?customerId=`                | Same list as the inbox, filtered to one customer (also `excludeId`).                       |
 
 Redaction (provisional until Backend 1 defines its permissions): name, avatar and `blacklisted` for anyone who can open
@@ -150,3 +151,17 @@ Backend 1, `null` if unreachable) and `availability` (the chosen status while on
 conversations the agent owns, with the other inbox filters (`status`, `priority`, `tag`, `tags`, `sort`, `q`, `page`,
 `size`). There is no separate "list agents" or availability endpoint: `GET /presence` lists agents who are online and
 `PUT /presence/me` sets availability; a full agent directory needs Backend 1's contract.
+
+## Loan application behind a conversation
+
+`GET /api/v1/admin/conversations/:id/application` returns `{ applicationId, status, ticketNumber, appliedDate,
+loanPurpose, requestedLoanSize, requestedLoanTerm, fetchedAt }`, or `data: null`. LOS has not given Chat service access
+yet (`docs/api-auth.md`, "Waiting on LOS"), so the data is read **with the customer's own LOS token when they sign in
+with LOS** (`POST /customer/auth/los`): their latest application, six fields, kept in `loan_application_snapshots`
+(the token is not kept). It needs `LOS_BASE_URL`; without it nothing is read. So it is **as fresh as the customer's last
+sign-in** (`fetchedAt` is when Chat read it, true UTC), covers the customer's latest application only, and is `null`
+until the customer has signed in with LOS. It is returned only when the conversation's `applicationId` and customer match
+the snapshot, to anyone who can open the conversation (the fields are not treated as sensitive; change that here and in the
+service if the business disagrees). `status` is LOS's own open string, `appliedDate` is Cambodia local time labelled `Z`
+(not converted), the amount is USD and the tenor is days. A LOS failure never blocks sign-in; it is logged and the old
+snapshot stays.

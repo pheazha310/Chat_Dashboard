@@ -19,6 +19,18 @@ export function deriveApiUrl(wsUrl: string | undefined): string | undefined {
 
 export const API_URL: string | undefined = (import.meta.env.VITE_API_URL || deriveApiUrl(WS_URL))?.replace(/\/$/, "");
 
+/**
+ * The exact origin of LOS Web (`VITE_LOS_WEB_ORIGIN`, e.g. https://los-dev.delightech.asia). Set, and only when this app
+ * runs inside an iframe, it signs in with the hand-off token LOS Web sends. A path or wildcard makes it unset.
+ */
+export function parseOrigin(value: string | undefined): string | undefined {
+  if (!value || !URL.canParse(value)) return undefined;
+  const url = new URL(value);
+  return url.origin !== "null" && url.href.replace(/\/$/, "") === url.origin ? url.origin : undefined;
+}
+
+export const LOS_WEB_ORIGIN: string | undefined = parseOrigin(import.meta.env.VITE_LOS_WEB_ORIGIN);
+
 /** Where the signed-in session (access + refresh token and the user) is kept; written by `shared/api/auth`. */
 export const AUTH_SESSION_KEY = "auth.session";
 /** Older key a host application could set with a bare access token. */

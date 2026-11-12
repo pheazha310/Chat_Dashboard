@@ -1,3 +1,4 @@
+export { listenForHandoff } from "./embed";
 export {
   AuthError,
   authRequired,
@@ -5,6 +6,7 @@ export {
   readSession,
   refreshSession,
   signIn,
+  signInWithHandoff,
   signOut,
   startSessionKeeper,
   useAuthStore,

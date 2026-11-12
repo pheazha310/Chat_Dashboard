@@ -2,6 +2,20 @@
 
 export type BackendAgentProfile = { id: string; name: string; avatarUrl: string | null };
 
+/** `GET /conversations/:id/application`: six fields of the customer's LOS application, read when they last signed in. */
+export type BackendLoanApplication = {
+  applicationId: number;
+  /** LOS's own open string. */
+  status: string;
+  ticketNumber: string | null;
+  appliedDate: string | null;
+  loanPurpose: string | null;
+  requestedLoanSize: number | null;
+  requestedLoanTerm: number | null;
+  /** When the chat backend read it from LOS (true UTC). */
+  fetchedAt: string;
+};
+
 export type BackendConversation = {
   id: string;
   customerId: string | null;

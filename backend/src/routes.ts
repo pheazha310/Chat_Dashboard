@@ -6,6 +6,7 @@ import { conversationRoutes } from "@modules/conversations/index.js";
 import { attachmentRoutes, conversationAttachmentRoutes, messageAudioRoutes } from "@modules/attachments/index.js";
 import { messageActionRoutes, messageRoutes } from "@modules/messages/index.js";
 import { customerRoutes } from "@modules/customers/index.js";
+import { loanApplicationRoutes } from "@modules/los-data/index.js";
 import { conversationMuteRoutes, notificationRoutes } from "@modules/notifications/index.js";
 import { presenceRoutes } from "@modules/presence/index.js";
 import { conversationEscalationRoutes, escalationRoutes } from "@modules/escalations/index.js";
@@ -66,6 +67,7 @@ apiRouter.use(
   assignmentRoutes,
   messageRoutes,
   customerRoutes,
+  loanApplicationRoutes,
   conversationMuteRoutes,
   conversationAttachmentRoutes,
   conversationNoteRoutes,

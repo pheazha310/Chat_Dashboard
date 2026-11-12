@@ -1,0 +1,26 @@
+// ==============================================================================================================
+// 12. LOAN APPLICATION SNAPSHOTS
+// Six fields of a customer's latest LOS application, read with the customer's own LOS token when they sign in (the
+// token is never stored). Loan data stays owned by LOS (Backend 1); this is what the agent panel shows, as fresh as
+// the customer's last sign-in. No foreign keys: the person id is a users.id and the application is an LOS id.
+// ==============================================================================================================
+
+TableGroup "12 Loan application snapshots" [color: #0E7490] {
+  loan_application_snapshots
+}
+
+Table loan_application_snapshots [headercolor: #0E7490] {
+  application_id integer [pk, note: 'LOS loan application id (matches conversations.application_id)']
+  customer_id uuid [not null, note: 'users.id of the customer whose token read it; a conversation shows it only when this is its customer']
+  status varchar(100) [not null, note: 'LOS status as is (open string)']
+  ticket_number varchar(100)
+  applied_date varchar(40) [note: 'As LOS sends it: Cambodia local time labelled Z, NOT true UTC. Not converted']
+  loan_purpose varchar(255) [note: 'The closest LOS field to a product']
+  requested_loan_size integer [note: 'USD']
+  requested_loan_term integer [note: 'Days']
+  fetched_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    customer_id
+  }
+}

@@ -1,5 +1,12 @@
+import { toApplicationDto } from "@/shared/api/backend/los-application";
 import { toActivity, toConversation } from "@/shared/api/backend/mappers";
-import { getActivities, getConversation, listConversations, listConversationsPage } from "@/shared/api/rest";
+import {
+  getActivities,
+  getApplication,
+  getConversation,
+  listConversations,
+  listConversationsPage,
+} from "@/shared/api/rest";
 import { isMockTransport } from "@/shared/api/ws";
 import { notify } from "@/shared/ui";
 import { INBOX_PAGE_SIZE, useConversationStore } from "./store";
@@ -7,17 +14,37 @@ import { INBOX_PAGE_SIZE, useConversationStore } from "./store";
 const inFlight = new Set<string>();
 
 /**
- * Fetches what the inbox does not carry: the summary and the activity timeline. With the mock transport both are
+ * Fetches what the inbox does not carry: the summary, the activity timeline and the customer's loan application. With the mock transport both are
  * already part of the synced conversation.
  */
 export async function loadDetails(conversationId: string): Promise<void> {
   if (isMockTransport || inFlight.has(conversationId)) return;
   inFlight.add(conversationId);
   try {
-    const [detail, activities] = await Promise.all([getConversation(conversationId), getActivities(conversationId)]);
+    const [detail, activities, application] = await Promise.all([
+      getConversation(conversationId),
+      getActivities(conversationId),
+      // The loan panel is optional: a failed or empty read must not stop the rest of the details.
+      getApplication(conversationId).catch(() => null),
+    ]);
     useConversationStore.getState().patch(conversationId, {
       summary: detail.summary ?? "",
       activity: activities.map(toActivity),
+      ...(application
+        ? {
+            application: toApplicationDto({
+              id: application.applicationId,
+              status: application.status,
+              ticketNumber: application.ticketNumber,
+              appliedDate: application.appliedDate,
+              loanDetail: {
+                loanPurpose: application.loanPurpose,
+                requestedLoanSize: application.requestedLoanSize,
+                requestedLoanTerm: application.requestedLoanTerm,
+              },
+            }),
+          }
+        : {}),
     });
   } catch {
     // The chat still works without the side panel details; the next selection retries.

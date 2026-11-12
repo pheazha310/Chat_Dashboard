@@ -1450,6 +1450,31 @@
                   "query": []
                 }
               }
+            },
+            {
+              "name": "Loan application behind the conversation (read from LOS at the customer's last sign-in)",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/admin/conversations/{{convId}}/application",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "admin", "conversations", "{{convId}}", "application"],
+                  "query": []
+                },
+                "description": "Six fields of the customer's LOS application, or null (no application, not read yet, or another customer's). Filled when the customer signs in with an LOS token; fetchedAt says how fresh it is. Null in a plain run, which signs in without LOS."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 with an application or null', () => { pm.response.to.have.status(200); const d = pm.response.json().data; pm.expect(d === null || typeof d.status === 'string').to.be.true; });"
+                    ]
+                  }
+                }
+              ]
             }
           ]
         }

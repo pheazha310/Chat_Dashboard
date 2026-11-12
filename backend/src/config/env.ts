@@ -1,6 +1,15 @@
 import "dotenv/config";
 import { z } from "zod";
 
+/** A bare web origin (`https://host[:port]`): normalised, so a trailing slash is fine; a path or `*` is refused. */
+const origin = () =>
+  z
+    .string()
+    .refine((value) => URL.canParse(value) && new URL(value).origin === new URL(value).href.replace(/\/$/, ""), {
+      message: "must be an origin such as https://host (no path, no wildcard)",
+    })
+    .transform((value) => new URL(value).origin);
+
 const schema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PORT: z.coerce.number().int().positive().default(4000),
@@ -39,6 +48,20 @@ const schema = z.object({
   // LOS staff role names that differ from the chat's, as "losName:ROLE" pairs, e.g. "loan_officer:AGENT,manager:SUPERVISOR".
   // Names not listed are accepted when they are a chat staff role (agent, supervisor, admin; any case).
   LOS_STAFF_ROLE_MAP: z.string().default(""),
+  // The LOS API (Dev https://api-dev.los.delightech.asia/api/v1, Staging https://api-uat.los.delightech.asia/api/v1).
+  // Each environment has its own signing key: its JWKS must be on the same host as this URL.
+  LOS_BASE_URL: z.url().optional(),
+  // Longest life (seconds, `exp` - `iat`) accepted for a staff hand-off token; LOS issues ~120.
+  LOS_HANDOFF_TOKEN_MAX_AGE: z.coerce.number().int().min(10).max(600).default(120),
+  // Exact origins of LOS Web (parent of the iframe) and of the chat dashboard, for postMessage checks. No wildcard.
+  LOS_WEB_ORIGIN: origin().optional(),
+  CHAT_WEB_ORIGIN: origin().optional(),
+  // PENDING at LOS (machine-to-machine access for /integration/chat/*): not issued yet, nothing reads them yet.
+  LOS_SERVICE_API_KEY: z.string().min(1).optional(),
+  LOS_SERVICE_ALLOWED_IPS: z.string().default(""),
+  // How long a staff session started by an LOS hand-off lasts, fixed at sign-in. After it the dashboard needs a fresh
+  // hand-off, so a staff member LOS has suspended, or whose role changed, is picked up (LOS sends no event for that).
+  LOS_STAFF_SESSION_SECONDS: z.coerce.number().int().min(300).max(86400).default(3600),
   // Sign-in, registration and refresh requests per client IP per minute; 0 turns the limit off.
   AUTH_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(0).default(20),
   // Express `trust proxy` hop count, so the client IP is read from X-Forwarded-For behind a load balancer. 0 = direct.
@@ -97,6 +120,16 @@ export const env = schema
     message: "LOS_ISSUER needs LOS_JWKS_URL or LOS_PUBLIC_KEY",
     path: ["LOS_ISSUER"],
   })
+  .refine(
+    (value) =>
+      !value.LOS_BASE_URL ||
+      !value.LOS_JWKS_URL ||
+      new URL(value.LOS_BASE_URL).host === new URL(value.LOS_JWKS_URL).host,
+    {
+      message: "LOS_JWKS_URL and LOS_BASE_URL must be on the same host (Dev and Staging keys differ)",
+      path: ["LOS_JWKS_URL"],
+    },
+  )
   .refine((value) => value.STORAGE_DRIVER !== "s3" || Boolean(value.S3_BUCKET), {
     message: "STORAGE_DRIVER=s3 needs S3_BUCKET",
     path: ["S3_BUCKET"],

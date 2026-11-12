@@ -12,7 +12,11 @@ import { MemoryRateLimitStore, RedisRateLimitStore } from "@shared/middleware/ra
 import { AccountCheckedAuthClient } from "@modules/auth/auth.account-check.js";
 import { AuthRepository } from "@modules/auth/auth.repository.js";
 import { AuthService } from "@modules/auth/auth.service.js";
-import { losVerifierFrom, MemoryUsedTokenIds, RedisUsedTokenIds } from "@modules/auth/auth.los.js";
+import { losVerifierFrom } from "@modules/auth/auth.los.js";
+import { BearerTokenAuth, LosDataClient } from "@modules/los-data/los-data.client.js";
+import { LoanApplicationRepository } from "@modules/los-data/los-data.repository.js";
+import { LoanApplicationService } from "@modules/los-data/los-data.service.js";
+import { PrismaUsedTokenIds } from "@modules/auth/auth.used-token.repository.js";
 import { AccessTokens, DevOrJwtAuthClient } from "@modules/auth/auth.tokens.js";
 import { DEFAULT_AUTH_OPTIONS } from "@modules/auth/auth.types.js";
 import { UserDirectory, UserService } from "@modules/auth/user.service.js";
@@ -55,19 +59,22 @@ const accessTokens = new AccessTokens(accessTokenSecret(), {
 });
 
 /** Checks LOS tokens for "sign in with LOS"; null (the endpoints answer 503) when LOS_ISSUER is not set. */
-const losVerifier = await losVerifierFrom(
-  env,
-  env.EVENT_BUS === "redis" ? new RedisUsedTokenIds(redis) : new MemoryUsedTokenIds(),
-);
+const losVerifier = await losVerifierFrom(env, new PrismaUsedTokenIds());
 
 /** Sign-in, registration, refresh and password changes. */
 export const authService = new AuthService(
   authRepository,
   accessTokens,
-  { ...DEFAULT_AUTH_OPTIONS, refreshTtlMs: env.REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000 },
+  {
+    ...DEFAULT_AUTH_OPTIONS,
+    refreshTtlMs: env.REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000,
+    losStaffSessionMs: env.LOS_STAFF_SESSION_SECONDS * 1000,
+  },
   undefined,
   identities,
   losVerifier,
+  // `loanApplications` is built below, once the conversation access it needs exists.
+  { refreshFromCustomerToken: (customerId, token) => loanApplications.refreshFromCustomerToken(customerId, token) },
 );
 
 /** Account management (admins), and the `local` directory of names. */
@@ -110,4 +117,15 @@ const checkedAccessTokens = new AccountCheckedAuthClient(accessTokens, userServi
 export const authClient = new MappedAuthClient(
   env.AUTH_MODE === "dev" ? new DevOrJwtAuthClient(new DevAuthClient(), checkedAccessTokens) : checkedAccessTokens,
   identities,
+);
+
+/**
+ * Loan data for the agent panel: read with the customer's own LOS token at their sign-in (no LOS service credential
+ * exists yet). Off while LOS_BASE_URL is unset.
+ */
+export const loanApplications = new LoanApplicationService(
+  new LoanApplicationRepository(),
+  container.conversations,
+  (token) =>
+    env.LOS_BASE_URL ? new LosDataClient({ baseUrl: env.LOS_BASE_URL, auth: new BearerTokenAuth(token) }) : null,
 );

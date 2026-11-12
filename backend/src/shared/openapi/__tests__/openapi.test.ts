@@ -71,6 +71,7 @@ describe("OpenAPI document", () => {
         "GET /conversations/{id}/customer",
         "GET /conversations/{id}/customer/conversations",
         "GET /conversations/{id}/participants",
+        "GET /conversations/{id}/application",
         "POST /messages/{messageId}/replies",
         "PATCH /messages/{messageId}",
         "DELETE /messages/{messageId}",

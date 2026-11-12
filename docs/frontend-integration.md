@@ -194,3 +194,22 @@ Against the real backend the "Auto-response settings" and "AI training data" pag
 (`features/message-settings/model/automation.ts`, `shared/api/rest/automation.ts`); only supervisors and admins can save
 the replies or approve an example, and agents see them read-only. With the mock transport they stay in the browser.
 Details: [api-automation.md](api-automation.md).
+
+## Embedded in LOS Web (iframe)
+
+With `VITE_LOS_WEB_ORIGIN` set (Dev: `https://los-dev.delightech.asia`; Staging LOS Web is `https://cms-uat.delightech.asia`)
+and the app running inside an iframe, it signs in with a hand-off token from LOS Web instead of showing the sign-in form
+(`shared/api/auth/embed.ts`). The message protocol is **PROPOSED**: LOS has not defined one, so agree it with the LOS Web team.
+
+| Direction        | Message                                                             |
+| ---------------- | ------------------------------------------------------------------- |
+| iframe → LOS Web | `{ type: "TOKEN_REQUEST" }`, posted to the exact LOS Web origin     |
+| LOS Web → iframe | `{ type: "HANDOFF_TOKEN", token }`, posted to the exact Chat origin |
+
+The iframe accepts a message only when `event.origin` equals the configured origin and `event.source` is `window.parent`;
+it never uses `*`, never reads a token from the URL and never stores the hand-off token. It sends the token to
+`POST /api/v1/admin/auth/los` and uses the session the backend issues. That session ends after
+`LOS_STAFF_SESSION_SECONDS`; the app then reloads and asks LOS Web for a fresh token (which LOS refuses for suspended
+staff). Until LOS issues hand-off tokens for chat (`aud` `chat`, `tokenType` `chat-handoff`, `jti`), this sign-in is refused.
+Set the matching `LOS_WEB_ORIGIN` and `CHAT_WEB_ORIGIN` on the backend, and send LOS the Chat dashboard origin so LOS Web
+can target it exactly.

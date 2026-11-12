@@ -24,6 +24,11 @@ export interface IdentitySync {
   sync(user: { id: string; role: Role; displayName: string; losUserId?: number | null }): Promise<void>;
 }
 
+/** What sign-in asks for after a customer signs in with an LOS token. It must never throw. */
+export interface LosApplicationRefresh {
+  refreshFromCustomerToken(customerId: string, customerToken: string): Promise<void>;
+}
+
 /** The refresh being rotated: the new session joins its sign-in and keeps its end. */
 interface Rotation {
   familyId: string;
@@ -57,6 +62,8 @@ export class AuthService {
     private readonly identities: IdentitySync = { sync: async () => {} },
     /** Sign in with LOS; null when LOS is not configured (LOS_ISSUER unset). */
     private readonly los: LosTokenVerifier | null = null,
+    /** Reads a customer's LOS application with the token they signed in with (see LoanApplicationService). */
+    private readonly losApplications?: LosApplicationRefresh,
   ) {}
 
   /** Mobile self-registration. Always creates a CUSTOMER; staff accounts are created by an admin. */
@@ -108,7 +115,12 @@ export class AuthService {
     if (!this.los) throw new AppError(503, "LOS_SIGN_IN_DISABLED", "Sign in with LOS is not configured");
     const los =
       audience === "customer" ? await this.los.verifyCustomer(token) : await this.los.verifyStaffHandoff(token);
-    return this.signInWithLos(los, client);
+    const tokens = await this.signInWithLos(los, client);
+    // The customer's own token reads their own application once; not awaited, so LOS being slow never delays sign-in.
+    if (audience === "customer") {
+      void this.losApplications?.refreshFromCustomerToken(tokens.user.id, token).catch(() => undefined);
+    }
+    return tokens;
   }
 
   /**
@@ -156,7 +168,9 @@ export class AuthService {
     }
     await this.repository.recordSuccessfulLogin(user.id);
     await this.syncIdentity(user);
-    return this.startSession({ ...user, lastLoginAt: this.now() }, client);
+    const sessionMs =
+      los.losUserType === "STAFF" ? (this.options.losStaffSessionMs ?? this.options.refreshTtlMs) : undefined;
+    return this.startSession({ ...user, lastLoginAt: this.now() }, client, undefined, undefined, sessionMs);
   }
 
   /**
@@ -287,11 +301,12 @@ export class AuthService {
     client: ClientInfo,
     repository: AuthRepository = this.repository,
     rotation?: Rotation,
+    sessionMs: number = this.options.refreshTtlMs,
   ): Promise<AuthTokensDto> {
     const now = this.now();
     if (!rotation) await repository.deleteExpiredSessions(user.id, now);
     const refreshToken = newRefreshToken();
-    const refreshExpiresAt = rotation?.expiresAt ?? new Date(now.getTime() + this.options.refreshTtlMs);
+    const refreshExpiresAt = rotation?.expiresAt ?? new Date(now.getTime() + sessionMs);
     const created = await repository.createSession({
       userId: user.id,
       familyId: rotation?.familyId ?? randomUUID(),

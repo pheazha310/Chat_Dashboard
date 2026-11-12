@@ -230,3 +230,14 @@ Full event list: [../websocket-events.md](../websocket-events.md).
 - No token: **401**.
 - Send the same `clientId` twice: **201**, then **200**.
 - A wrong URL such as `GET /` or `/api/conversations` returns 404 (the staff API is under `/api/v1/admin`).
+
+## Testing against the real LOS (Dev)
+
+`los-dev.postman_collection.json` and `los-dev.postman_environment.json` call the real Dev LOS (`https://api-dev.los.delightech.asia/api/v1`)
+and your local Chat backend. Import both, fill `customerPhone` and `customerPin` (and `staffUsername`/`staffPassword` for
+folder B) in Postman, and keep them out of git. The backend must run with `LOS_ISSUER=los-backend` and the Dev
+`LOS_JWKS_URL` (see `backend/.env.example`). Run the folders in order: **0** connectivity, **A** customer sign-in
+(LOS login, claim checks, Chat session, same user on a second run), **B** staff hand-off, **C** the LOS loan-data
+endpoints that exist today. Folder B's claim checks (`aud` chat, `tokenType` chat-handoff, a `jti`) fail until LOS issues
+the Chat hand-off token; that is the point. The LOS login bodies are assumptions (the pack names the paths only) and LOS
+limits logins (5 per 15 minutes for customers), so do not run login in a loop. Tokens are never printed.

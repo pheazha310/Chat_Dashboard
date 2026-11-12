@@ -115,6 +115,14 @@ export async function signIn(email: string, password: string): Promise<AuthUser>
   return session.user;
 }
 
+/** Signs a staff member in with a hand-off token from LOS Web (`POST /auth/los`). The token is not kept. */
+export async function signInWithHandoff(handoffToken: string): Promise<AuthUser> {
+  const session = await post<AuthSession>("/auth/los", { handoffToken });
+  if (!session) throw new AuthError(0, "UNKNOWN_ERROR", "Unexpected answer from the chat backend");
+  saveSession(session);
+  return session.user;
+}
+
 /** Ends this sign-in on the server (best effort) and forgets it here and in every other tab. */
 export async function signOut(): Promise<void> {
   const session = readSession();

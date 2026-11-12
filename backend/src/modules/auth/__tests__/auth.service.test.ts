@@ -399,6 +399,63 @@ describe("AuthService", () => {
       expect(repo.live(first.user.id)).toHaveLength(1);
     });
 
+    it("ends an LOS staff session at the staff limit so the dashboard needs a fresh hand-off; customers keep theirs", async () => {
+      const limited = new AuthService(
+        repo.asRepository(),
+        tokens,
+        { ...DEFAULT_AUTH_OPTIONS, losStaffSessionMs: 3_600_000 },
+        () => now,
+        identities,
+        los as unknown as LosTokenVerifier,
+      );
+      const staff = await limited.losSignIn("staff", "t", client);
+      expect(new Date(staff.refreshTokenExpiresAt).getTime()).toBe(now.getTime() + 3_600_000);
+
+      // Refreshing keeps the end fixed; after it the refresh token is refused.
+      const refreshed = await limited.refresh("staff", staff.refreshToken, client);
+      expect(refreshed.refreshTokenExpiresAt).toBe(staff.refreshTokenExpiresAt);
+      now = new Date(now.getTime() + 3_600_001);
+      await expect(limited.refresh("staff", refreshed.refreshToken, client)).rejects.toBeInstanceOf(UnauthorizedError);
+
+      const customerSession = await limited.losSignIn("customer", "t", client);
+      expect(new Date(customerSession.refreshTokenExpiresAt).getTime()).toBe(
+        now.getTime() + DEFAULT_AUTH_OPTIONS.refreshTtlMs,
+      );
+    });
+
+    describe("the customer's LOS application", () => {
+      const applications = { refreshFromCustomerToken: vi.fn(async () => {}) };
+      beforeEach(() => {
+        applications.refreshFromCustomerToken.mockClear();
+        service = new AuthService(
+          repo.asRepository(),
+          tokens,
+          DEFAULT_AUTH_OPTIONS,
+          () => now,
+          identities,
+          los as unknown as LosTokenVerifier,
+          applications,
+        );
+      });
+
+      it("is read with the customer's own LOS token when a customer signs in, for the account that signed in", async () => {
+        const result = await service.losSignIn("customer", "los-customer-token", client);
+        expect(applications.refreshFromCustomerToken).toHaveBeenCalledWith(result.user.id, "los-customer-token");
+      });
+
+      it("is not read for staff, whose hand-off token is not a customer token", async () => {
+        await service.losSignIn("staff", "handoff-token", client);
+        expect(applications.refreshFromCustomerToken).not.toHaveBeenCalled();
+      });
+
+      it("never fails or delays the sign-in", async () => {
+        applications.refreshFromCustomerToken.mockRejectedValue(new Error("boom"));
+        await expect(service.losSignIn("customer", "t", client)).resolves.toMatchObject({ user: { role: "CUSTOMER" } });
+        applications.refreshFromCustomerToken.mockReturnValue(new Promise(() => {}));
+        await expect(service.losSignIn("customer", "t", client)).resolves.toBeDefined();
+      });
+    });
+
     it("refuses a disabled account even with a valid LOS token", async () => {
       const { user } = await service.losSignIn("customer", "t", client);
       await repo.updateUser(user.id, { status: "DISABLED" });

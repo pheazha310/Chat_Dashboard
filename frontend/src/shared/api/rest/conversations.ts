@@ -1,4 +1,9 @@
-import type { BackendActivity, BackendConversation, BackendMessage } from "@/shared/api/backend/types";
+import type {
+  BackendActivity,
+  BackendConversation,
+  BackendLoanApplication,
+  BackendMessage,
+} from "@/shared/api/backend/types";
 import { apiRequest } from "./client";
 
 export type MessagePageMeta = {
@@ -52,6 +57,11 @@ export async function searchAllMessages(q: string) {
 
 export async function getConversation(conversationId: string) {
   return (await apiRequest<BackendConversation>(`/conversations/${conversationId}`)).data;
+}
+
+/** The customer's LOS application behind a conversation, or null (none, or not read yet). */
+export async function getApplication(conversationId: string) {
+  return (await apiRequest<BackendLoanApplication | null>(`/conversations/${conversationId}/application`)).data;
 }
 
 export async function getActivities(conversationId: string) {

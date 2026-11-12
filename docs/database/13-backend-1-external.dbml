@@ -1,10 +1,10 @@
 // ==============================================================================================================
-// 12. BACKEND 1 — EXTERNAL, NOT CREATED HERE
+// 13. BACKEND 1 — EXTERNAL, NOT CREATED HERE
 // Loan-system data owned by Backend 1 (its API is not known yet). Shown for context only:
 // these tables do not exist in the chat database and nothing has a foreign key to them.
 // ==============================================================================================================
 
-TableGroup "12 Backend 1 (external)" [color: #94A3B8] {
+TableGroup "13 Backend 1 (external)" [color: #94A3B8] {
   los_customers
   los_agents
   loan_applications

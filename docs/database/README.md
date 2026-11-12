@@ -17,7 +17,8 @@ and relations; [../database-schema.md](../database-schema.md) explains the rules
 | [09-replies-and-automation.dbml](09-replies-and-automation.dbml)         | `canned_responses`, `automation_rules`, `automation_logs`                                                                   |
 | [10-callbacks-and-calls.dbml](10-callbacks-and-calls.dbml)               | `callback_requests`, `calls`, `call_participants`                                                                           |
 | [11-moderation.dbml](11-moderation.dbml)                                 | `spam_reports`, `customer_blocks`, `blocked_keywords`, `moderation_activities`                                              |
-| [12-backend-1-external.dbml](12-backend-1-external.dbml)                 | `los_customers`, `los_agents`, `loan_applications`: Backend 1, context only, not created here                               |
+| [12-loan-application-snapshots.dbml](12-loan-application-snapshots.dbml) | `loan_application_snapshots`: six fields of the customer's latest LOS application, read at their sign-in                    |
+| [13-backend-1-external.dbml](13-backend-1-external.dbml)                 | `los_customers`, `los_agents`, `loan_applications`: Backend 1, context only, not created here                               |
 
 Each file has the same layout: a header saying what the domain is for, its `TableGroup`, its tables, and then the
 relations that start in those tables. The Prisma models live in the file with the same number in

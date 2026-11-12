@@ -10,6 +10,7 @@ import { registerRoleOpenApi } from "@modules/roles/role.openapi.js";
 import { registerCannedResponseOpenApi } from "@modules/canned-responses/canned-response.openapi.js";
 import { registerPresenceOpenApi } from "@modules/presence/presence.openapi.js";
 import { registerCustomerOpenApi } from "@modules/customers/customer.openapi.js";
+import { registerLoanApplicationOpenApi } from "@modules/los-data/los-data.openapi.js";
 import { registerNotificationOpenApi } from "@modules/notifications/notification.openapi.js";
 import { registerMessageActionOpenApi } from "@modules/messages/message-action.openapi.js";
 import { registerMessageOpenApi } from "@modules/messages/message.openapi.js";
@@ -40,6 +41,7 @@ export function buildOpenApiDocument() {
   registerPresenceOpenApi(registry);
   registerNotificationOpenApi(registry);
   registerCustomerOpenApi(registry);
+  registerLoanApplicationOpenApi(registry);
   registerWorkspaceOpenApi(registry);
   registerChatSettingsOpenApi(registry);
   registerProfileOpenApi(registry);

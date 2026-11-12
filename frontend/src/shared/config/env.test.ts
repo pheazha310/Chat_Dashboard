@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { deriveApiUrl, getAuthToken } from "./env";
+import { deriveApiUrl, getAuthToken, parseOrigin } from "./env";
 
 describe("deriveApiUrl", () => {
   it.each([
@@ -29,5 +29,15 @@ describe("getAuthToken", () => {
     expect(getAuthToken()).toBe("legacy");
     stub({ "auth.session": "not json" });
     expect(getAuthToken()).toBeUndefined();
+  });
+});
+
+describe("parseOrigin", () => {
+  it("accepts a bare origin, with or without a trailing slash, and nothing looser", () => {
+    expect(parseOrigin("https://los-dev.delightech.asia/")).toBe("https://los-dev.delightech.asia");
+    expect(parseOrigin("https://los-dev.delightech.asia")).toBe("https://los-dev.delightech.asia");
+    for (const bad of [undefined, "", "*", "los-dev.delightech.asia", "https://los-dev.delightech.asia/app"]) {
+      expect(parseOrigin(bad)).toBeUndefined();
+    }
   });
 });

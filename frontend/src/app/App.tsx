@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { ApplicationsPage, ChatPage, LoginPage } from "@/pages";
 import { CustomerCallDialog, LiveCallDialog } from "@/features/customer-call";
-import { authRequired, startSessionKeeper, useAuthStore } from "@/shared/api/auth";
+import { authRequired, listenForHandoff, signInWithHandoff, startSessionKeeper, useAuthStore } from "@/shared/api/auth";
+import { LOS_WEB_ORIGIN } from "@/shared/config";
 import { ConfirmDialogHost, Toaster } from "@/shared/ui";
 import { startRealtime } from "./providers/realtime";
 
@@ -10,6 +11,17 @@ export default function App() {
   const wasSignedIn = useRef(signedIn);
 
   useEffect(() => startSessionKeeper(), []);
+
+  useEffect(() => {
+    // Inside LOS Web's iframe: sign in with the hand-off token it sends, instead of showing the sign-in form.
+    if (!authRequired || signedIn || !LOS_WEB_ORIGIN || window.parent === window) return;
+    return listenForHandoff({
+      parentOrigin: LOS_WEB_ORIGIN,
+      parent: window.parent,
+      target: window,
+      exchange: signInWithHandoff,
+    });
+  }, [signedIn]);
 
   useEffect(() => {
     // Signed out (here, in another tab, or because the session ended): start from a clean page, so nothing of the

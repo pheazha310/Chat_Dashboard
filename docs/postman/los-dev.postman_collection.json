@@ -1,0 +1,540 @@
+{
+  "info": {
+    "name": "Chat Dashboard - real LOS (Dev) integration",
+    "description": "Tests the real LOS Dev API against the Chat backend. Import this with los-dev.postman_environment.json, fill the secret variables in Postman (never commit them), and run the folders in order. Folder B fails on purpose until LOS issues a Chat hand-off token.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "0. Connectivity",
+      "description": "Public checks, no credentials.",
+      "item": [
+        {
+          "name": "LOS JWKS (public)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{losUrl}}/guest/.well-known/jwks.json"
+            },
+            "description": "Public. The Chat backend verifies LOS tokens with this key (RS256). Dev and Staging should have different keys; compare kid between environments."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 with one RS256 signing key', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  const keys = pm.response.json().keys;",
+                  "  pm.expect(keys.length).to.be.above(0);",
+                  "  pm.expect(keys[0].alg).to.eql('RS256');",
+                  "  console.log('kid:', keys[0].kid);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "A. Customer (mobile) sign-in",
+      "description": "LOS customer login, then the Chat session.",
+      "item": [
+        {
+          "name": "1. LOS customer login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{losUrl}}/customer/auth/login"
+            },
+            "description": "Real LOS login (phone + 4-digit PIN). LOS allows 5 customer logins per 15 minutes: do not run this in a loop. The body field names (phone, pin) are an assumption from the pack; if LOS refuses, read its message and adjust. Saves losCustomerToken.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"{{customerPhone}}\",\n  \"pin\": \"{{customerPin}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// LOS does not document its login response, so look for the first JWT stored under a key that contains \"access\".",
+                  "const find = (v) => {",
+                  "  if (!v || typeof v !== 'object') return null;",
+                  "  for (const [k, x] of Object.entries(v)) {",
+                  "    if (typeof x === 'string' && /access/i.test(k) && x.split('.').length === 3) return x;",
+                  "    const n = find(x); if (n) return n;",
+                  "  }",
+                  "  return null;",
+                  "};",
+                  "pm.test('login succeeded', () => pm.response.to.have.status(200));",
+                  "const token = find(pm.response.json());",
+                  "pm.test('an access token was found in the response', () => pm.expect(token).to.be.a('string'));",
+                  "if (token) pm.environment.set('losCustomerToken', token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2. Check the customer token's claims",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{losUrl}}/customer/auth/me"
+            },
+            "description": "Calls LOS with the customer token and checks the claims the Chat backend requires: iss, aud, type, tokenType, userId, exp.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{losCustomerToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Reads the claims only (no signature check; the Chat backend does that). The token itself is never printed.",
+                  "const claims = (t) => JSON.parse(Buffer.from(t.split('.')[1].replace(/-/g,'+').replace(/_/g,'/'), 'base64').toString());",
+                  "pm.test('LOS accepts the token', () => pm.response.to.have.status(200));",
+                  "const c = claims(pm.environment.get('losCustomerToken'));",
+                  "pm.test('iss is los-backend', () => pm.expect(c.iss).to.eql('los-backend'));",
+                  "pm.test('aud is luyleun', () => pm.expect(c.aud).to.eql('luyleun'));",
+                  "pm.test('type customer, tokenType access', () => { pm.expect(c.type).to.eql('customer'); pm.expect(c.tokenType).to.eql('access'); });",
+                  "pm.test('userId is a positive integer', () => pm.expect(Number.isInteger(c.userId) && c.userId > 0).to.be.true);",
+                  "pm.test('no kid header is fine; exp is in the future', () => pm.expect(c.exp * 1000).to.be.above(Date.now()));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3. Chat: sign in with the LOS customer token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{chatUrl}}/api/v1/customer/auth/los"
+            },
+            "description": "Sends the real LOS customer token to the Chat backend, which verifies it against LOS_JWKS_URL and returns the Chat session. The backend must run with LOS_ISSUER=los-backend and the Dev LOS_JWKS_URL. Saves chatCustomerToken. Run it twice: the second run must return the same user id (identity mapping).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"losToken\": \"{{losCustomerToken}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 and a Chat session', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  const d = pm.response.json().data;",
+                  "  pm.expect(d.accessToken).to.be.a('string');",
+                  "  pm.expect(d.user.role).to.eql('CUSTOMER');",
+                  "  pm.environment.set('chatCustomerToken', d.accessToken);",
+                  "  const before = pm.environment.get('chatCustomerUserId');",
+                  "  if (before) pm.expect(d.user.id).to.eql(before);   // same LOS customer -> same Chat user",
+                  "  pm.environment.set('chatCustomerUserId', d.user.id);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4. Chat: who am I (customer)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{chatUrl}}/api/v1/customer/auth/me"
+            },
+            "description": "Uses the Chat token, not the LOS token.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{chatCustomerToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200, a customer with the LOS user id', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  const u = pm.response.json().data;",
+                  "  pm.expect(u.role).to.eql('CUSTOMER');",
+                  "  pm.expect(u.losUserId).to.be.a('number');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "5. Chat: a bad LOS token is refused",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{chatUrl}}/api/v1/customer/auth/los"
+            },
+            "description": "Negative check: a made-up token must give a generic 401.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"losToken\": \"aaa.bbb.ccc\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('401', () => pm.response.to.have.status(401));"]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "B. Staff hand-off (LOS Web to Chat)",
+      "description": "Needs a real LOS staff account. Steps 2 to 4 pass only once LOS issues the Chat hand-off token.",
+      "item": [
+        {
+          "name": "1. LOS staff login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{losUrl}}/admin/auth/login"
+            },
+            "description": "Real LOS staff login (20 per 15 minutes). The pack gives the path but NOT the body: the field names below (username, password) are a guess; if LOS refuses, adjust them. Saves losStaffToken.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{staffUsername}}\",\n  \"password\": \"{{staffPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// LOS does not document its login response, so look for the first JWT stored under a key that contains \"access\".",
+                  "const find = (v) => {",
+                  "  if (!v || typeof v !== 'object') return null;",
+                  "  for (const [k, x] of Object.entries(v)) {",
+                  "    if (typeof x === 'string' && /access/i.test(k) && x.split('.').length === 3) return x;",
+                  "    const n = find(x); if (n) return n;",
+                  "  }",
+                  "  return null;",
+                  "};",
+                  "pm.test('login succeeded', () => pm.response.to.have.status(200));",
+                  "const token = find(pm.response.json());",
+                  "pm.test('an access token was found in the response', () => pm.expect(token).to.be.a('string'));",
+                  "if (token) pm.environment.set('losStaffToken', token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2. LOS: request the hand-off token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{losUrl}}/admin/dashboard-embed/handoff-token"
+            },
+            "description": "30 per minute. Saves losHandoffToken. The tests show whether LOS has made the changes Chat needs: aud chat, tokenType chat-handoff, a jti, a life of about 2 minutes. Until then the first three FAIL, on purpose.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{losStaffToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Reads the claims only (no signature check; the Chat backend does that). The token itself is never printed.",
+                  "const claims = (t) => JSON.parse(Buffer.from(t.split('.')[1].replace(/-/g,'+').replace(/_/g,'/'), 'base64').toString());",
+                  "pm.test('LOS issued a token', () => pm.response.to.have.status(200));",
+                  "const token = pm.response.json().data.token;",
+                  "pm.environment.set('losHandoffToken', token);",
+                  "const c = claims(token);",
+                  "console.log('aud=' + c.aud, 'tokenType=' + c.tokenType, 'role=' + c.role, 'has jti=' + Boolean(c.jti), 'life=' + (c.exp - c.iat) + 's');",
+                  "pm.test('aud is chat (pending at LOS)', () => pm.expect(c.aud).to.eql('chat'));",
+                  "pm.test('tokenType is chat-handoff (pending at LOS)', () => pm.expect(c.tokenType).to.eql('chat-handoff'));",
+                  "pm.test('has a jti (pending at LOS)', () => pm.expect(c.jti).to.be.a('string'));",
+                  "pm.test('type staff, has a role and userId', () => { pm.expect(c.type).to.eql('staff'); pm.expect(c.role).to.be.a('string'); pm.expect(c.userId).to.be.a('number'); });",
+                  "pm.test('lives at most 120 seconds', () => pm.expect(c.exp - c.iat).to.be.at.most(120));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3. Chat: sign in with the hand-off token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{chatUrl}}/api/v1/admin/auth/los"
+            },
+            "description": "Run within 2 minutes of step 2. Succeeds only when LOS issues the Chat-specific token (see step 2); today it answers 401, by design. Needs LOS_STAFF_ROLE_MAP to cover the staff member's LOS role, or it is refused. Saves chatStaffToken.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"handoffToken\": \"{{losHandoffToken}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const d = pm.response.json().data;",
+                  "  pm.environment.set('chatStaffToken', d.accessToken);",
+                  "  pm.test('a staff session with a mapped role', () => pm.expect(['AGENT','SUPERVISOR','ADMIN']).to.include(d.user.role));",
+                  "} else {",
+                  "  pm.test('401 until LOS issues a Chat hand-off token (expected today)', () => pm.response.to.have.status(401));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4. Chat: the same hand-off token cannot be used twice",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{chatUrl}}/api/v1/admin/auth/los"
+            },
+            "description": "Only meaningful after step 3 succeeded. The same token again must be 401 (single use, by jti).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"handoffToken\": \"{{losHandoffToken}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('401 (reused or not yet accepted)', () => pm.response.to.have.status(401));"]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "C. Loan data (LOS customer endpoints that exist today)",
+      "description": "Confirmed endpoints, called with the customer's own LOS token. Chat does NOT call these itself yet: its machine-to-machine access is pending at LOS. Use them to compare real responses with the pack's illustrative sample.",
+      "item": [
+        {
+          "name": "Latest application",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{losUrl}}/customer/application/latest"
+            },
+            "description": "Check loanDetail.loanPurpose, requestedLoanSize (USD), requestedLoanTerm (days), status, ticketNumber, appliedDate.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{losCustomerToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const a = pm.response.json().data;",
+                  "if (a) console.log('status=' + a.status, 'purpose=' + (a.loanDetail && a.loanDetail.loanPurpose), 'appliedDate=' + a.appliedDate);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Application history",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{losUrl}}/customer/application/loan/history"
+            },
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{losCustomerToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('200', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Profile detail",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{losUrl}}/customer/profile/detail"
+            },
+            "description": "Contains personal data (national id, salary): Chat does not store it.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{losCustomerToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('200', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

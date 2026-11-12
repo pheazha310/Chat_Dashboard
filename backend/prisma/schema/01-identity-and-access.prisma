@@ -150,3 +150,14 @@ model RefreshToken {
   @@index([expiresAt]) /// For the cleanup job that deletes expired sessions
   @@map("refresh_tokens")
 }
+
+/// A staff hand-off token (LOS `jti`) that has been used to sign in. The primary key makes each token single-use even
+/// with several API instances; a row can be deleted once `expires_at` has passed (the token is invalid by then).
+model LosHandoffToken {
+  jti       String   @id @db.VarChar(200)
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([expiresAt]) /// For the cleanup of expired rows
+  @@map("los_handoff_tokens")
+}

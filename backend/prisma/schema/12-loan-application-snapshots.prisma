@@ -1,0 +1,20 @@
+// 12. Loan application snapshots
+// A copy of six fields of a customer's latest LOS application, read with the customer's own LOS token when they sign in
+// (the token itself is never stored). Loan data stays owned by LOS (Backend 1); this is only what the agent panel shows,
+// so it is as fresh as the customer's last sign-in (`fetched_at`).
+
+/// One row per LOS application: the fields chat shows. `status` is an open string (LOS has more statuses than documented).
+model LoanApplicationSnapshot {
+  applicationId     Int      @id @map("application_id") /// LOS loan application id (matches conversations.application_id)
+  customerId        String   @map("customer_id") @db.Uuid /// users.id of the customer whose token read it; a conversation only shows it when this is its customer
+  status            String   @db.VarChar(100) /// LOS status, shown as is
+  ticketNumber      String?  @map("ticket_number") @db.VarChar(100)
+  appliedDate       String?  @map("applied_date") @db.VarChar(40) /// As LOS sends it: Cambodia local time labelled Z, NOT true UTC. Not converted
+  loanPurpose       String?  @map("loan_purpose") @db.VarChar(255) /// The closest LOS field to a product
+  requestedLoanSize Int?     @map("requested_loan_size") /// USD
+  requestedLoanTerm Int?     @map("requested_loan_term") /// Days
+  fetchedAt         DateTime @default(now()) @map("fetched_at") @db.Timestamptz(6)
+
+  @@index([customerId])
+  @@map("loan_application_snapshots")
+}

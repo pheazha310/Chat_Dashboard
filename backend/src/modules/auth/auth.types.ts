@@ -84,6 +84,11 @@ export interface UserRow {
 
 export interface AuthOptions {
   refreshTtlMs: number;
+  /**
+   * How long a staff session started by an LOS hand-off lasts (refreshing does not extend it). After it the dashboard
+   * must fetch a new hand-off from LOS, which refuses suspended staff and reports a changed role. Unset: `refreshTtlMs`.
+   */
+  losStaffSessionMs?: number;
   /** Failed sign-ins in a row before the account is locked. */
   maxFailedLogins: number;
   lockMs: number;
