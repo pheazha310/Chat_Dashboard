@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { AuthRepository } from "../auth.repository.js";
+import type { AuthRepository, IdentityRef } from "../auth.repository.js";
 import type { ListUsersQuery } from "../auth.schema.js";
 import type { CustomerFields, StaffFields, UserRow } from "../auth.types.js";
 
@@ -30,6 +30,7 @@ interface SessionRow {
 export class FakeAuthRepository {
   users = new Map<string, UserRow & { passwordChangedAt?: Date }>();
   sessions: SessionRow[] = [];
+  identities: (IdentityRef & { userId: string; linkedBy: string | null })[] = [];
   /** Makes the next `revokeIfActive` lose the race, as if a parallel refresh rotated the token first. */
   loseNextRotation = false;
 
@@ -41,11 +42,13 @@ export class FakeAuthRepository {
     // Transactions are all-or-nothing: snapshot, and restore on failure.
     const users = new Map([...this.users].map(([k, v]) => [k, { ...v }]));
     const sessions = this.sessions.map((s) => ({ ...s }));
+    const identities = this.identities.map((i) => ({ ...i }));
     try {
       return await fn(this.asRepository());
     } catch (error) {
       this.users = users;
       this.sessions = sessions;
+      this.identities = identities;
       throw error;
     }
   }
@@ -66,7 +69,32 @@ export class FakeAuthRepository {
   }
 
   async findUserByLos(losUserType: string, losUserId: number) {
-    return [...this.users.values()].find((u) => u.losUserType === losUserType && u.losUserId === losUserId) ?? null;
+    const identity = this.identities.find(
+      (i) => i.externalUserType === losUserType && i.externalUserId === String(losUserId),
+    );
+    return identity ? (this.users.get(identity.userId) ?? null) : null;
+  }
+
+  async linkIdentity(userId: string, identity: IdentityRef, linkedBy: string | null) {
+    const taken = this.identities.some(
+      (i) =>
+        (i.externalUserType === identity.externalUserType && i.externalUserId === identity.externalUserId) ||
+        (i.userId === userId && i.provider === identity.provider),
+    );
+    if (taken) throw unique("external_identities");
+    this.identities.push({ ...identity, userId, linkedBy });
+    await this.updateUser(userId, {
+      losUserType: identity.externalUserType,
+      losUserId: Number(identity.externalUserId),
+    });
+  }
+
+  async unlinkIdentity(userId: string, provider: IdentityRef["provider"]) {
+    const before = this.identities.length;
+    this.identities = this.identities.filter((i) => !(i.userId === userId && i.provider === provider));
+    if (this.identities.length === before) return false;
+    await this.updateUser(userId, { losUserType: null, losUserId: null });
+    return true;
   }
 
   async createLosUser(data: { losUserType: string; losUserId: number; role: string; displayName: string }) {
@@ -85,6 +113,13 @@ export class FakeAuthRepository {
       ...data,
     };
     this.users.set(row.id, row);
+    this.identities.push({
+      provider: "LOS",
+      externalUserType: data.losUserType as IdentityRef["externalUserType"],
+      externalUserId: String(data.losUserId),
+      userId: row.id,
+      linkedBy: null,
+    });
     return row;
   }
 
@@ -147,6 +182,11 @@ export class FakeAuthRepository {
         throw unique("customer_code");
       }
     }
+  }
+
+  async setCredentials(id: string, username: string, passwordHash: string) {
+    if (await this.findUserByUsername(username)) throw unique("username");
+    await this.updateUser(id, { username, passwordHash, failedLoginCount: 0, lockedUntil: null });
   }
 
   async setPassword(id: string, passwordHash: string) {

@@ -194,6 +194,17 @@ describe("AuthService", () => {
       now = new Date(now.getTime() + DEFAULT_AUTH_OPTIONS.refreshTtlMs);
       await expect(service.refresh("staff", c.refreshToken, client)).rejects.toBeInstanceOf(UnauthorizedError);
     });
+
+    it("tells the client the session expired, so it can offer another sign-in, but not for an unknown token", async () => {
+      const user = await addUser("ann", "AGENT");
+      const session = await service.login("staff", { username: user.username, password: PASSWORD }, client);
+      now = new Date(now.getTime() + DEFAULT_AUTH_OPTIONS.refreshTtlMs);
+      await expect(service.refresh("staff", session.refreshToken, client)).rejects.toMatchObject({
+        status: 401,
+        code: "SESSION_EXPIRED",
+      });
+      await expect(service.refresh("staff", "x".repeat(43), client)).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    });
   });
 
   describe("logout and password change", () => {

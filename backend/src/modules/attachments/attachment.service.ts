@@ -17,7 +17,7 @@ import type { AttachmentDto } from "@modules/messages/message.types.js";
 import { parseRange, type ByteRange } from "./attachment.range.js";
 import type { AttachmentRepository } from "./attachment.repository.js";
 import type { ListQuery, UploadFields, VoiceFields } from "./attachment.schema.js";
-import { INLINE_SAFE, messageTypeFor, validateFile, type AttachmentKind } from "./attachment.validation.js";
+import { INLINE_SAFE, kindOf, messageTypeFor, validateFile, type AttachmentKind } from "./attachment.validation.js";
 
 export interface UploadedFile {
   originalname: string;
@@ -81,6 +81,58 @@ export class AttachmentService {
     file: UploadedFile | undefined,
   ) {
     return this.store({ kind: "customer", customerId }, conversationId, fields, file, false);
+  }
+
+  /** A customer uploads a file now and sends it later as a message (`sendStagedFromCustomer`). */
+  async stageFromCustomer(customerId: string, conversationId: string, file: UploadedFile | undefined) {
+    if (!file) throw new BadRequestError('Send the file in a multipart field named "file"');
+    await this.conversations().requireForCustomer(customerId, conversationId);
+    const checked = validateFile(file, { voice: false });
+    const storageKey = `conversations/${conversationId}/${randomUUID()}.${checked.extension}`;
+    await this.storage.put(storageKey, file.buffer);
+    try {
+      const row = await this.repository.stage({
+        conversationId,
+        uploadedById: customerId,
+        storageKey,
+        fileName: checked.fileName,
+        mimeType: checked.mimeType,
+        fileSize: file.size,
+        checksumSha256: createHash("sha256").update(file.buffer).digest("hex"),
+      });
+      return toAttachment(row);
+    } catch (error) {
+      await this.discard(storageKey);
+      throw error;
+    }
+  }
+
+  /** A customer sends a file they uploaded earlier as a message, with an optional caption. */
+  async sendStagedFromCustomer(
+    customerId: string,
+    conversationId: string,
+    fields: { clientId: string; attachmentId: string; text?: string | undefined },
+  ) {
+    await this.conversations().requireForCustomer(customerId, conversationId);
+    const staged = await this.repository.findStaged(fields.attachmentId, conversationId, customerId);
+    if (!staged) throw new NotFoundError("Attachment not found");
+    const kind = kindOf(staged.mimeType);
+    const result = await this.messages.receiveFileFromCustomer({
+      customerId,
+      conversationId,
+      clientId: fields.clientId,
+      text: fields.text,
+      messageType: messageTypeFor(kind, false),
+      preview: `${LABEL[kind]}: ${staged.fileName}`,
+      attachment: { stagedId: staged.id },
+    });
+    const attachment = result.message.attachments[0];
+    if (result.created && attachment) {
+      await bestEffort("realtime attachment.uploaded", () =>
+        this.realtime.messageEvent(conversationId, "attachment.uploaded", { attachment }),
+      );
+    }
+    return result;
   }
 
   /** A customer sends a recorded voice message in their own conversation. */

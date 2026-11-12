@@ -263,7 +263,8 @@ export class MessageService implements SystemMessagePort, AutomaticMessagePort, 
     text?: string | undefined;
     messageType: string;
     preview: string;
-    attachment: NewAttachment;
+    /** New file metadata, or the id of a file the customer uploaded earlier (`POST /chat/attachments`). */
+    attachment: NewAttachment | { stagedId: string };
   }) {
     if (await this.guard?.().isBlocked(input.customerId)) throw new ForbiddenError("This customer is blocked");
     const { message, attachments, created, owner } = await this.repository.inTransaction(async (tx) => {
@@ -288,13 +289,22 @@ export class MessageService implements SystemMessagePort, AutomaticMessagePort, 
         content: input.text ?? null,
         preview: toPreview(input.text || input.preview),
       });
-      const file = await tx.addAttachment({
-        ...input.attachment,
-        conversationId: input.conversationId,
-        messageId: stored.id,
-        uploadedById: input.customerId,
-        uploadedByType: "CUSTOMER",
-      });
+      const file =
+        "stagedId" in input.attachment
+          ? await tx.claimStaged({
+              attachmentId: input.attachment.stagedId,
+              conversationId: input.conversationId,
+              messageId: stored.id,
+              uploadedById: input.customerId,
+            })
+          : await tx.addAttachment({
+              ...input.attachment,
+              conversationId: input.conversationId,
+              messageId: stored.id,
+              uploadedById: input.customerId,
+              uploadedByType: "CUSTOMER",
+            });
+      if (!file) throw new NotFoundError("Attachment not found");
       if (conversation.isArchived) await this.restoreArchived(tx, input.conversationId, input.customerId);
       if (conversation.status !== "OPEN") {
         await tx.reopen(input.conversationId);

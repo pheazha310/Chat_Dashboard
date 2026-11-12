@@ -4,7 +4,7 @@ import type { VoiceFields } from "@modules/attachments/attachment.schema.js";
 import type { CallService } from "@modules/calls/call.service.js";
 import type { ConversationService } from "@modules/conversations/conversation.service.js";
 import type { MessageService } from "@modules/messages/message.service.js";
-import type { JoinInput, SendInput, StartCallInput } from "./customer-channel.schema.js";
+import type { ChatSendInput, JoinInput, SendInput, StartCallInput } from "./customer-channel.schema.js";
 
 /**
  * What the customer's mobile app can do: join its conversation, send text, files and voice, read the messages, and
@@ -24,6 +24,33 @@ export class CustomerChannelService {
   /** Join room: finds the customer's conversation (for the application) or creates it, then returns it. */
   join(customerId: string, input: JoinInput) {
     return this.conversations.joinForCustomer(customerId, input);
+  }
+
+  /** The customer's one conversation (`/conversation`), created on first use like join room. */
+  async mine(customerId: string) {
+    return (await this.join(customerId, {})).conversation;
+  }
+
+  async historyOfMine(customerId: string, query: CursorQuery) {
+    const { id } = await this.mine(customerId);
+    return this.history(customerId, id, query);
+  }
+
+  async sendToMine(customerId: string, input: ChatSendInput) {
+    const { id } = await this.mine(customerId);
+    if (input.type === "FILE") {
+      return this.attachments.sendStagedFromCustomer(customerId, id, {
+        clientId: input.clientId,
+        attachmentId: input.attachmentId as string,
+        text: input.text,
+      });
+    }
+    return this.sendText(customerId, id, { clientId: input.clientId, text: input.text as string });
+  }
+
+  async uploadToMine(customerId: string, file: UploadedFile | undefined) {
+    const { id } = await this.mine(customerId);
+    return this.attachments.stageFromCustomer(customerId, id, file);
   }
 
   conversation(customerId: string, conversationId: string) {

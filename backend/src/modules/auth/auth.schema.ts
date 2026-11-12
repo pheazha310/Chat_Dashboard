@@ -33,7 +33,13 @@ const passwordSchema = z.string().min(1).max(128);
 
 const displayName = z.string().trim().min(1).max(100);
 
-export const loginBody = z.object({ username: usernameSchema, password: passwordSchema }).strict();
+/**
+ * `provider: "chat"` checks the password against this backend's own accounts only and never sends it to LOS (the
+ * standalone dashboard); the default tries LOS first for staff, then chat accounts.
+ */
+export const loginBody = z
+  .object({ username: usernameSchema, password: passwordSchema, provider: z.enum(["auto", "chat"]).optional() })
+  .strict();
 export type LoginInput = z.infer<typeof loginBody>;
 
 export const registerBody = z
@@ -163,4 +169,21 @@ export const updateUserBody = z
   .refine((value) => Object.keys(value).length > 0, "Send at least one field");
 export type UpdateUserInput = z.infer<typeof updateUserBody>;
 
-export const resetPasswordBody = z.object({ password: newPasswordSchema }).strict();
+/** Link a chat account to an identity at LOS (`external_identities`). */
+export const linkIdentityBody = z
+  .object({
+    provider: z.literal("LOS"),
+    externalUserType: z.enum(["CUSTOMER", "STAFF"]),
+    externalUserId: z
+      .number()
+      .int()
+      .positive()
+      .max(2 ** 31 - 1),
+  })
+  .strict();
+export const identityParams = z.object({ userId: idSchema, provider: z.literal("LOS") });
+
+/** `username` is for an account that has none yet (it signs in through LOS): it gives the account chat credentials. */
+export const resetPasswordBody = z
+  .object({ password: newPasswordSchema, username: usernameSchema.optional() })
+  .strict();

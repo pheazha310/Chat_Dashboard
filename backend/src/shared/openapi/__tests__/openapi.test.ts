@@ -33,6 +33,8 @@ describe("OpenAPI document", () => {
         "POST /users",
         "GET /users/{userId}",
         "PATCH /users/{userId}",
+        "POST /users/{userId}/identities",
+        "DELETE /users/{userId}/identities/{provider}",
         "POST /users/{userId}/password",
         "GET /roles",
         "PUT /roles/{roleId}/permissions",

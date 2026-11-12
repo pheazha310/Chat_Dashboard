@@ -11,6 +11,8 @@ import {
   losStaffBody,
   refreshBody,
   registerBody,
+  identityParams,
+  linkIdentityBody,
   resetPasswordBody,
   updateUserBody,
   userParams,
@@ -53,6 +55,18 @@ export class AuthController {
     res.json({ status: "success", data: await this.service.losSignIn(this.audience, token, clientOf(req)) });
   };
 
+  /** Same exchange as `losSignIn`, answered with 201 because it opens a new chat session (`POST auth/session`). */
+  session = async (req: Request, res: Response) => {
+    noStore(res);
+    const token =
+      this.audience === "customer"
+        ? parsed(req, "body", losCustomerBody).losToken
+        : parsed(req, "body", losStaffBody).handoffToken;
+    res
+      .status(201)
+      .json({ status: "success", data: await this.service.losSignIn(this.audience, token, clientOf(req)) });
+  };
+
   refresh = async (req: Request, res: Response) => {
     noStore(res);
     const { refreshToken } = parsed(req, "body", refreshBody);
@@ -60,12 +74,12 @@ export class AuthController {
   };
 
   logout = async (req: Request, res: Response) => {
-    await this.service.logout(parsed(req, "body", refreshBody).refreshToken);
+    await this.service.logout(parsed(req, "body", refreshBody).refreshToken, clientOf(req));
     res.status(204).end();
   };
 
   logoutAll = async (req: Request, res: Response) => {
-    await this.service.logoutAll(getAuth(req));
+    await this.service.logoutAll(getAuth(req), clientOf(req));
     res.status(204).end();
   };
 
@@ -119,9 +133,20 @@ export class UserController {
     res.json({ status: "success", data });
   };
 
+  linkIdentity = async (req: Request, res: Response) => {
+    const { userId } = parsed(req, "params", userParams);
+    const data = await this.service.linkIdentity(getAuth(req), userId, parsed(req, "body", linkIdentityBody));
+    res.status(201).json({ status: "success", data });
+  };
+
+  unlinkIdentity = async (req: Request, res: Response) => {
+    const { userId, provider } = parsed(req, "params", identityParams);
+    res.json({ status: "success", data: await this.service.unlinkIdentity(getAuth(req), userId, provider) });
+  };
+
   resetPassword = async (req: Request, res: Response) => {
     const { userId } = parsed(req, "params", userParams);
-    const { password } = parsed(req, "body", resetPasswordBody);
-    res.json({ status: "success", data: await this.service.resetPassword(getAuth(req), userId, password) });
+    const { password, username } = parsed(req, "body", resetPasswordBody);
+    res.json({ status: "success", data: await this.service.resetPassword(getAuth(req), userId, password, username) });
   };
 }

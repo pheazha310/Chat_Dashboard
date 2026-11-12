@@ -22,6 +22,8 @@ function findToken(value: unknown, keyPattern: RegExp): string | null {
 }
 
 const TIMEOUT_MS = 8000;
+/** After LOS could not be reached, how long staff sign-in skips it (so chat accounts are not delayed by the timeout). */
+const OUTAGE_PAUSE_MS = 30_000;
 
 /** 429 when LOS is limiting sign-ins; the staff member can try again shortly. */
 export class LosRateLimitedError extends AppError {
@@ -40,9 +42,14 @@ export class LosStaffLogin implements LosStaffCredentials {
   constructor(
     private readonly baseUrl: string,
     private readonly fetchFn: typeof fetch = fetch,
+    private readonly now: () => number = Date.now,
   ) {}
 
+  /** Until when LOS is not asked, after it could not be reached. */
+  private pausedUntil = 0;
+
   async accessToken(username: string, password: string): Promise<string | null> {
+    if (this.now() < this.pausedUntil) return null;
     try {
       const login = await this.post("/admin/auth/login", { username, password });
       if (!login) return null;
@@ -51,6 +58,7 @@ export class LosStaffLogin implements LosStaffCredentials {
       return token;
     } catch (error) {
       if (error instanceof LosRateLimitedError) throw error;
+      this.pausedUntil = this.now() + OUTAGE_PAUSE_MS;
       logger.warn({ err: error instanceof Error ? error.message : "unknown" }, "LOS staff login unavailable");
       return null;
     }
@@ -66,6 +74,7 @@ export class LosStaffLogin implements LosStaffCredentials {
     });
     // LOS limits logins (and every login comes from this server): say so, a wrong-password message would mislead.
     if (response.status === 429) throw new LosRateLimitedError();
+    if (response.status >= 500) throw new Error(`LOS answered ${response.status}`);
     if (!response.ok) {
       // Status only: a refusal is normal for a chat-only account.
       logger.info({ path, status: response.status }, "LOS staff login step refused");

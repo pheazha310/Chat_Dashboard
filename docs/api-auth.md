@@ -96,7 +96,7 @@ same `401` as a wrong password, and a refresh token only works at the prefix it 
 | `POST /auth/register`              | none         | `{ username, password, displayName, email? }`     | **Customer prefix only.** Creates a `CUSTOMER` and signs in. `201`; `409` if the username is taken                                                                                           |
 | `POST /auth/login`                 | none         | `{ username, password }`                          | `401` wrong username/password; `429 ACCOUNT_LOCKED`; `403` disabled                                                                                                                          |
 | `POST /auth/los`                   | none         | customer `{ losToken }`, staff `{ handoffToken }` | Sign in with LOS (below). `401` any token problem; `403` disabled; `503 LOS_SIGN_IN_DISABLED` if LOS is not configured, `503 LOS_SIGN_IN_UNAVAILABLE` if a hand-off token cannot be recorded |
-| `POST /auth/refresh`               | none         | `{ refreshToken }`                                | New pair; `401` unknown, expired, reused or disabled                                                                                                                                         |
+| `POST /auth/refresh`               | none         | `{ refreshToken }`                                | New pair; `401` unknown, reused or disabled; `401 SESSION_EXPIRED` when the sign-in has ended                                                                                                |
 | `POST /auth/logout`                | none         | `{ refreshToken }`                                | Ends that sign-in. Always `204`                                                                                                                                                              |
 | `POST /auth/logout-all`            | access token |                                                   | Ends every sign-in of the caller. `204`                                                                                                                                                      |
 | `GET /auth/me`                     | access token |                                                   | The caller's account                                                                                                                                                                         |
@@ -366,3 +366,34 @@ Unit: password hashing, tokens (tampering, `alg: none`, expiry, wrong key), the 
 changes). Integration (`auth-api.integration.test.ts`, needs `TEST_DATABASE_URL`): sign-in and protected routes over
 HTTP, account creation, disabling, rotation and replay, lockout, customer registration and the staff/customer split,
 and password change.
+
+## Session URLs of the "Chat Backend" Postman collection
+
+[postman/chat-backend.postman_collection.json](postman/chat-backend.postman_collection.json) (with
+`chat-backend.postman_environment.template.json`) uses two base URLs: `{{baseUrl}}/api/v1/customer` and
+`{{baseUrl}}/api/v1/agents` (the staff API, the same router as `/api/v1/admin`, without a `/chat` segment).
+
+| Request                                                      | Same as                          | Success |
+| ------------------------------------------------------------ | -------------------------------- | ------- |
+| `POST /api/v1/customer/auth/session` `{ losToken }`          | `POST /api/v1/customer/auth/los` | 201     |
+| `POST /api/v1/agents/auth/session` `{ handoffToken }`        | `POST /api/v1/admin/auth/los`    | 201     |
+| `GET /api/v1/customer/auth/me`, `GET /api/v1/agents/auth/me` | `/auth/me`                       | 200     |
+
+The customer's id-less chat requests (`GET conversation`, `GET`/`POST conversation/messages`, `POST attachments`) are in
+[api-customer-mobile.md](api-customer-mobile.md). The same APIs also answer under `/customer/api/v1[/chat]` and
+`/agent/api/v1[/chat]`.
+
+## Standalone mode (LOS optional)
+
+Flows, provisioning, linking, revocation and the audit trail are in [standalone-mode.md](standalone-mode.md). API additions:
+
+- `POST /auth/login` accepts an optional `provider`: `"auto"` (default: LOS first for staff when `LOS_BASE_URL` is set,
+  then chat accounts) or `"chat"` (chat accounts only; the password is never sent to LOS). After LOS could not be
+  reached, LOS is skipped for 30 seconds.
+- `POST /users/:userId/identities` `{ provider: "LOS", externalUserType, externalUserId }` (201, admin) links an
+  existing account to an LOS identity; `DELETE /users/:userId/identities/LOS` (admin) unlinks it and signs the account
+  out everywhere. 409 for an identity already linked elsewhere, a second identity, or unlinking an account whose only
+  sign-in is LOS; 400 when the identity type does not match the account.
+- `POST /users/:userId/password` also accepts `username` for an LOS-only account, giving the same account chat
+  credentials (409 without it, 400 for an account that already has a username).
+- Every sign-in, refusal, logout, revocation and link is written to `auth_audit_events` (never secrets).

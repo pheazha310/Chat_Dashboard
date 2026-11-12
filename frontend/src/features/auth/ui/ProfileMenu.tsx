@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { authRequired, useAuthStore } from "@/shared/api/auth";
+import { accessContextLabel, authRequired, currentAccessContext, useAuthStore } from "@/shared/api/auth";
 import { assets } from "@/shared/config";
 import { AssetIcon, notify } from "@/shared/ui";
 import { submitSignOut } from "../model/sign-in";
@@ -45,6 +45,7 @@ export default function ProfileMenu() {
             <strong>{user.displayName}</strong>
             {(user.username ?? user.email) && <small>{user.username ?? user.email}</small>}
             <small>{user.role.toLowerCase()}</small>
+            <small>{accessContextLabel(currentAccessContext())}</small>
           </div>
           <button role="menuitem" onClick={() => void submitSignOut()}>
             Sign out

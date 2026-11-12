@@ -110,6 +110,44 @@ Table refresh_tokens [headercolor: #2563EB] {
   }
 }
 
+Table external_identities [headercolor: #2563EB] {
+  id uuid [pk, default: `gen_random_uuid()`]
+  provider varchar(20) [not null, note: 'LOS (CHECK). The outside sign-in provider']
+  external_user_id varchar(100) [not null, note: 'The provider id of the person (LOS userId, decimal text)']
+  external_user_type varchar(20) [not null, note: 'CUSTOMER or STAFF (CHECK); LOS numbers each kind separately']
+  chat_user_id uuid [not null, note: 'users.id (ON DELETE CASCADE)']
+  linked_by uuid [note: 'The admin who linked it; null when created by the provider first sign-in']
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (provider, external_user_type, external_user_id) [unique, note: 'One chat account per outside identity']
+    (chat_user_id, provider) [unique, note: 'One identity per provider per account']
+  }
+
+  Note: 'Explicit mapping from an LOS identity to the one chat account it signs into. Never matched by email or phone. users.los_user_type/los_user_id stay as a copy written in the same transaction'
+}
+
+Table auth_audit_events [headercolor: #2563EB] {
+  id uuid [pk, default: `gen_random_uuid()`]
+  event varchar(40) [not null, note: 'LOGIN_SUCCESS, LOGIN_FAILED, LOGOUT, LOGOUT_ALL, REFRESH_REUSE_DETECTED, SESSIONS_REVOKED, IDENTITY_LINKED, IDENTITY_UNLINKED']
+  provider varchar(20) [not null, note: 'CHAT or LOS']
+  outcome varchar(10) [not null, note: 'SUCCESS or FAILURE (CHECK)']
+  user_id uuid [note: 'The account concerned, when known (ON DELETE SET NULL)']
+  actor_id uuid [note: 'The admin who did it, for admin actions']
+  attempted_username varchar(32) [note: 'Only when the typed text has the shape of a username']
+  reason varchar(60) [note: 'BAD_PASSWORD, UNKNOWN_USER, DISABLED, LOCKED, WRONG_AUDIENCE, LOS_UNAVAILABLE, LOS_REFUSED, ...']
+  ip_address varchar(45)
+  user_agent varchar(255)
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (user_id, created_at)
+    created_at
+  }
+
+  Note: 'Append-only. Never holds passwords, tokens or token hashes'
+}
+
 Table roles [headercolor: #2563EB] {
   id int [pk, increment]
   name varchar(20) [not null, unique, note: 'CUSTOMER, AGENT, SUPERVISOR or ADMIN (CHECK). Fixed: tokens and users.role carry it']
@@ -178,6 +216,8 @@ Ref: users.id < refresh_tokens.user_id [delete: cascade]
 Ref: users.id - staff.user_id [delete: cascade]
 Ref: users.id - customers.user_id [delete: cascade]
 Ref: refresh_tokens.id - refresh_tokens.replaced_by_id [delete: set null]
+Ref: users.id < external_identities.chat_user_id [delete: cascade]
+Ref: users.id < auth_audit_events.user_id [delete: set null]
 
 // ==============================================================================================================
 // 02. CONVERSATIONS

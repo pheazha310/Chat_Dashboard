@@ -1,4 +1,4 @@
-export { listenForHandoff } from "./embed";
+export { accessContext, accessContextLabel, currentAccessContext, listenForHandoff, type AccessContext } from "./embed";
 export {
   AuthError,
   authRequired,

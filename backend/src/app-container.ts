@@ -11,6 +11,7 @@ import { MappedAuthClient } from "@shared/auth/mapped-auth-client.js";
 import { MemoryRateLimitStore, RedisRateLimitStore } from "@shared/middleware/rate-limit.middleware.js";
 import { AccountCheckedAuthClient } from "@modules/auth/auth.account-check.js";
 import { AuthRepository } from "@modules/auth/auth.repository.js";
+import { AuthAuditRepository } from "@modules/auth/auth.audit.repository.js";
 import { AuthService } from "@modules/auth/auth.service.js";
 import { losVerifierFrom } from "@modules/auth/auth.los.js";
 import { LosStaffLogin } from "@modules/auth/auth.los-login.js";
@@ -62,6 +63,9 @@ const accessTokens = new AccessTokens(accessTokenSecret(), {
 /** Checks LOS tokens for "sign in with LOS"; null (the endpoints answer 503) when LOS_ISSUER is not set. */
 const losVerifier = await losVerifierFrom(env, new PrismaUsedTokenIds());
 
+/** Authentication events (`auth_audit_events`). */
+const authAudit = new AuthAuditRepository();
+
 /** Sign-in, registration, refresh and password changes. */
 export const authService = new AuthService(
   authRepository,
@@ -78,10 +82,11 @@ export const authService = new AuthService(
   { refreshFromCustomerToken: (customerId, token) => loanApplications.refreshFromCustomerToken(customerId, token) },
   // Staff sign in with their LOS username and password (tried before the chat accounts); needs LOS_BASE_URL.
   env.LOS_BASE_URL ? new LosStaffLogin(env.LOS_BASE_URL) : null,
+  authAudit,
 );
 
 /** Account management (admins), and the `local` directory of names. */
-export const userService = new UserService(authRepository, identities);
+export const userService = new UserService(authRepository, identities, authAudit);
 
 /** What each role may do (roles, permissions). */
 export const roleService = new RoleService(new RoleRepository());

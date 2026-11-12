@@ -52,10 +52,17 @@ export function readSession(): AuthSession | null {
   }
 }
 
-type AuthState = { user: AuthUser | null };
+type AuthState = {
+  user: AuthUser | null;
+  /** The last session ended because it ran out (not because the user signed out); cleared at the next sign-in. */
+  sessionExpired: boolean;
+};
 
 /** The signed-in user, or `null`. Other tabs' sign-in and sign-out are followed through the `storage` event. */
-export const useAuthStore = create<AuthState>(() => ({ user: authRequired ? (readSession()?.user ?? null) : null }));
+export const useAuthStore = create<AuthState>(() => ({
+  user: authRequired ? (readSession()?.user ?? null) : null,
+  sessionExpired: false,
+}));
 
 function saveSession(session: AuthSession) {
   const { accessToken, accessTokenExpiresAt, refreshToken, refreshTokenExpiresAt, user } = session;
@@ -67,7 +74,7 @@ function saveSession(session: AuthSession) {
   } catch {
     /* Storage full or blocked: the session then lasts until the access token expires. */
   }
-  useAuthStore.setState({ user });
+  useAuthStore.setState({ user, sessionExpired: false });
 }
 
 function clearSession() {
@@ -174,6 +181,7 @@ async function rotate(before: string | undefined): Promise<boolean> {
   } catch (error) {
     if (error instanceof AuthError && error.status === 401) {
       clearSession();
+      if (error.code === "SESSION_EXPIRED") useAuthStore.setState({ sessionExpired: true });
       return false;
     }
     throw error;

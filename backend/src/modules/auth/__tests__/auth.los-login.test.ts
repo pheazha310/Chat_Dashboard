@@ -42,4 +42,28 @@ describe("LosStaffLogin", () => {
     const odd = vi.fn<typeof fetch>().mockImplementation(() => json(200, { data: { nothing: true } }));
     await expect(new LosStaffLogin(BASE, odd).accessToken("a", "b")).resolves.toBeNull();
   });
+
+  describe("when LOS is down", () => {
+    it("stops asking LOS for a while after it was unreachable, so chat sign-in is not delayed", async () => {
+      let now = 1_000_000;
+      const down = vi.fn<typeof fetch>().mockRejectedValue(new Error("ECONNREFUSED"));
+      const login = new LosStaffLogin(BASE, down, () => now);
+
+      await expect(login.accessToken("a", "b")).resolves.toBeNull();
+      await expect(login.accessToken("a", "b")).resolves.toBeNull();
+      expect(down).toHaveBeenCalledTimes(1);
+
+      now += 31_000; // the pause is over: LOS is tried again
+      await expect(login.accessToken("a", "b")).resolves.toBeNull();
+      expect(down).toHaveBeenCalledTimes(2);
+    });
+
+    it("does not pause for a refusal: a chat-only account is refused by a healthy LOS", async () => {
+      const refuses = vi.fn<typeof fetch>().mockImplementation(() => json(401, { status: "error" }));
+      const login = new LosStaffLogin(BASE, refuses, () => 1);
+      await login.accessToken("a", "b");
+      await login.accessToken("a", "b");
+      expect(refuses).toHaveBeenCalledTimes(2);
+    });
+  });
 });

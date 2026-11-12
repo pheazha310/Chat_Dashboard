@@ -29,7 +29,16 @@ import { buildOpenApiDocument } from "./openapi.js";
 export const ADMIN_API_PREFIX = "/api/v1/admin";
 
 /** Namespace of the customer's mobile app. Only `CUSTOMER` tokens are accepted here (and no staff role is). */
+/** The staff API under the name the apps use: the same router as ADMIN_API_PREFIX, so `/api/v1/agents/auth/session` etc. */
+export const AGENTS_API_PREFIX = "/api/v1/agents";
 export const CUSTOMER_API_PREFIX = "/api/v1/customer";
+
+/**
+ * The same two APIs under the URLs of the Postman "Chat Backend" collection (docs/postman/README.md): sign-in at
+ * `<prefix>/auth`, chat at `<prefix>/chat`. They share the routers and services of the namespaces above.
+ */
+export const CUSTOMER_APP_PREFIX = "/customer/api/v1";
+export const AGENT_APP_PREFIX = "/agent/api/v1";
 
 /** Development helpers, served only with AUTH_MODE=dev (app.ts). */
 export const DEV_API_PREFIX = "/api/v1/dev";
@@ -43,6 +52,10 @@ export const customerApiRouter = Router();
 // Registration, sign-in and refresh are public, so they are mounted before the authentication below.
 customerApiRouter.use("/auth", customerAuthRoutes);
 customerApiRouter.use(authenticate(authClient, ["CUSTOMER"]), customerProfileRoutes, customerChannelRoutes);
+
+export const customerAppRouter = Router();
+customerAppRouter.use("/auth", customerAuthRoutes);
+customerAppRouter.use("/chat", authenticate(authClient, ["CUSTOMER"]), customerProfileRoutes, customerChannelRoutes);
 
 // Mount each module's router here; app.ts serves it under ADMIN_API_PREFIX.
 export const apiRouter = Router();
@@ -91,3 +104,8 @@ apiRouter.use("/tags", authenticate(authClient), tagRoutes);
 apiRouter.use("/notes", authenticate(authClient), noteRoutes);
 apiRouter.use("/escalations", authenticate(authClient), escalationRoutes);
 apiRouter.use("/attachments", authenticate(authClient), attachmentRoutes);
+
+/** Staff chat under `/agent/api/v1/chat`: the whole staff API again, plus sign-in at `/agent/api/v1/auth`. */
+export const agentAppRouter = Router();
+agentAppRouter.use("/auth", staffAuthRoutes);
+agentAppRouter.use("/chat", apiRouter);

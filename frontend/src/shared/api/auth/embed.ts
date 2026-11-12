@@ -7,6 +7,8 @@
  * token goes to the backend (`POST /auth/los`), which verifies it and issues this app's own session; it is not stored.
  */
 
+import { LOS_WEB_ORIGIN } from "@/shared/config";
+
 const MAX_TOKEN_LENGTH = 4096;
 
 type Listener = (event: MessageEvent) => void;
@@ -50,3 +52,26 @@ export function listenForHandoff({ parentOrigin, parent, target, exchange }: Han
   parent.postMessage({ type: "TOKEN_REQUEST" }, parentOrigin);
   return () => target.removeEventListener("message", onMessage);
 }
+
+export type AccessContext = "embedded" | "standalone";
+
+/**
+ * How the dashboard was opened: inside LOS Web's iframe (hand-off sign-in is possible) or on its own URL. A frame
+ * without a configured LOS Web origin cannot receive a hand-off, so it counts as standalone.
+ */
+export function accessContext({
+  framed,
+  losWebOrigin,
+}: {
+  framed: boolean;
+  losWebOrigin: string | undefined;
+}): AccessContext {
+  return framed && losWebOrigin ? "embedded" : "standalone";
+}
+
+export const accessContextLabel = (context: AccessContext) =>
+  context === "embedded" ? "LOS-integrated access" : "Standalone access";
+
+/** The access context of this page, read from the browser. */
+export const currentAccessContext = (): AccessContext =>
+  accessContext({ framed: typeof window !== "undefined" && window.parent !== window, losWebOrigin: LOS_WEB_ORIGIN });

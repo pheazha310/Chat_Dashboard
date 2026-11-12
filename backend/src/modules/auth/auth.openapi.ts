@@ -10,6 +10,8 @@ import {
   loginBody,
   losStaffBody,
   refreshBody,
+  identityParams,
+  linkIdentityBody,
   resetPasswordBody,
   updateUserBody,
   userParams,
@@ -224,12 +226,47 @@ export function registerAuthOpenApi(registry: OpenAPIRegistry) {
   });
   registry.registerPath({
     method: "post",
+    path: "/users/{userId}/identities",
+    tags: userTags,
+    security,
+    summary: "Link an account to an LOS identity",
+    description:
+      "Admins only. Maps this chat account to a person's LOS userId, so their LOS sign-in lands here instead of creating a second account. Never matched by name, email or phone. The identity type must match the account (CUSTOMER or STAFF). 409 when the identity belongs to another account or this account already has one. From then on LOS sets the account's role on every LOS sign-in.",
+    request: { params: userParams, body: jsonBody(linkIdentityBody) },
+    responses: {
+      201: ok("Account", successOf(user)),
+      400: errors[400],
+      401: errors[401],
+      403: errors[403],
+      404: errors[404],
+      409: errors[409],
+    },
+  });
+  registry.registerPath({
+    method: "delete",
+    path: "/users/{userId}/identities/{provider}",
+    tags: userTags,
+    security,
+    summary: "Unlink an account from LOS",
+    description:
+      "Admins only. Removes the LOS mapping and signs the account out everywhere. The account keeps its chat username and password. 409 when LOS is its only sign-in; 404 when it has no LOS identity.",
+    request: { params: identityParams },
+    responses: {
+      200: ok("Account", successOf(user)),
+      401: errors[401],
+      403: errors[403],
+      404: errors[404],
+      409: errors[409],
+    },
+  });
+  registry.registerPath({
+    method: "post",
     path: "/users/{userId}/password",
     tags: userTags,
     security,
     summary: "Set a new password",
     description:
-      "Admins only. Clears a sign-in lock and signs the user out everywhere. 409 for an LOS-only account (it has no username to sign in with).",
+      "Admins only. Clears a sign-in lock and signs the user out everywhere. For an LOS-only account (no username yet) send `username` too: the same account then gets chat credentials and can sign in standalone; without it, 409. An account that already has a username cannot be renamed here (400); 409 for a taken username.",
     request: { params: userParams, body: jsonBody(resetPasswordBody) },
     responses: {
       200: ok("Account", successOf(user)),

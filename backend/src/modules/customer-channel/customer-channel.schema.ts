@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { cursorQuery } from "@shared/utils/pagination.js";
 import { idSchema } from "@shared/utils/ids.js";
 import { MAX_TEXT_LENGTH } from "@modules/messages/message.schema.js";
 import { applicationIdSchema } from "@modules/conversations/conversation.schema.js";
@@ -46,3 +47,31 @@ export const downloadQuery = z.object({
     .optional()
     .transform((value) => value === "1" || value === "true"),
 });
+
+/**
+ * The mobile app's send body: `clientMessageId` (the same idempotency key as `clientId`), a `type`, and either
+ * `text` (TEXT) or the `attachmentId` of a file uploaded with `POST /chat/attachments` (FILE, `text` is its caption).
+ */
+export const chatSendBody = z
+  .object({
+    clientMessageId: clientId,
+    type: z.enum(["TEXT", "FILE"]).default("TEXT"),
+    text: z.string().trim().max(MAX_TEXT_LENGTH).optional(),
+    attachmentId: idSchema.optional(),
+  })
+  .superRefine((body, ctx) => {
+    if (body.type === "TEXT" && !body.text)
+      ctx.addIssue({ code: "custom", path: ["text"], message: "text is required" });
+    if (body.type === "FILE" && !body.attachmentId) {
+      ctx.addIssue({ code: "custom", path: ["attachmentId"], message: "attachmentId is required" });
+    }
+  })
+  .transform(({ clientMessageId, ...rest }) => ({ clientId: clientMessageId, ...rest }));
+export type ChatSendInput = z.infer<typeof chatSendBody>;
+
+/** The message history query of `/conversation/messages`: the cursors of the dashboard, and `size` for the page size. */
+export const mineHistoryQuery = z.preprocess((raw) => {
+  if (typeof raw !== "object" || raw === null || !("size" in raw)) return raw;
+  const { size, ...rest } = raw as Record<string, unknown>;
+  return { ...rest, limit: size };
+}, cursorQuery);

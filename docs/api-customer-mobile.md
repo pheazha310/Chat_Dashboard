@@ -38,6 +38,16 @@ production) a `dev:<customerUuid>:CUSTOMER` token also works for local testing.
 | `POST /calls/:callId/cancel`                         | Stop a ringing call **the customer started**.                                                                                                                             |
 | `POST /calls/:callId/end`                            | Hang up an answered call (`409` while it still rings: cancel it instead).                                                                                                 |
 
+Without an id, for a customer's one conversation (also served under `/customer/api/v1/chat/...`, the URLs of the Postman
+"Chat Backend" collection in [postman/README.md](postman/README.md)):
+
+| Method and path               | Purpose                                                                                                                                                                                                |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `GET /conversation`           | The customer's conversation, created on first use (same as join room with no body). `200`.                                                                                                             |
+| `GET /conversation/messages`  | Same as `GET /conversations/:id/messages` for that conversation. `size` is accepted as an alias of `limit`.                                                                                            |
+| `POST /conversation/messages` | Body `{ clientMessageId, type?, text?, attachmentId? }`. `type` `TEXT` (default, `text` required) or `FILE` (`attachmentId` required, `text` is the caption). `201` new, `200` a retry.                |
+| `POST /attachments`           | Uploads a file first (multipart `file`). `201` with the attachment (`id`, `fileName`, `mimeType`, ...). It is invisible to staff until a `FILE` message sends it. Only its uploader can send it, once. |
+
 A message's `attachments[].downloadPath` is relative to this base (`/attachments/<id>/download`), so the app fetches it
 with the same bearer token.
 

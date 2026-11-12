@@ -22,6 +22,16 @@ const userSelect = {
   customer: { select: { phone: true, customerCode: true, preferredLanguage: true } },
 } as const;
 
+/** The only outside sign-in provider so far. */
+export const LOS_PROVIDER = "LOS";
+
+/** An identity at an outside provider. `externalUserId` is text; for LOS it is the decimal LOS userId. */
+export interface IdentityRef {
+  provider: typeof LOS_PROVIDER;
+  externalUserType: "CUSTOMER" | "STAFF";
+  externalUserId: string;
+}
+
 /** True for a unique-constraint violation (a second account with the same username). */
 export const isUniqueViolation = (error: unknown) =>
   typeof error === "object" && error !== null && (error as { code?: unknown }).code === "P2002";
@@ -60,19 +70,66 @@ export class AuthRepository {
     return this.db.authUser.findUnique({ where: { username }, select: userSelect });
   }
 
-  findUserByLos(losUserType: string, losUserId: number): Promise<UserRow | null> {
-    return this.db.authUser.findUnique({
-      where: { losUserType_losUserId: { losUserType, losUserId } },
+  /** The account an LOS identity is mapped to (`external_identities`), or null when it is not linked to any. */
+  async findUserByLos(losUserType: string, losUserId: number): Promise<UserRow | null> {
+    const identity = await this.db.externalIdentity.findUnique({
+      where: {
+        provider_externalUserType_externalUserId: {
+          provider: LOS_PROVIDER,
+          externalUserType: losUserType,
+          externalUserId: String(losUserId),
+        },
+      },
+      select: { user: { select: userSelect } },
+    });
+    return identity?.user ?? null;
+  }
+
+  /** An account that signs in only through LOS: no username, no password. Created with its profile row and identity. */
+  createLosUser(data: { losUserType: string; losUserId: number; role: string; displayName: string }): Promise<UserRow> {
+    return this.db.authUser.create({
+      data: {
+        ...data,
+        createdBy: null,
+        ...profileFor(data.role),
+        identities: {
+          create: {
+            provider: LOS_PROVIDER,
+            externalUserType: data.losUserType,
+            externalUserId: String(data.losUserId),
+          },
+        },
+      },
       select: userSelect,
     });
   }
 
-  /** An account that signs in only through LOS: no username, no password. Created with its profile row. */
-  createLosUser(data: { losUserType: string; losUserId: number; role: string; displayName: string }): Promise<UserRow> {
-    return this.db.authUser.create({
-      data: { ...data, createdBy: null, ...profileFor(data.role) },
-      select: userSelect,
+  /**
+   * Maps an LOS identity to an existing account: the identity row and the `users.los_*` copy are written together. A
+   * unique violation means the identity belongs to another account, or this account already has one.
+   */
+  async linkIdentity(userId: string, identity: IdentityRef, linkedBy: string | null): Promise<void> {
+    await this.db.externalIdentity.create({
+      data: {
+        provider: identity.provider,
+        externalUserType: identity.externalUserType,
+        externalUserId: identity.externalUserId,
+        chatUserId: userId,
+        linkedBy,
+      },
     });
+    await this.db.authUser.update({
+      where: { id: userId },
+      data: { losUserType: identity.externalUserType, losUserId: Number(identity.externalUserId) },
+    });
+  }
+
+  /** Removes the account's LOS mapping (and the `users.los_*` copy). Returns false when it had none. */
+  async unlinkIdentity(userId: string, provider: IdentityRef["provider"]): Promise<boolean> {
+    const { count } = await this.db.externalIdentity.deleteMany({ where: { chatUserId: userId, provider } });
+    if (count > 0)
+      await this.db.authUser.update({ where: { id: userId }, data: { losUserType: null, losUserId: null } });
+    return count > 0;
   }
 
   findUserById(id: string): Promise<UserRow | null> {
@@ -115,6 +172,14 @@ export class AuthRepository {
       where: { id },
       data: { ...user, ...profileUpdates({ staff, customer }) },
       select: userSelect,
+    });
+  }
+
+  /** Gives an account without a sign-in name its chat credentials (the two are set together, as the CHECK requires). */
+  async setCredentials(id: string, username: string, passwordHash: string): Promise<void> {
+    await this.db.authUser.update({
+      where: { id },
+      data: { username, passwordHash, passwordChangedAt: new Date(), failedLoginCount: 0, lockedUntil: null },
     });
   }
 

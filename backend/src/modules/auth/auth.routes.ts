@@ -9,6 +9,8 @@ import {
   changePasswordBody,
   createUserBody,
   devLoginBody,
+  identityParams,
+  linkIdentityBody,
   listUsersQuery,
   loginBody,
   losCustomerBody,
@@ -35,6 +37,12 @@ function authRouter(audience: Audience) {
     limited(`${audience}-los`),
     validate({ body: audience === "customer" ? losCustomerBody : losStaffBody }),
     controller.losSignIn,
+  );
+  router.post(
+    "/session",
+    limited(`${audience}-session`),
+    validate({ body: audience === "customer" ? losCustomerBody : losStaffBody }),
+    controller.session,
   );
   router.post("/refresh", limited(`${audience}-refresh`), validate({ body: refreshBody }), controller.refresh);
   router.post("/logout", limited(`${audience}-logout`), validate({ body: refreshBody }), controller.logout);
@@ -81,4 +89,6 @@ userRoutes.get("/", validate({ query: listUsersQuery }), users.list);
 userRoutes.post("/", validate({ body: createUserBody }), users.create);
 userRoutes.get("/:userId", validate({ params: userParams }), users.get);
 userRoutes.patch("/:userId", validate({ params: userParams, body: updateUserBody }), users.update);
+userRoutes.post("/:userId/identities", validate({ params: userParams, body: linkIdentityBody }), users.linkIdentity);
+userRoutes.delete("/:userId/identities/:provider", validate({ params: identityParams }), users.unlinkIdentity);
 userRoutes.post("/:userId/password", validate({ params: userParams, body: resetPasswordBody }), users.resetPassword);

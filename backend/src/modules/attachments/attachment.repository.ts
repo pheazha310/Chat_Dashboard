@@ -41,6 +41,46 @@ export class AttachmentRepository {
     });
   }
 
+  /** A customer's uploaded file that no message carries yet (`POST /chat/attachments`). */
+  findStaged(id: string, conversationId: string, uploadedById: string) {
+    return this.db.attachment.findFirst({
+      where: {
+        id,
+        conversationId,
+        uploadedById,
+        uploadedByType: "CUSTOMER",
+        deletedAt: null,
+        uploadStatus: "PENDING",
+        messageAttachments: { none: {} },
+      },
+    });
+  }
+
+  /** Stores a customer's file metadata without a message. Invisible to every listing until a message claims it. */
+  stage(data: {
+    conversationId: string;
+    uploadedById: string;
+    storageKey: string;
+    fileName: string;
+    mimeType: string;
+    fileSize: number;
+    checksumSha256: string;
+  }) {
+    return this.db.attachment.create({
+      data: {
+        conversationId: data.conversationId,
+        uploadedByType: "CUSTOMER",
+        uploadedById: data.uploadedById,
+        storageKey: data.storageKey,
+        fileName: data.fileName,
+        mimeType: data.mimeType,
+        fileSize: BigInt(data.fileSize),
+        checksumSha256: data.checksumSha256,
+        uploadStatus: "PENDING",
+      },
+    });
+  }
+
   /** The first audio attachment of a message that is not deleted. */
   findAudioOfMessage(messageId: string) {
     return this.db.attachment.findFirst({

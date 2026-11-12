@@ -286,3 +286,8 @@ ALTER TABLE customers ADD CONSTRAINT customers_phone_e164 CHECK (phone ~ '^\+[1-
 ALTER TABLE ai_training_examples ADD CONSTRAINT ai_training_examples_status_check CHECK (status IN ('PENDING', 'APPROVED'));
 ALTER TABLE ai_training_examples ADD CONSTRAINT ai_training_examples_approval_check CHECK ((status = 'APPROVED') = (approved_by IS NOT NULL AND approved_at IS NOT NULL));
 CREATE UNIQUE INDEX automation_rules_one_auto_reply_per_trigger ON automation_rules (trigger_type) WHERE trigger_type IN ('FIRST_RESPONSE', 'AWAY');
+
+-- External identities and the auth audit trail (migration 20261125000000_external_identities_and_auth_audit).
+ALTER TABLE external_identities ADD CONSTRAINT external_identities_provider_check CHECK (provider IN ('LOS'));
+ALTER TABLE external_identities ADD CONSTRAINT external_identities_type_check CHECK (external_user_type IN ('CUSTOMER', 'STAFF'));
+ALTER TABLE auth_audit_events ADD CONSTRAINT auth_audit_events_outcome_check CHECK (outcome IN ('SUCCESS', 'FAILURE'));

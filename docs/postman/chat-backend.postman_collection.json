@@ -1,0 +1,676 @@
+{
+  "info": {
+    "_postman_id": "064cece0-d180-4cff-bcb1-a1415895a694",
+    "name": "Chat Backend",
+    "description": "Chat against real LOS dev logins, one folder per person. The numbered requests are the sign-in flow, run by hand in order; each saves the token the next step needs, and a failed step clears the tokens after it.\n\nCustomer: 1. LOS login → 2. Chat session → chat requests (Bearer {{customerToken}}).  \nStaff: 1. LOS login → 2. LOS handoff → 3. Chat session → chat requests (Bearer {{staffToken}}).\n\nOnly the chat session tokens (customerToken, staffToken) work on chat requests. Leave the chat requests' Authorization on \"Inherit auth from parent\".\n\nBase URLs: {{baseUrl}}/api/v1/customer and {{baseUrl}}/api/v1/agents.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "36185983"
+  },
+  "item": [
+    {
+      "name": "Customer",
+      "item": [
+        {
+          "name": "1. LOS login (LOS checks the password)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let body; try { body = pm.response.json(); } catch (e) { body = null; }",
+                  "if (pm.response.code === 200 && body && body.data) {",
+                  "  const d = body.data;",
+                  "  pm.environment.set('losCustomerToken', d.accessToken);",
+                  "} else {",
+                  "  pm.environment.unset('losCustomerToken');",
+                  "  pm.environment.unset('customerToken');",
+                  "}",
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "pm.test('response is JSON (if not, losUrl/baseUrl points at the wrong host)', () => pm.expect(body).to.be.an('object'));",
+                  "if (pm.response.code !== 200 && body) pm.test('reason: ' + JSON.stringify(body.error || body.message || body), () => { throw new Error('see test name'); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{customerUsername}}\",\n  \"password\": \"{{customerPin}}\"\n}"
+            },
+            "url": {
+              "raw": "{{losUrl}}/customer/auth/login",
+              "host": ["{{losUrl}}"],
+              "path": ["customer", "auth", "login"]
+            },
+            "description": "Logs in on LOS dev. Saves losCustomerToken: an LOS token, only used by step 2."
+          },
+          "response": []
+        },
+        {
+          "name": "2. Chat session (swap the LOS token for a chat token)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let body; try { body = pm.response.json(); } catch (e) { body = null; }",
+                  "if (pm.response.code === 201 && body && body.data) {",
+                  "  const d = body.data;",
+                  "  pm.environment.set('customerToken', d.accessToken);",
+                  "  pm.environment.set('customerRefreshToken', d.refreshToken);",
+                  "  console.log('customer chat session for', d.user.username, '- valid', d.expiresIn);",
+                  "} else {",
+                  "  pm.environment.unset('customerToken');",
+                  "}",
+                  "pm.test('201', () => pm.response.to.have.status(201));",
+                  "pm.test('response is JSON (if not, losUrl/baseUrl points at the wrong host)', () => pm.expect(body).to.be.an('object'));",
+                  "if (pm.response.code !== 201 && body) pm.test('reason: ' + JSON.stringify(body.error || body.message || body), () => { throw new Error('see test name'); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"losToken\": \"{{losCustomerToken}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/customer/auth/session",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "customer", "auth", "session"]
+            },
+            "description": "chat_backend checks the LOS signature, finds or creates the chat account, and returns its own session. Saves customerToken (1 h), used by every chat request below."
+          },
+          "response": []
+        },
+        {
+          "name": "Who am I",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json().data;",
+                  "pm.test('customer', () => pm.expect(d.kind).to.eql('customer'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/customer/auth/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "customer", "auth", "me"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get my conversation",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json().data;",
+                  "pm.environment.set('conversationId', d.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/customer/conversation",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "customer", "conversation"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Send a message",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201', () => pm.response.to.have.status(201));",
+                  "const d = pm.response.json().data;",
+                  "pm.environment.set('conversationId', d.conversationId);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientMessageId\": \"{{$guid}}\",\n  \"type\": \"TEXT\",\n  \"text\": \"Hi, can I change my repayment date to the 25th?\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/customer/conversation/messages",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "customer", "conversation", "messages"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Upload a PDF",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201', () => pm.response.to.have.status(201));",
+                  "const d = pm.response.json().data;",
+                  "pm.environment.set('pdfId', d.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "contentType": "application/pdf",
+                  "src": "fixtures/sample.pdf"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/customer/attachments",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "customer", "attachments"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Send the PDF",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('201', () => pm.response.to.have.status(201));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientMessageId\": \"{{$guid}}\",\n  \"type\": \"FILE\",\n  \"attachmentId\": \"{{pdfId}}\",\n  \"text\": \"My payslip\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/customer/conversation/messages",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "customer", "conversation", "messages"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "My messages (newest first)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('200', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/customer/conversation/messages?size=30",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "customer", "conversation", "messages"],
+              "query": [
+                {
+                  "key": "size",
+                  "value": "30"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Refresh token (new chat session without LOS)",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{customerRefreshToken}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/customer/auth/refresh",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "customer", "auth", "refresh"]
+            },
+            "description": "Rotates the session: each refresh token works once; the new pair is saved."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json().data;",
+                  "pm.environment.set('customerToken', d.accessToken);",
+                  "pm.environment.set('customerRefreshToken', d.refreshToken);"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "description": "Run 1 and 2 once (again when the session expires, after 1 hour), then any chat request. The chat requests inherit Bearer {{customerToken}} from this folder.",
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{customerToken}}",
+            "type": "string"
+          }
+        ]
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const isSignInStep = /^\\d\\. /.test(pm.info.requestName);\nif (!isSignInStep && !pm.environment.get('customerToken')) {\n  pm.variables.set('missingSession', 'No chat session yet: run \"Customer / 2. Chat session\" first (it saves customerToken)');\n}"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const missing = pm.variables.get('missingSession');\nif (missing) pm.test(missing, () => { throw new Error(missing); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Staff",
+      "item": [
+        {
+          "name": "1. LOS login (LOS checks the password)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let body; try { body = pm.response.json(); } catch (e) { body = null; }",
+                  "if (pm.response.code === 200 && body && body.data) {",
+                  "  const d = body.data;",
+                  "  pm.environment.set('losStaffToken', d.accessToken);",
+                  "  console.log('LOS staff role:', d.user && d.user.role);",
+                  "} else {",
+                  "  pm.environment.unset('losStaffToken');",
+                  "  pm.environment.unset('staffHandoff');",
+                  "  pm.environment.unset('staffToken');",
+                  "}",
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "pm.test('response is JSON (if not, losUrl/baseUrl points at the wrong host)', () => pm.expect(body).to.be.an('object'));",
+                  "if (pm.response.code !== 200 && body) pm.test('reason: ' + JSON.stringify(body.error || body.message || body), () => { throw new Error('see test name'); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{staffUsername}}\",\n  \"password\": \"{{staffPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{losUrl}}/admin/auth/login",
+              "host": ["{{losUrl}}"],
+              "path": ["admin", "auth", "login"]
+            },
+            "description": "Logs in on LOS dev. Saves losStaffToken: the real LOS staff token, only used by step 2. In production this stays inside los_web."
+          },
+          "response": []
+        },
+        {
+          "name": "2. LOS handoff (chat-only pass, 2 minutes)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let body; try { body = pm.response.json(); } catch (e) { body = null; }",
+                  "if (pm.response.code === 200 && body && body.data) {",
+                  "  const d = body.data;",
+                  "  pm.environment.set('staffHandoff', d.token);",
+                  "} else {",
+                  "  pm.environment.unset('staffHandoff');",
+                  "  pm.environment.unset('staffToken');",
+                  "}",
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "pm.test('response is JSON (if not, losUrl/baseUrl points at the wrong host)', () => pm.expect(body).to.be.an('object'));",
+                  "if (pm.response.code !== 200 && body) pm.test('reason: ' + JSON.stringify(body.error || body.message || body), () => { throw new Error('see test name'); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{losStaffToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{losUrl}}{{losHandoffPath}}",
+              "host": ["{{losUrl}}{{losHandoffPath}}"]
+            },
+            "description": "Asks LOS for a short, chat-only token. Saves staffHandoff, only used by step 3. In production los_web does this and posts the handoff into the chat iframe."
+          },
+          "response": []
+        },
+        {
+          "name": "3. Chat session (swap the handoff for a chat token)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let body; try { body = pm.response.json(); } catch (e) { body = null; }",
+                  "if (pm.response.code === 201 && body && body.data) {",
+                  "  const d = body.data;",
+                  "  pm.environment.set('staffToken', d.accessToken);",
+                  "  pm.environment.set('staffChatId', d.user.id);",
+                  "  console.log('staff chat session for', d.user.username, '- valid', d.expiresIn);",
+                  "} else {",
+                  "  pm.environment.unset('staffToken');",
+                  "}",
+                  "pm.test('201', () => pm.response.to.have.status(201));",
+                  "pm.test('response is JSON (if not, losUrl/baseUrl points at the wrong host)', () => pm.expect(body).to.be.an('object'));",
+                  "if (pm.response.code !== 201 && body) pm.test('reason: ' + JSON.stringify(body.error || body.message || body), () => { throw new Error('see test name'); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"handoffToken\": \"{{staffHandoff}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/agents/auth/session",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "agents", "auth", "session"]
+            },
+            "description": "chat_backend checks the handoff signature, finds or creates the staff chat account, and returns its own session. Saves staffToken (15 min), used by every chat request below."
+          },
+          "response": []
+        },
+        {
+          "name": "Inbox: all conversations",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const rows = pm.response.json().data;",
+                  "if (rows.length && !pm.environment.get('conversationId')) pm.environment.set('conversationId', rows[0].id);",
+                  "pm.test('lists conversations', () => pm.expect(rows).to.be.an('array'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/agents/conversations?size=50",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "agents", "conversations"],
+              "query": [
+                {
+                  "key": "size",
+                  "value": "50"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Conversation history",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('200', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/agents/conversations/{{conversationId}}/messages?size=50",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "agents", "conversations", "{{conversationId}}", "messages"],
+              "query": [
+                {
+                  "key": "size",
+                  "value": "50"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Download the customer PDF",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('200', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/agents/attachments/{{pdfId}}/download",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "agents", "attachments", "{{pdfId}}", "download"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Send a message",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201', () => pm.response.to.have.status(201));\nconst d = pm.response.json().data;\npm.test('STAFF message', () => pm.expect(d.senderKind).to.eql('STAFF'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientMessageId\": \"{{$guid}}\",\n  \"type\": \"TEXT\",\n  \"text\": \"Received your payslip. Your repayment date is now the 25th.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "text"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/agents/conversations/{{conversationId}}/messages",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "agents", "conversations", "{{conversationId}}", "messages"]
+            }
+          },
+          "response": []
+        }
+      ],
+      "description": "Run 1, 2 and 3 back to back (the handoff from step 2 is valid for 2 minutes), then any chat request. Repeat 1-3 when the session expires (15 minutes). The chat requests inherit Bearer {{staffToken}} from this folder.",
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{staffToken}}",
+            "type": "string"
+          }
+        ]
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const isSignInStep = /^\\d\\. /.test(pm.info.requestName);",
+              "if (!isSignInStep && !pm.environment.get('staffToken')) {",
+              "  pm.variables.set('missingSession', 'No chat session yet: run \"Staff / 3. Chat session\" first (it saves staffToken)');",
+              "}"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const missing = pm.variables.get('missingSession');",
+              "if (missing) pm.test(missing, () => { throw new Error(missing); });"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

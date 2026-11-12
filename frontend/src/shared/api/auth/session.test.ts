@@ -55,7 +55,7 @@ const store = (value: AuthSession) => entries.set("auth.session", JSON.stringify
 
 beforeEach(() => {
   entries.clear();
-  useAuthStore.setState({ user: null });
+  useAuthStore.setState({ user: null, sessionExpired: false });
 });
 afterEach(() => vi.unstubAllGlobals());
 
@@ -107,6 +107,25 @@ describe("auth session", () => {
     await expect(refreshSession()).resolves.toBe(false);
     expect(readSession()).toBeNull();
     expect(useAuthStore.getState().user).toBeNull();
+  });
+
+  it("remembers that the session expired, and forgets it at the next sign-in", async () => {
+    store(session(1));
+    useAuthStore.setState({ user });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(fail(401, "SESSION_EXPIRED", "Your session has expired")));
+    await expect(refreshSession()).resolves.toBe(false);
+    expect(useAuthStore.getState().sessionExpired).toBe(true);
+
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(ok(session(2))));
+    await signIn("ann", "password-123");
+    expect(useAuthStore.getState().sessionExpired).toBe(false);
+  });
+
+  it("does not report an expiry for any other refusal", async () => {
+    store(session(1));
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(fail(401, "UNAUTHORIZED", "Invalid or expired refresh token")));
+    await refreshSession();
+    expect(useAuthStore.getState().sessionExpired).toBe(false);
   });
 
   it("keeps the session when the backend cannot be reached", async () => {

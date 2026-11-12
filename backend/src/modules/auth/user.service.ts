@@ -4,8 +4,9 @@ import { can } from "@shared/auth/permissions.js";
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "@shared/errors/AppError.js";
 import type { AgentProfile, CustomerProfile, Directory } from "@shared/ports/directory.js";
 import { pageMeta } from "@shared/utils/pagination.js";
+import { NO_AUDIT, type AuthAuditLog } from "./auth.audit.js";
 import { hashPassword } from "./auth.password.js";
-import { isUniqueViolation, isUniqueViolationOn, type AuthRepository } from "./auth.repository.js";
+import { isUniqueViolation, isUniqueViolationOn, type AuthRepository, type IdentityRef } from "./auth.repository.js";
 import type { CreateUserInput, ListUsersQuery, UpdateUserInput } from "./auth.schema.js";
 import {
   STAFF_ROLES,
@@ -36,6 +37,7 @@ export class UserService {
   constructor(
     private readonly repository: AuthRepository,
     private readonly status: AccountStatusListener,
+    private readonly audit: AuthAuditLog = NO_AUDIT,
   ) {}
 
   async list(auth: AuthContext, query: ListUsersQuery) {
@@ -114,8 +116,82 @@ export class UserService {
       }),
     );
     if (statusChanged) await this.notifyStatus(updated);
+    if (roleChanged || (statusChanged && input.status === "DISABLED")) {
+      await this.audit.record({
+        event: "SESSIONS_REVOKED",
+        provider: "CHAT",
+        outcome: "SUCCESS",
+        userId: user.id,
+        actorId: auth.userId,
+        reason: statusChanged && input.status === "DISABLED" ? "DISABLED" : "ROLE_CHANGED",
+      });
+    }
     if (roleChanged || updated.displayName !== user.displayName) await this.syncIdentity(updated);
     return toUser(updated);
+  }
+
+  /**
+   * Maps an existing chat account to an LOS identity, so that person's LOS sign-in lands in this account instead of a
+   * new one. Explicit and admin-only: nothing is matched by name, email or phone. LOS then manages the account's role
+   * (it is set from LOS on every LOS sign-in).
+   */
+  async linkIdentity(
+    auth: AuthContext,
+    userId: string,
+    input: {
+      provider: IdentityRef["provider"];
+      externalUserType: IdentityRef["externalUserType"];
+      externalUserId: number;
+    },
+  ): Promise<UserDto> {
+    requireAdmin(auth);
+    const user = await this.find(userId);
+    if ((input.externalUserType === "CUSTOMER") !== (user.role === "CUSTOMER")) {
+      throw new BadRequestError("The identity type does not match the account's kind");
+    }
+    if (user.losUserId !== null) throw new ConflictError("This account is already linked to an LOS identity");
+    try {
+      await this.repository.linkIdentity(
+        user.id,
+        {
+          provider: input.provider,
+          externalUserType: input.externalUserType,
+          externalUserId: String(input.externalUserId),
+        },
+        auth.userId,
+      );
+    } catch (error) {
+      if (isUniqueViolation(error)) throw new ConflictError("This LOS identity is already linked to an account");
+      throw error;
+    }
+    await this.audit.record({
+      event: "IDENTITY_LINKED",
+      provider: input.provider,
+      outcome: "SUCCESS",
+      userId: user.id,
+      actorId: auth.userId,
+    });
+    return toUser(await this.find(user.id));
+  }
+
+  /** Removes the LOS mapping and signs the account out everywhere. Refused when it would leave no way to sign in. */
+  async unlinkIdentity(auth: AuthContext, userId: string, provider: IdentityRef["provider"]): Promise<UserDto> {
+    requireAdmin(auth);
+    const user = await this.find(userId);
+    if (user.losUserId === null) throw new NotFoundError("This account has no LOS identity");
+    if (user.username === null) throw new ConflictError("LOS is this account's only sign-in, so it cannot be unlinked");
+    await this.repository.inTransaction(async (tx) => {
+      await tx.unlinkIdentity(user.id, provider);
+      await tx.revokeAllForUser(user.id);
+    });
+    await this.audit.record({
+      event: "IDENTITY_UNLINKED",
+      provider,
+      outcome: "SUCCESS",
+      userId: user.id,
+      actorId: auth.userId,
+    });
+    return toUser(await this.find(user.id));
   }
 
   /** Copies the name and role to the chat identity. Best effort: the next sign-in or request repeats it. */
@@ -149,17 +225,30 @@ export class UserService {
   }
 
   /** Sets a new password for someone who forgot theirs, and signs them out everywhere. */
-  async resetPassword(auth: AuthContext, userId: string, password: string): Promise<UserDto> {
+  async resetPassword(auth: AuthContext, userId: string, password: string, username?: string): Promise<UserDto> {
     requireAdmin(auth);
     const user = await this.find(userId);
-    // A password needs a username to sign in with; an LOS-only account has none.
-    if (user.username === null) throw new ConflictError("This account signs in with LOS and has no password");
+    // A password needs a username to sign in with. An LOS-only account has none: `username` gives it one (and so
+    // standalone access on the same account); an account that has one is never renamed here.
+    if (user.username === null && username === undefined) {
+      throw new ConflictError(
+        "This account signs in with LOS and has no password; send a username to give it chat credentials",
+      );
+    }
+    if (user.username !== null && username !== undefined)
+      throw new BadRequestError("This account already has a username");
     const passwordHash = await hashPassword(password);
-    await this.repository.inTransaction(async (tx) => {
-      await tx.setPassword(user.id, passwordHash);
-      await tx.revokeAllForUser(user.id);
-    });
-    return toUser({ ...user, failedLoginCount: 0, lockedUntil: null });
+    try {
+      await this.repository.inTransaction(async (tx) => {
+        if (user.username === null && username !== undefined) await tx.setCredentials(user.id, username, passwordHash);
+        else await tx.setPassword(user.id, passwordHash);
+        await tx.revokeAllForUser(user.id);
+      });
+    } catch (error) {
+      if (isUniqueViolation(error)) throw new ConflictError("An account with this username already exists");
+      throw error;
+    }
+    return toUser({ ...user, ...(username === undefined ? {} : { username }), failedLoginCount: 0, lockedUntil: null });
   }
 
   // ─── Directory lookups (BACKEND1_MODE=local) ───────────────────────────────

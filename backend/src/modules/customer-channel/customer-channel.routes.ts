@@ -8,6 +8,8 @@ import { CustomerChannelController } from "./customer-channel.controller.js";
 import { CustomerChannelService } from "./customer-channel.service.js";
 import {
   attachmentParams,
+  chatSendBody,
+  mineHistoryQuery,
   callParams,
   conversationParams,
   downloadQuery,
@@ -24,6 +26,12 @@ const controller = new CustomerChannelController(
 
 /** Mounted at /api/v1/customer (customer authentication is applied at the mount). */
 export const customerChannelRoutes = Router();
+
+// The customer's one conversation, without an id (the Postman "Chat Backend" collection).
+customerChannelRoutes.get("/conversation", controller.mine);
+customerChannelRoutes.get("/conversation/messages", validate({ query: mineHistoryQuery }), controller.historyOfMine);
+customerChannelRoutes.post("/conversation/messages", validate({ body: chatSendBody }), controller.sendToMine);
+customerChannelRoutes.post("/attachments", uploadFile, controller.uploadToMine);
 
 customerChannelRoutes.post("/conversations/join", validate({ body: joinBody }), controller.join);
 customerChannelRoutes.get(

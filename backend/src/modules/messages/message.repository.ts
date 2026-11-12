@@ -403,6 +403,27 @@ export class MessageRepository {
     return attachment;
   }
 
+  /** Links a customer's staged file to its message. Null if it is not theirs, not staged, or already sent. */
+  async claimStaged(data: { attachmentId: string; conversationId: string; messageId: string; uploadedById: string }) {
+    const claimed = await this.db.attachment.updateMany({
+      where: {
+        id: data.attachmentId,
+        conversationId: data.conversationId,
+        uploadedById: data.uploadedById,
+        uploadedByType: "CUSTOMER",
+        deletedAt: null,
+        uploadStatus: "PENDING",
+        messageAttachments: { none: {} },
+      },
+      data: { uploadStatus: "UPLOADED" },
+    });
+    if (claimed.count === 0) return null;
+    await this.db.messageAttachment.create({
+      data: { messageId: data.messageId, attachmentId: data.attachmentId, conversationId: data.conversationId },
+    });
+    return this.db.attachment.findUniqueOrThrow({ where: { id: data.attachmentId } });
+  }
+
   /** Live attachments of several messages, grouped by message. */
   async attachmentsFor(messageIds: string[]): Promise<Map<string, AttachmentRow[]>> {
     const grouped = new Map<string, AttachmentRow[]>();

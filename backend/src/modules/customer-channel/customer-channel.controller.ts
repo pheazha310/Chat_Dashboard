@@ -7,6 +7,8 @@ import { voiceFields } from "@modules/attachments/attachment.schema.js";
 import type { CustomerChannelService } from "./customer-channel.service.js";
 import {
   attachmentParams,
+  chatSendBody,
+  mineHistoryQuery,
   callParams,
   conversationParams,
   downloadQuery,
@@ -39,6 +41,24 @@ export class CustomerChannelController {
   join = async (req: Request, res: Response) => {
     const { conversation, created } = await this.service.join(customerOf(req), parsed(req, "body", joinBody));
     res.status(created ? 201 : 200).json({ status: "success", data: conversation });
+  };
+
+  mine = async (req: Request, res: Response) => {
+    res.json({ status: "success", data: await this.service.mine(customerOf(req)) });
+  };
+
+  historyOfMine = async (req: Request, res: Response) => {
+    const { items, meta } = await this.service.historyOfMine(customerOf(req), parsed(req, "query", mineHistoryQuery));
+    res.json({ status: "success", data: items, meta });
+  };
+
+  sendToMine = async (req: Request, res: Response) => {
+    const { message, created } = await this.service.sendToMine(customerOf(req), parsed(req, "body", chatSendBody));
+    res.status(created ? 201 : 200).json({ status: "success", data: message });
+  };
+
+  uploadToMine = async (req: Request, res: Response) => {
+    res.status(201).json({ status: "success", data: await this.service.uploadToMine(customerOf(req), req.file) });
   };
 
   conversation = async (req: Request, res: Response) => {

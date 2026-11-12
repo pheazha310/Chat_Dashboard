@@ -24,6 +24,10 @@
       "value": "http://localhost:4500"
     },
     {
+      "key": "identityProvider",
+      "value": "LOS"
+    },
+    {
       "key": "sokhaUsername",
       "value": ""
     },
@@ -939,11 +943,48 @@
                   "path": ["api", "v1", "admin", "users", "{{userId}}", "password"],
                   "query": []
                 },
-                "description": "Admins only. Signs the user out everywhere.",
+                "description": "Admins only. Signs the user out everywhere. For an LOS-only account also send username to give the same account chat credentials (docs/standalone-mode.md).",
                 "body": {
                   "mode": "raw",
                   "raw": "{\n  \"password\": \"a-reset-password\"\n}"
                 }
+              }
+            },
+            {
+              "name": "Link an account to an LOS identity",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/admin/users/{{userId}}/identities",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "admin", "users", "{{userId}}", "identities"],
+                  "query": []
+                },
+                "description": "Admins only. Maps this chat account to a person's LOS userId (never matched by name, email or phone), so their LOS sign-in lands here. See docs/standalone-mode.md.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"provider\": \"LOS\",\n  \"externalUserType\": \"STAFF\",\n  \"externalUserId\": 42\n}"
+                }
+              }
+            },
+            {
+              "name": "Unlink an account from LOS",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/admin/users/{{userId}}/identities/{{identityProvider}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["api", "v1", "admin", "users", "{{userId}}", "identities", "{{identityProvider}}"],
+                  "query": []
+                },
+                "description": "Admins only. Removes the LOS mapping and signs the account out everywhere; the chat username and password stay."
               }
             }
           ]

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { logger } from "@config/logger.js";
 import type { AuthContext, Role } from "@shared/auth/auth.types.js";
 import { AppError, ConflictError, ForbiddenError, NotFoundError, UnauthorizedError } from "@shared/errors/AppError.js";
+import { NO_AUDIT, auditableUsername, clientFields, type AuthAuditEvent, type AuthAuditLog } from "./auth.audit.js";
 import { burnPasswordCheck, hashPassword, needsRehash, verifyPassword } from "./auth.password.js";
 import { isUniqueViolation, type AuthRepository } from "./auth.repository.js";
 import type { LosIdentity, LosTokenVerifier } from "./auth.los.js";
@@ -41,6 +42,13 @@ const INVALID_LOGIN = "Invalid username or password";
 const INVALID_REFRESH = "Invalid or expired refresh token";
 const NO_PASSWORD = "This account signs in with LOS and has no password";
 
+/** 401 for a refresh token whose sign-in has ended, so a client can offer another sign-in rather than just failing. */
+export class SessionExpiredError extends UnauthorizedError {
+  constructor() {
+    super("Your session has expired; sign in again", undefined, "SESSION_EXPIRED");
+  }
+}
+
 /** 429 while an account is locked after too many failed sign-ins. */
 export class AccountLockedError extends AppError {
   constructor(readonly retryAfterSeconds: number) {
@@ -67,7 +75,13 @@ export class AuthService {
     private readonly losApplications?: LosApplicationRefresh,
     /** Staff sign-in with LOS username and password; null/unset when LOS_BASE_URL is not configured. */
     private readonly losStaffLogin: LosStaffCredentials | null = null,
+    /** Where authentication events are recorded (`auth_audit_events`). */
+    private readonly auditLog: AuthAuditLog = NO_AUDIT,
   ) {}
+
+  private audit(event: Omit<AuthAuditEvent, "ipAddress" | "userAgent">, client: ClientInfo) {
+    return this.auditLog.record({ ...event, ...clientFields(client) });
+  }
 
   /** Mobile self-registration. Always creates a CUSTOMER; staff accounts are created by an admin. */
   async register(input: RegisterInput, client: ClientInfo): Promise<AuthTokensDto> {
@@ -90,28 +104,54 @@ export class AuthService {
   }
 
   async login(audience: Audience, input: LoginInput, client: ClientInfo): Promise<AuthTokensDto> {
+    const attemptedUsername = auditableUsername(input.username);
+    const refused = (reason: string, userId: string | null = null) =>
+      this.audit(
+        { event: "LOGIN_FAILED", provider: "CHAT", outcome: "FAILURE", userId, attemptedUsername, reason },
+        client,
+      );
     // Staff: LOS first (their LOS username and password); anything LOS does not accept is tried as a chat account.
-    if (audience === "staff" && this.losStaffLogin && this.los) {
+    // `provider: "chat"` (the standalone dashboard) skips LOS, so the password never leaves this backend.
+    if (audience === "staff" && input.provider !== "chat" && this.losStaffLogin && this.los) {
       const accessToken = await this.losStaffLogin.accessToken(input.username, input.password);
       if (accessToken) return this.signInWithLos(await this.los.verifyStaffAccess(accessToken), client);
     }
     const user = await this.repository.findUserByUsername(input.username);
     if (!user) {
       await burnPasswordCheck(input.password);
+      await refused("UNKNOWN_USER");
       throw new UnauthorizedError(INVALID_LOGIN);
     }
     const now = this.now();
-    if (!(await this.checkPassword(user, input.password, now))) throw new UnauthorizedError(INVALID_LOGIN);
+    let passwordOk: boolean;
+    try {
+      passwordOk = await this.checkPassword(user, input.password, now);
+    } catch (error) {
+      if (error instanceof AccountLockedError) await refused("LOCKED", user.id);
+      throw error;
+    }
+    if (!passwordOk) {
+      await refused("BAD_PASSWORD", user.id);
+      throw new UnauthorizedError(INVALID_LOGIN);
+    }
     // The password was right, so saying why is safe from here on, except for the endpoint mismatch.
-    if (!fitsAudience(audience, user.role)) throw new UnauthorizedError(INVALID_LOGIN);
-    if (user.status !== "ACTIVE") throw new ForbiddenError("This account is disabled");
+    if (!fitsAudience(audience, user.role)) {
+      await refused("WRONG_AUDIENCE", user.id);
+      throw new UnauthorizedError(INVALID_LOGIN);
+    }
+    if (user.status !== "ACTIVE") {
+      await refused("DISABLED", user.id);
+      throw new ForbiddenError("This account is disabled");
+    }
 
     await this.repository.recordSuccessfulLogin(user.id);
     await this.syncIdentity(user);
     if (user.passwordHash && needsRehash(user.passwordHash)) {
       await this.repository.setPassword(user.id, await hashPassword(input.password));
     }
-    return this.startSession({ ...user, lastLoginAt: now }, client);
+    const tokens = await this.startSession({ ...user, lastLoginAt: now }, client);
+    await this.audit({ event: "LOGIN_SUCCESS", provider: "CHAT", outcome: "SUCCESS", userId: user.id }, client);
+    return tokens;
   }
 
   /**
@@ -122,8 +162,22 @@ export class AuthService {
    */
   async losSignIn(audience: Audience, token: string, client: ClientInfo): Promise<AuthTokensDto> {
     if (!this.los) throw new AppError(503, "LOS_SIGN_IN_DISABLED", "Sign in with LOS is not configured");
-    const los =
-      audience === "customer" ? await this.los.verifyCustomer(token) : await this.los.verifyStaffHandoff(token);
+    let los: LosIdentity;
+    try {
+      los = audience === "customer" ? await this.los.verifyCustomer(token) : await this.los.verifyStaffHandoff(token);
+    } catch (error) {
+      const outage = error instanceof AppError && error.status >= 500;
+      await this.audit(
+        {
+          event: "LOGIN_FAILED",
+          provider: "LOS",
+          outcome: "FAILURE",
+          reason: outage ? "LOS_UNAVAILABLE" : "LOS_REFUSED",
+        },
+        client,
+      );
+      throw error;
+    }
     const tokens = await this.signInWithLos(los, client);
     // The customer's own token reads their own application once; not awaited, so LOS being slow never delays sign-in.
     if (audience === "customer") {
@@ -164,7 +218,13 @@ export class AuthService {
         if (!user) throw error;
       }
     }
-    if (user.status !== "ACTIVE") throw new ForbiddenError("This account is disabled");
+    if (user.status !== "ACTIVE") {
+      await this.audit(
+        { event: "LOGIN_FAILED", provider: "LOS", outcome: "FAILURE", userId: user.id, reason: "DISABLED" },
+        client,
+      );
+      throw new ForbiddenError("This account is disabled");
+    }
 
     const roleChanged = user.role !== los.role;
     if (roleChanged || user.displayName !== los.username) {
@@ -174,12 +234,26 @@ export class AuthService {
         if (roleChanged) await tx.revokeAllForUser(id);
         return updated;
       });
+      if (roleChanged) {
+        await this.audit(
+          { event: "SESSIONS_REVOKED", provider: "LOS", outcome: "SUCCESS", userId: user.id, reason: "ROLE_CHANGED" },
+          client,
+        );
+      }
     }
     await this.repository.recordSuccessfulLogin(user.id);
     await this.syncIdentity(user);
     const sessionMs =
       los.losUserType === "STAFF" ? (this.options.losStaffSessionMs ?? this.options.refreshTtlMs) : undefined;
-    return this.startSession({ ...user, lastLoginAt: this.now() }, client, undefined, undefined, sessionMs);
+    const tokens = await this.startSession(
+      { ...user, lastLoginAt: this.now() },
+      client,
+      undefined,
+      undefined,
+      sessionMs,
+    );
+    await this.audit({ event: "LOGIN_SUCCESS", provider: "LOS", outcome: "SUCCESS", userId: user.id }, client);
+    return tokens;
   }
 
   /**
@@ -192,10 +266,23 @@ export class AuthService {
     if (session.revokedAt) {
       await this.repository.revokeFamily(session.familyId);
       logger.warn({ userId: session.userId, familyId: session.familyId }, "revoked refresh token reused");
+      await this.audit(
+        { event: "REFRESH_REUSE_DETECTED", provider: "CHAT", outcome: "FAILURE", userId: session.userId },
+        client,
+      );
       throw new UnauthorizedError(INVALID_REFRESH);
     }
     const { user } = session;
     if (session.expiresAt <= this.now() || user.status !== "ACTIVE" || !fitsAudience(audience, user.role)) {
+      if (user.status !== "ACTIVE") {
+        await this.audit(
+          { event: "LOGIN_FAILED", provider: "CHAT", outcome: "FAILURE", userId: user.id, reason: "DISABLED" },
+          client,
+        );
+      }
+      if (session.expiresAt <= this.now() && user.status === "ACTIVE" && fitsAudience(audience, user.role)) {
+        throw new SessionExpiredError();
+      }
       throw new UnauthorizedError(INVALID_REFRESH);
     }
     const rotated = await this.repository.inTransaction(async (tx) =>
@@ -232,14 +319,17 @@ export class AuthService {
   }
 
   /** Ends one sign-in (the refresh token's whole family). Unknown or already revoked tokens are accepted silently. */
-  async logout(refreshToken: string): Promise<void> {
+  async logout(refreshToken: string, client: ClientInfo = {}): Promise<void> {
     const session = await this.repository.findSessionByHash(hashRefreshToken(refreshToken));
-    if (session) await this.repository.revokeFamily(session.familyId);
+    if (!session) return;
+    await this.repository.revokeFamily(session.familyId);
+    await this.audit({ event: "LOGOUT", provider: "CHAT", outcome: "SUCCESS", userId: session.userId }, client);
   }
 
   /** Signs the caller out everywhere. Access tokens already issued stay valid until they expire. */
-  async logoutAll(auth: AuthContext): Promise<void> {
+  async logoutAll(auth: AuthContext, client: ClientInfo = {}): Promise<void> {
     await this.repository.revokeAllForUser(auth.userId);
+    await this.audit({ event: "LOGOUT_ALL", provider: "CHAT", outcome: "SUCCESS", userId: auth.userId }, client);
   }
 
   async me(auth: AuthContext): Promise<UserDto> {

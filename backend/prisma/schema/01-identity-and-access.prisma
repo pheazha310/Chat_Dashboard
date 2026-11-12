@@ -92,6 +92,8 @@ model AuthUser {
   createdAt         DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt         DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   refreshTokens     RefreshToken[]
+  identities        ExternalIdentity[]
+  auditEvents       AuthAuditEvent[]
   roleRef           Role           @relation(fields: [role], references: [name], onDelete: Restrict, onUpdate: Cascade)
   staff             Staff?
   customer          Customer?
@@ -161,4 +163,43 @@ model LosHandoffToken {
 
   @@index([expiresAt]) /// For the cleanup of expired rows
   @@map("los_handoff_tokens")
+}
+
+/// Maps an identity at an outside sign-in provider (today only LOS) to the one chat account it signs into. The mapping is
+/// explicit: it is created when LOS first signs a person in, or by an admin linking an existing chat account. Email or
+/// phone are never used to match. `users.los_user_type`/`los_user_id` stay as a copy, written in the same transaction.
+model ExternalIdentity {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  provider         String   @db.VarChar(20) /// LOS
+  externalUserId   String   @map("external_user_id") @db.VarChar(100) /// The provider's id for the person (LOS userId)
+  externalUserType String   @map("external_user_type") @db.VarChar(20) /// CUSTOMER or STAFF; the provider numbers each kind separately
+  chatUserId       String   @map("chat_user_id") @db.Uuid /// users.id
+  linkedBy         String?  @map("linked_by") @db.Uuid /// The admin who linked it; null when created by the provider's first sign-in
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  user             AuthUser @relation(fields: [chatUserId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, externalUserType, externalUserId])
+  @@unique([chatUserId, provider]) /// A chat account has at most one identity per provider
+  @@map("external_identities")
+}
+
+/// Append-only record of authentication events (sign-in, refusal, lockout, logout, revocation, identity link). Never holds
+/// passwords, tokens or token hashes. `attempted_username` is stored only when it has the shape of a username.
+model AuthAuditEvent {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  event             String   @db.VarChar(40) /// e.g. LOGIN_SUCCESS, LOGIN_FAILED, ACCOUNT_LOCKED, LOGOUT, SESSIONS_REVOKED, IDENTITY_LINKED
+  provider          String   @db.VarChar(20) /// CHAT or LOS
+  outcome           String   @db.VarChar(10) /// SUCCESS or FAILURE
+  userId            String?  @map("user_id") @db.Uuid /// The account concerned, when known
+  actorId           String?  @map("actor_id") @db.Uuid /// The admin who did it, for admin actions
+  attemptedUsername String?  @map("attempted_username") @db.VarChar(32)
+  reason            String?  @db.VarChar(60) /// Short machine-readable cause, e.g. DISABLED, BAD_PASSWORD, LOS_UNAVAILABLE
+  ipAddress         String?  @map("ip_address") @db.VarChar(45)
+  userAgent         String?  @map("user_agent") @db.VarChar(255)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  user              AuthUser? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([createdAt])
+  @@map("auth_audit_events")
 }
