@@ -20,6 +20,11 @@ export interface LosConfig {
   handoffAudience: string;
   /** `tokenType` claim of that hand-off token. */
   handoffTokenType: string;
+  /**
+   * `aud` of the LOS staff access token this backend receives itself when it logs a staff member in to LOS with their
+   * username and password (see `verifyStaffAccess`). Unset: that sign-in is off.
+   */
+  staffAccessAudience?: string;
   /** Longest life in seconds (`exp` - `iat`) accepted for a hand-off token; a longer-lived one is refused. */
   handoffMaxAgeSeconds?: number;
   /** LOS staff role names (lower-case) that map to a different chat role, e.g. `loan_officer` → AGENT. */
@@ -149,6 +154,21 @@ export class LosTokenVerifier {
     return { losUserType: "STAFF", ...identity, role };
   }
 
+  /**
+   * The LOS staff access token this backend was handed directly by LOS's login (`type = staff`, `tokenType = access`, a
+   * known staff `role`). Unlike the hand-off token it is never given to a browser, so it needs no `jti`, one-use rule or
+   * short life: it only proves what LOS just said about the credentials this server forwarded.
+   */
+  async verifyStaffAccess(token: string): Promise<LosIdentity> {
+    const audience = this.config.staffAccessAudience;
+    if (!audience) this.reject("staff access tokens are not accepted");
+    const claims = await this.verify(token, audience);
+    if (claims.type !== "staff" || claims.tokenType !== "access") this.reject("not a staff access token");
+    const role = staffRoleOf(claims.role, this.config.staffRoleMap ?? new Map());
+    if (!role) this.reject("unknown staff role");
+    return { losUserType: "STAFF", ...this.identity(claims), role };
+  }
+
   /** Records the hand-off token's `jti` until the token expires; refuses one already used. */
   private async claimOnce(claims: JWTPayload) {
     const { jti, exp } = claims;
@@ -224,6 +244,7 @@ export async function losVerifierFrom(
     LOS_CUSTOMER_AUDIENCE: string;
     LOS_HANDOFF_AUDIENCE: string;
     LOS_HANDOFF_TOKEN_TYPE: string;
+    LOS_STAFF_ACCESS_AUDIENCE?: string | undefined;
     LOS_HANDOFF_TOKEN_MAX_AGE?: number | undefined;
     LOS_STAFF_ROLE_MAP?: string | undefined;
   },
@@ -239,6 +260,7 @@ export async function losVerifierFrom(
       customerAudience: env.LOS_CUSTOMER_AUDIENCE,
       handoffAudience: env.LOS_HANDOFF_AUDIENCE,
       handoffTokenType: env.LOS_HANDOFF_TOKEN_TYPE,
+      ...(env.LOS_STAFF_ACCESS_AUDIENCE !== undefined && { staffAccessAudience: env.LOS_STAFF_ACCESS_AUDIENCE }),
       ...(env.LOS_HANDOFF_TOKEN_MAX_AGE !== undefined && { handoffMaxAgeSeconds: env.LOS_HANDOFF_TOKEN_MAX_AGE }),
       staffRoleMap: parseStaffRoleMap(env.LOS_STAFF_ROLE_MAP ?? ""),
     },

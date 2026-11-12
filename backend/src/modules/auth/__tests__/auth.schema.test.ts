@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { createUserBody, devLoginBody, updateUserBody } from "../auth.schema.js";
+import {
+  createUserBody,
+  devLoginBody,
+  loginBody,
+  registerBody,
+  updateUserBody,
+  usernameSchema,
+} from "../auth.schema.js";
 
 describe("account profile fields", () => {
   it("accepts staff and customer fields, null to clear", () => {
@@ -23,7 +30,7 @@ describe("account profile fields", () => {
   });
 
   it("takes staff fields, not customer fields, when an admin creates an account", () => {
-    const base = { email: "a@example.com", displayName: "A", role: "AGENT", password: "x".repeat(8) };
+    const base = { username: "a.user", displayName: "A", role: "AGENT", password: "x".repeat(8) };
     expect(createUserBody.safeParse({ ...base, staff: { department: "Loans" } }).success).toBe(true);
     expect(createUserBody.safeParse({ ...base, customer: { phone: "+85512345678" } }).success).toBe(false);
   });
@@ -49,5 +56,32 @@ describe("development sign-in body", () => {
     ["a userId out of LOS range", { type: "staff", userId: 2 ** 31 }],
   ])("refuses %s", (_, body) => {
     expect(devLoginBody.safeParse(body).success).toBe(false);
+  });
+});
+
+describe("username", () => {
+  it("is trimmed and lower-cased", () => {
+    expect(usernameSchema.parse("  Sophea.Agent ")).toBe("sophea.agent");
+  });
+
+  it.each(["ab", "a".repeat(33), "has space", "-leading", ".dot", "emoji😀", "a@b.com", ""])("refuses %j", (value) => {
+    expect(usernameSchema.safeParse(value).success).toBe(false);
+  });
+
+  it.each(["abc", "agent_1", "a-b.c", "9lives", "a".repeat(32)])("accepts %j", (value) => {
+    expect(usernameSchema.safeParse(value).success).toBe(true);
+  });
+
+  it("signs in and registers with a username, not an email", () => {
+    expect(loginBody.parse({ username: "Ann", password: "x" })).toEqual({ username: "ann", password: "x" });
+    expect(loginBody.safeParse({ email: "ann@example.com", password: "x" }).success).toBe(false);
+    expect(registerBody.safeParse({ username: "ann", password: "long-enough", displayName: "Ann" }).success).toBe(true);
+  });
+
+  it("lets an admin set an optional contact email when creating an account", () => {
+    const base = { username: "ann", displayName: "Ann", role: "AGENT", password: "x".repeat(8) };
+    expect(createUserBody.safeParse(base).success).toBe(true);
+    expect(createUserBody.parse({ ...base, email: "Ann@Example.com" }).email).toBe("ann@example.com");
+    expect(createUserBody.safeParse({ ...base, email: "nope" }).success).toBe(false);
   });
 });

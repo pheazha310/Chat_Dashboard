@@ -16,9 +16,9 @@ describe("AuthService", () => {
   let service: AuthService;
   let now: Date;
 
-  const addUser = async (email: string, role: string, status = "ACTIVE") =>
+  const addUser = async (username: string, role: string, status = "ACTIVE") =>
     repo
-      .createUser({ email, passwordHash: await hashPassword(PASSWORD), role, displayName: email })
+      .createUser({ username, passwordHash: await hashPassword(PASSWORD), role, displayName: username })
       .then(async (u) => (await repo.updateUser(u.id, { status })) as typeof u);
 
   beforeEach(() => {
@@ -29,12 +29,12 @@ describe("AuthService", () => {
 
   describe("login", () => {
     it("returns tokens for the right password and resets the failure count", async () => {
-      const user = await addUser("ann@example.com", "AGENT");
+      const user = await addUser("ann", "AGENT");
       user.failedLoginCount = 3;
-      const result = await service.login("staff", { email: "ann@example.com", password: PASSWORD }, client);
+      const result = await service.login("staff", { username: "ann", password: PASSWORD }, client);
 
       expect(result.tokenType).toBe("Bearer");
-      expect(result.user).toMatchObject({ id: user.id, email: "ann@example.com", role: "AGENT" });
+      expect(result.user).toMatchObject({ id: user.id, username: "ann", role: "AGENT" });
       expect(result.user).not.toHaveProperty("passwordHash");
       await expect(tokens.verifyToken(result.accessToken)).resolves.toEqual({ userId: user.id, role: "AGENT" });
       expect(repo.users.get(user.id)?.failedLoginCount).toBe(0);
@@ -44,72 +44,69 @@ describe("AuthService", () => {
       expect(repo.sessions[0]).toMatchObject({ userAgent: "vitest", ipAddress: "127.0.0.1" });
     });
 
-    it("answers an unknown email and a wrong password the same way", async () => {
-      await addUser("ann@example.com", "AGENT");
-      await expect(service.login("staff", { email: "bob@example.com", password: PASSWORD }, client)).rejects.toThrow(
-        new UnauthorizedError("Invalid email or password"),
+    it("answers an unknown username and a wrong password the same way", async () => {
+      await addUser("ann", "AGENT");
+      await expect(service.login("staff", { username: "bob", password: PASSWORD }, client)).rejects.toThrow(
+        new UnauthorizedError("Invalid username or password"),
       );
-      await expect(service.login("staff", { email: "ann@example.com", password: "nope" }, client)).rejects.toThrow(
-        new UnauthorizedError("Invalid email or password"),
+      await expect(service.login("staff", { username: "ann", password: "nope" }, client)).rejects.toThrow(
+        new UnauthorizedError("Invalid username or password"),
       );
       expect(repo.sessions).toHaveLength(0);
     });
 
     it("locks the account after 5 wrong passwords, even for the right one, until the lock ends", async () => {
-      const user = await addUser("ann@example.com", "AGENT");
+      const user = await addUser("ann", "AGENT");
       for (let i = 0; i < 5; i++) {
-        await expect(service.login("staff", { email: user.email, password: "wrong" }, client)).rejects.toThrow();
+        await expect(service.login("staff", { username: user.username, password: "wrong" }, client)).rejects.toThrow();
       }
-      const locked = service.login("staff", { email: user.email, password: PASSWORD }, client);
+      const locked = service.login("staff", { username: user.username, password: PASSWORD }, client);
       await expect(locked).rejects.toBeInstanceOf(AccountLockedError);
       await expect(locked).rejects.toMatchObject({ status: 429, details: { retryAfterSeconds: 900 } });
 
       now = new Date(now.getTime() + 15 * 60_000 + 1);
-      await expect(service.login("staff", { email: user.email, password: PASSWORD }, client)).resolves.toBeDefined();
-    });
-
-    it("refuses a customer at the staff endpoint and staff at the customer endpoint, like a wrong password", async () => {
-      await addUser("cus@example.com", "CUSTOMER");
-      await addUser("agent@example.com", "AGENT");
       await expect(
-        service.login("staff", { email: "cus@example.com", password: PASSWORD }, client),
-      ).rejects.toBeInstanceOf(UnauthorizedError);
-      await expect(
-        service.login("customer", { email: "agent@example.com", password: PASSWORD }, client),
-      ).rejects.toBeInstanceOf(UnauthorizedError);
-      await expect(
-        service.login("customer", { email: "cus@example.com", password: PASSWORD }, client),
+        service.login("staff", { username: user.username, password: PASSWORD }, client),
       ).resolves.toBeDefined();
     });
 
+    it("refuses a customer at the staff endpoint and staff at the customer endpoint, like a wrong password", async () => {
+      await addUser("cus", "CUSTOMER");
+      await addUser("agent", "AGENT");
+      await expect(service.login("staff", { username: "cus", password: PASSWORD }, client)).rejects.toBeInstanceOf(
+        UnauthorizedError,
+      );
+      await expect(service.login("customer", { username: "agent", password: PASSWORD }, client)).rejects.toBeInstanceOf(
+        UnauthorizedError,
+      );
+      await expect(service.login("customer", { username: "cus", password: PASSWORD }, client)).resolves.toBeDefined();
+    });
+
     it("refuses a disabled account once the password is right", async () => {
-      await addUser("ann@example.com", "AGENT", "DISABLED");
-      await expect(
-        service.login("staff", { email: "ann@example.com", password: PASSWORD }, client),
-      ).rejects.toBeInstanceOf(ForbiddenError);
+      await addUser("ann", "AGENT", "DISABLED");
+      await expect(service.login("staff", { username: "ann", password: PASSWORD }, client)).rejects.toBeInstanceOf(
+        ForbiddenError,
+      );
     });
 
     it("upgrades a hash made with old parameters", async () => {
-      const user = await addUser("ann@example.com", "AGENT");
+      const user = await addUser("ann", "AGENT");
       // A valid hash with a lower cost (log2 N = 14) than the current one.
       const { scryptSync, randomBytes } = await import("node:crypto");
       const salt = randomBytes(16);
       const key = scryptSync(PASSWORD, salt, 64, { N: 2 ** 14, r: 8, p: 1 });
       user.passwordHash = `scrypt$14$8$1$${salt.toString("base64")}$${key.toString("base64")}`;
-      await service.login("staff", { email: user.email, password: PASSWORD }, client);
+      await service.login("staff", { username: user.username, password: PASSWORD }, client);
       expect(repo.users.get(user.id)?.passwordHash).toMatch(/^scrypt\$15\$/);
     });
   });
 
   describe("register", () => {
-    it("creates a customer and signs them in; a taken email is 409", async () => {
-      const result = await service.register(
-        { email: "new@example.com", password: "long-enough", displayName: "New" },
-        client,
-      );
-      expect(result.user).toMatchObject({ role: "CUSTOMER", email: "new@example.com", status: "ACTIVE" });
+    it("creates a customer and signs them in; a taken username is 409", async () => {
+      const result = await service.register({ username: "new", password: "long-enough", displayName: "New" }, client);
+      expect(result.user).toMatchObject({ role: "CUSTOMER", username: "new", status: "ACTIVE" });
       await expect(
-        service.register({ email: "new@example.com", password: "long-enough", displayName: "Again" }, client),
+        service.register({ username: "new", password: "long-enough", displayName: "Again" }, client),
       ).rejects.toBeInstanceOf(ConflictError);
     });
   });
@@ -119,7 +116,7 @@ describe("AuthService", () => {
       const identities = { sync: vi.fn(async () => {}) };
       service = new AuthService(repo.asRepository(), tokens, DEFAULT_AUTH_OPTIONS, () => now, identities);
       const registered = await service.register(
-        { email: "dara@example.com", password: "long-enough", displayName: "Dara" },
+        { username: "dara", password: "long-enough", displayName: "Dara" },
         client,
       );
       expect(identities.sync).toHaveBeenCalledWith({
@@ -129,13 +126,15 @@ describe("AuthService", () => {
         losUserId: null,
       });
 
-      const user = await addUser("ann@example.com", "AGENT");
+      const user = await addUser("ann", "AGENT");
       identities.sync.mockRejectedValueOnce(new Error("db hiccup"));
-      await expect(service.login("staff", { email: user.email, password: PASSWORD }, client)).resolves.toBeDefined();
+      await expect(
+        service.login("staff", { username: user.username, password: PASSWORD }, client),
+      ).resolves.toBeDefined();
       expect(identities.sync).toHaveBeenLastCalledWith({
         id: user.id,
         role: "AGENT",
-        displayName: user.email,
+        displayName: user.username,
         losUserId: null,
       });
     });
@@ -143,8 +142,8 @@ describe("AuthService", () => {
 
   describe("refresh", () => {
     it("rotates: the old refresh token stops working and the new one works", async () => {
-      await addUser("ann@example.com", "AGENT");
-      const first = await service.login("staff", { email: "ann@example.com", password: PASSWORD }, client);
+      await addUser("ann", "AGENT");
+      const first = await service.login("staff", { username: "ann", password: PASSWORD }, client);
       const second = await service.refresh("staff", first.refreshToken, client);
       expect(second.refreshToken).not.toBe(first.refreshToken);
       expect(repo.live()).toHaveLength(1);
@@ -152,8 +151,8 @@ describe("AuthService", () => {
     });
 
     it("links each rotated session to the one that replaced it", async () => {
-      await addUser("ann@example.com", "AGENT");
-      const first = await service.login("staff", { email: "ann@example.com", password: PASSWORD }, client);
+      await addUser("ann", "AGENT");
+      const first = await service.login("staff", { username: "ann", password: PASSWORD }, client);
       await service.refresh("staff", first.refreshToken, client);
       const [old, current] = repo.sessions;
       expect(old?.replacedById).toBe(current?.id);
@@ -162,8 +161,8 @@ describe("AuthService", () => {
     });
 
     it("revokes the whole sign-in when a used refresh token comes back", async () => {
-      await addUser("ann@example.com", "AGENT");
-      const first = await service.login("staff", { email: "ann@example.com", password: PASSWORD }, client);
+      await addUser("ann", "AGENT");
+      const first = await service.login("staff", { username: "ann", password: PASSWORD }, client);
       const second = await service.refresh("staff", first.refreshToken, client);
 
       await expect(service.refresh("staff", first.refreshToken, client)).rejects.toBeInstanceOf(UnauthorizedError);
@@ -172,26 +171,26 @@ describe("AuthService", () => {
     });
 
     it("treats losing a rotation race as reuse and keeps the revocation", async () => {
-      await addUser("ann@example.com", "AGENT");
-      const first = await service.login("staff", { email: "ann@example.com", password: PASSWORD }, client);
+      await addUser("ann", "AGENT");
+      const first = await service.login("staff", { username: "ann", password: PASSWORD }, client);
       repo.loseNextRotation = true;
       await expect(service.refresh("staff", first.refreshToken, client)).rejects.toBeInstanceOf(UnauthorizedError);
       expect(repo.live()).toHaveLength(0);
     });
 
     it("refuses unknown and expired tokens, disabled users and the wrong endpoint", async () => {
-      const user = await addUser("ann@example.com", "AGENT");
+      const user = await addUser("ann", "AGENT");
       await expect(service.refresh("staff", "x".repeat(43), client)).rejects.toBeInstanceOf(UnauthorizedError);
 
-      const a = await service.login("staff", { email: user.email, password: PASSWORD }, client);
+      const a = await service.login("staff", { username: user.username, password: PASSWORD }, client);
       await expect(service.refresh("customer", a.refreshToken, client)).rejects.toBeInstanceOf(UnauthorizedError);
 
-      const b = await service.login("staff", { email: user.email, password: PASSWORD }, client);
+      const b = await service.login("staff", { username: user.username, password: PASSWORD }, client);
       user.status = "DISABLED";
       await expect(service.refresh("staff", b.refreshToken, client)).rejects.toBeInstanceOf(UnauthorizedError);
       user.status = "ACTIVE";
 
-      const c = await service.login("staff", { email: user.email, password: PASSWORD }, client);
+      const c = await service.login("staff", { username: user.username, password: PASSWORD }, client);
       now = new Date(now.getTime() + DEFAULT_AUTH_OPTIONS.refreshTtlMs);
       await expect(service.refresh("staff", c.refreshToken, client)).rejects.toBeInstanceOf(UnauthorizedError);
     });
@@ -199,9 +198,9 @@ describe("AuthService", () => {
 
   describe("logout and password change", () => {
     it("logout revokes that sign-in only; logoutAll revokes every one", async () => {
-      const user = await addUser("ann@example.com", "AGENT");
-      const laptop = await service.login("staff", { email: user.email, password: PASSWORD }, client);
-      await service.login("staff", { email: user.email, password: PASSWORD }, client);
+      const user = await addUser("ann", "AGENT");
+      const laptop = await service.login("staff", { username: user.username, password: PASSWORD }, client);
+      await service.login("staff", { username: user.username, password: PASSWORD }, client);
       await service.logout(laptop.refreshToken);
       expect(repo.live(user.id)).toHaveLength(1);
       await service.logout("unknown-token-is-fine-xxxxxxxxxx");
@@ -210,8 +209,8 @@ describe("AuthService", () => {
     });
 
     it("needs the current password, signs out other devices and returns a new sign-in", async () => {
-      const user = await addUser("ann@example.com", "AGENT");
-      const other = await service.login("staff", { email: user.email, password: PASSWORD }, client);
+      const user = await addUser("ann", "AGENT");
+      const other = await service.login("staff", { username: user.username, password: PASSWORD }, client);
       const auth = { userId: user.id, role: "AGENT" as const };
 
       await expect(
@@ -226,12 +225,12 @@ describe("AuthService", () => {
       await expect(service.refresh("staff", other.refreshToken, client)).rejects.toBeInstanceOf(UnauthorizedError);
       await expect(service.refresh("staff", fresh.refreshToken, client)).resolves.toBeDefined();
       await expect(
-        service.login("staff", { email: user.email, password: "brand-new-pass" }, client),
+        service.login("staff", { username: user.username, password: "brand-new-pass" }, client),
       ).resolves.toBeDefined();
     });
 
     it("counts wrong current passwords toward the sign-in lock", async () => {
-      const user = await addUser("ann@example.com", "AGENT");
+      const user = await addUser("ann", "AGENT");
       const auth = { userId: user.id, role: "AGENT" as const };
       const attempt = (currentPassword: string) =>
         service.changePassword(auth, { currentPassword, newPassword: "brand-new-pass" }, client);
@@ -239,17 +238,17 @@ describe("AuthService", () => {
       for (let i = 0; i < 5; i++) await expect(attempt("wrong")).rejects.toBeInstanceOf(ForbiddenError);
       // Locked now: even the right password is refused, here and at sign-in.
       await expect(attempt(PASSWORD)).rejects.toBeInstanceOf(AccountLockedError);
-      await expect(service.login("staff", { email: user.email, password: PASSWORD }, client)).rejects.toBeInstanceOf(
-        AccountLockedError,
-      );
+      await expect(
+        service.login("staff", { username: user.username, password: PASSWORD }, client),
+      ).rejects.toBeInstanceOf(AccountLockedError);
       expect(await verifyPassword(PASSWORD, repo.users.get(user.id)?.passwordHash ?? "")).toBe(true);
     });
   });
 
   describe("sign-in lifetime", () => {
     it("keeps the sign-in's end when refreshing, so a sign-in never outlives REFRESH_TOKEN_TTL_DAYS", async () => {
-      await addUser("ann@example.com", "AGENT");
-      const first = await service.login("staff", { email: "ann@example.com", password: PASSWORD }, client);
+      await addUser("ann", "AGENT");
+      const first = await service.login("staff", { username: "ann", password: PASSWORD }, client);
       now = new Date(now.getTime() + 10 * 24 * 60 * 60 * 1000);
       const second = await service.refresh("staff", first.refreshToken, client);
       expect(second.refreshTokenExpiresAt).toBe(first.refreshTokenExpiresAt);
@@ -258,12 +257,12 @@ describe("AuthService", () => {
     });
 
     it("deletes the user's expired sessions on a new sign-in, and only those", async () => {
-      const ann = await addUser("ann@example.com", "AGENT");
-      await addUser("bob@example.com", "AGENT");
-      await service.login("staff", { email: ann.email, password: PASSWORD }, client);
-      await service.login("staff", { email: "bob@example.com", password: PASSWORD }, client);
+      const ann = await addUser("ann", "AGENT");
+      await addUser("bob", "AGENT");
+      await service.login("staff", { username: ann.username, password: PASSWORD }, client);
+      await service.login("staff", { username: "bob", password: PASSWORD }, client);
       now = new Date(now.getTime() + DEFAULT_AUTH_OPTIONS.refreshTtlMs + 1000);
-      await service.login("staff", { email: ann.email, password: PASSWORD }, client);
+      await service.login("staff", { username: ann.username, password: PASSWORD }, client);
       expect(repo.sessions.filter((s) => s.userId === ann.id)).toHaveLength(1);
       expect(repo.sessions).toHaveLength(2); // Bob's expired session stays until Bob signs in again.
     });
@@ -280,12 +279,12 @@ describe("AuthService", () => {
 
   describe("session cleanup job", () => {
     it("deletes every user's expired sessions in batches and keeps the live and revoked-but-unexpired ones", async () => {
-      const ann = await addUser("ann@example.com", "AGENT");
-      const bob = await addUser("bob@example.com", "AGENT");
-      for (let i = 0; i < 3; i++) await service.login("staff", { email: ann.email, password: PASSWORD }, client);
-      await service.login("staff", { email: bob.email, password: PASSWORD }, client);
+      const ann = await addUser("ann", "AGENT");
+      const bob = await addUser("bob", "AGENT");
+      for (let i = 0; i < 3; i++) await service.login("staff", { username: ann.username, password: PASSWORD }, client);
+      await service.login("staff", { username: bob.username, password: PASSWORD }, client);
       now = new Date(now.getTime() + DEFAULT_AUTH_OPTIONS.refreshTtlMs / 2);
-      const live = await service.login("staff", { email: bob.email, password: PASSWORD }, client);
+      const live = await service.login("staff", { username: bob.username, password: PASSWORD }, client);
       await service.logout(live.refreshToken); // revoked, not expired: kept for reuse detection
       now = new Date(now.getTime() + DEFAULT_AUTH_OPTIONS.refreshTtlMs / 2 + 1000);
 
@@ -296,13 +295,91 @@ describe("AuthService", () => {
     });
   });
 
+  describe("staff sign-in with LOS username and password", () => {
+    const losIdentity = { losUserType: "STAFF", losUserId: 2, username: "admin", role: "AGENT" } as const;
+    const withLos = (accessToken: string | null) =>
+      new AuthService(
+        repo.asRepository(),
+        tokens,
+        DEFAULT_AUTH_OPTIONS,
+        () => now,
+        undefined,
+        { verifyStaffAccess: async () => losIdentity } as never,
+        undefined,
+        { accessToken: vi.fn(async () => accessToken) },
+      );
+
+    it("signs in the LOS account when LOS accepts the credentials", async () => {
+      const result = await withLos("access").login("staff", { username: "admin", password: "los-pw" }, client);
+      expect(result.user).toMatchObject({ username: null, losUserId: 2, role: "AGENT", displayName: "admin" });
+    });
+
+    it("falls back to the chat account's own password when LOS does not know the credentials", async () => {
+      await addUser("ann", "AGENT");
+      const result = await withLos(null).login("staff", { username: "ann", password: PASSWORD }, client);
+      expect(result.user).toMatchObject({ username: "ann", losUserId: null });
+      await expect(withLos(null).login("staff", { username: "ann", password: "nope" }, client)).rejects.toThrow(
+        new UnauthorizedError("Invalid username or password"),
+      );
+    });
+
+    it("signs in many LOS staff at once, one account each, and the same account again", async () => {
+      const service = new AuthService(
+        repo.asRepository(),
+        tokens,
+        DEFAULT_AUTH_OPTIONS,
+        () => now,
+        undefined,
+        {
+          verifyStaffAccess: async (token: string) => ({
+            losUserType: "STAFF",
+            losUserId: Number(token),
+            username: `staff${token}`,
+            role: Number(token) % 2 ? "AGENT" : "SUPERVISOR",
+          }),
+        } as never,
+        undefined,
+        { accessToken: async (username: string) => username.replace("staff", "") },
+      );
+      const ids = Array.from({ length: 30 }, (_, i) => i + 1);
+      const first = await Promise.all(
+        ids.map((id) => service.login("staff", { username: `staff${id}`, password: "los-pw" }, client)),
+      );
+      expect(new Set(first.map((r) => r.user.id)).size).toBe(30);
+      expect(first[0]!.user.role).toBe("AGENT");
+      expect(first[1]!.user.role).toBe("SUPERVISOR");
+      const again = await Promise.all(
+        ids.map((id) => service.login("staff", { username: `staff${id}`, password: "los-pw" }, client)),
+      );
+      expect(again.map((r) => r.user.id)).toEqual(first.map((r) => r.user.id));
+      expect(repo.users.size).toBe(30);
+    });
+
+    it("does not ask LOS for customer sign-in", async () => {
+      await addUser("cus", "CUSTOMER");
+      const los = { accessToken: vi.fn(async () => "access") };
+      const service = new AuthService(
+        repo.asRepository(),
+        tokens,
+        DEFAULT_AUTH_OPTIONS,
+        () => now,
+        undefined,
+        null,
+        undefined,
+        los,
+      );
+      await service.login("customer", { username: "cus", password: PASSWORD }, client);
+      expect(los.accessToken).not.toHaveBeenCalled();
+    });
+  });
+
   describe("development sign-in, the LOS way (AUTH_MODE=dev)", () => {
     const staff = (userId: number, role: "AGENT" | "SUPERVISOR" | "ADMIN", username = "Sophea") =>
       ({ type: "staff", userId, username, role }) as const;
 
     it("creates an LOS-only staff account on first use and signs into the same one after", async () => {
       const first = await service.devLogin(staff(7, "AGENT"), client);
-      expect(first.user).toMatchObject({ email: null, losUserId: 7, role: "AGENT", displayName: "Sophea" });
+      expect(first.user).toMatchObject({ username: null, losUserId: 7, role: "AGENT", displayName: "Sophea" });
       expect(first.user.staff).not.toBeNull();
       await expect(tokens.verifyToken(first.accessToken)).resolves.toEqual({ userId: first.user.id, role: "AGENT" });
       const again = await service.devLogin(staff(7, "AGENT"), client);
@@ -366,7 +443,7 @@ describe("AuthService", () => {
     it("creates an LOS-only account on the first sign-in and reuses it after", async () => {
       const first = await service.losSignIn("customer", "los-token", client);
       expect(los.verifyCustomer).toHaveBeenCalledWith("los-token");
-      expect(first.user).toMatchObject({ email: null, losUserId: 2, displayName: "Dara", role: "CUSTOMER" });
+      expect(first.user).toMatchObject({ username: null, losUserId: 2, displayName: "Dara", role: "CUSTOMER" });
       expect(identities.sync).toHaveBeenCalledWith({
         id: first.user.id,
         role: "CUSTOMER",

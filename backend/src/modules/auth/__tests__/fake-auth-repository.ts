@@ -50,8 +50,8 @@ export class FakeAuthRepository {
     }
   }
 
-  async findUserByEmail(email: string) {
-    return [...this.users.values()].find((u) => u.email === email) ?? null;
+  async findUserByUsername(username: string) {
+    return [...this.users.values()].find((u) => u.username === username) ?? null;
   }
 
   async findUserById(id: string) {
@@ -73,6 +73,7 @@ export class FakeAuthRepository {
     if (await this.findUserByLos(data.losUserType, data.losUserId)) throw unique("los_user_id");
     const row: UserRow = {
       id: randomUUID(),
+      username: null,
       email: null,
       passwordHash: null,
       status: "ACTIVE",
@@ -91,16 +92,18 @@ export class FakeAuthRepository {
     staff,
     ...data
   }: {
-    email: string;
+    username: string;
+    email?: string;
     passwordHash: string;
     role: string;
     displayName: string;
     staff?: Partial<StaffFields>;
   }) {
-    if (await this.findUserByEmail(data.email)) throw unique("email");
+    if (await this.findUserByUsername(data.username)) throw unique("username");
     this.checkCodes(undefined, staff);
-    const row: UserRow & { email: string; passwordHash: string } = {
+    const row: UserRow & { username: string; passwordHash: string } = {
       id: randomUUID(),
+      email: null,
       losUserId: null,
       losUserType: null,
       status: "ACTIVE",

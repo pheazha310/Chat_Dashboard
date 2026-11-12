@@ -1,50 +1,16 @@
 {
   "info": {
-    "name": "Chat Dashboard - real LOS (Dev) integration",
-    "description": "Tests the real LOS Dev API against the Chat backend. Import this with los-dev.postman_environment.json, fill the secret variables in Postman (never commit them), and run the folders in order. Folder B fails on purpose until LOS issues a Chat hand-off token.",
+    "name": "Chat Dashboard - Chat flow and real LOS (Dev)",
+    "description": "One folder per person. Import with los-dev.postman_environment.json and fill the secret variables in Postman (never commit them).\n\nCustomer: sign in by LOS (1a, 1b, 2) or by username and password (0 once, then 2), then 3 refresh, join, send, read.\nStaff: 1 login, then read, take the conversation, reply.\nRun order: Customer, Staff, Checks, Sign out. The Staff folder uses chatConvId and chatPdfId that the Customer folder saves. The last folders are optional checks against real LOS data.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
     {
-      "name": "0. Connectivity",
-      "description": "Public checks, no credentials.",
+      "name": "Customer",
+      "description": "Needs Customer sign-in first. Requests inherit Bearer {{chatCustomerToken}}.",
       "item": [
         {
-          "name": "LOS JWKS (public)",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{losUrl}}/guest/.well-known/jwks.json"
-            },
-            "description": "Public. The Chat backend verifies LOS tokens with this key (RS256). Dev and Staging should have different keys; compare kid between environments."
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('200 with one RS256 signing key', () => {",
-                  "  pm.response.to.have.status(200);",
-                  "  const keys = pm.response.json().keys;",
-                  "  pm.expect(keys.length).to.be.above(0);",
-                  "  pm.expect(keys[0].alg).to.eql('RS256');",
-                  "  console.log('kid:', keys[0].kid);",
-                  "});"
-                ]
-              }
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "name": "A. Customer (mobile) sign-in",
-      "description": "LOS customer login, then the Chat session.",
-      "item": [
-        {
-          "name": "1. LOS customer login",
+          "name": "0. Register a Chat account (once)",
           "request": {
             "method": "POST",
             "header": [
@@ -53,18 +19,1164 @@
                 "value": "application/json"
               }
             ],
-            "url": {
-              "raw": "{{losUrl}}/customer/auth/login"
-            },
-            "description": "Real LOS login (phone + 4-digit PIN). LOS allows 5 customer logins per 15 minutes: do not run this in a loop. The body field names (phone, pin) are an assumption from the pack; if LOS refuses, read its message and adjust. Saves losCustomerToken.",
+            "url": "{{chatUrl}}/api/v1/customer/auth/register",
+            "description": "Leave chatCustomerUsername empty and this creates a throwaway test customer once (then reuses it); fill it in to use your own. Safe to run again: if the username already exists the answer is 409 and the next step signs in. Password 8 to 128 characters.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"phone\": \"{{customerPhone}}\",\n  \"pin\": \"{{customerPin}}\"\n}",
+              "raw": "{\n  \"username\": \"{{chatCustomerUsername}}\",\n  \"password\": \"{{chatCustomerPassword}}\",\n  \"displayName\": \"Test Customer\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('chatCustomerUsername')) pm.environment.set('chatCustomerUsername', 'pm_' + Math.random().toString(36).slice(2, 10));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 created, or 409 when the account already exists (both are fine)', () => pm.expect([201,409]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "1. Chat login with username and password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{chatUrl}}/api/v1/customer/auth/login",
+            "description": "Needs a Chat account: run '0. Register' once. Saves chatCustomerToken and chatCustomerRefresh.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{chatCustomerUsername}}\",\n  \"password\": \"{{chatCustomerPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let body; try { body = pm.response.json(); } catch (e) { body = null; }",
+                  "if (pm.response.code === 200) { ",
+                  "  const d = body.data;",
+                  "  pm.environment.set('chatCustomerToken', d.accessToken);",
+                  "  pm.environment.set('chatCustomerRefresh', d.refreshToken);",
+                  "} else {",
+                  "  pm.environment.unset('chatCustomerToken');",
+                  "  pm.environment.unset('chatCustomerRefresh');",
+                  "}",
+                  "pm.test('200 and a Chat session', () => {",
+                  "  pm.expect([200]).to.include(pm.response.code);",
+                  "  pm.expect(body.data.accessToken).to.be.a('string');",
+                  "  pm.expect(body.data.refreshToken).to.be.a('string');",
+                  "  pm.expect(body.data.user.role).to.eql('CUSTOMER');",
+                  "});",
+                  "if (!body || !body.data) pm.test('reason: ' + JSON.stringify(body && (body.error || body.message) || 'no JSON'), () => { throw new Error('see test name'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2. Refresh the session",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{chatUrl}}/api/v1/customer/auth/refresh",
+            "description": "Send one refresh at a time. A refresh token used twice ends the whole sign-in.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{chatCustomerRefresh}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 and a new pair', () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json().data;",
+                  "pm.environment.set('chatCustomerToken', d.accessToken);",
+                  "pm.environment.set('chatCustomerRefresh', d.refreshToken);  // the old refresh token is dead now"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Who am I",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{chatUrl}}/api/v1/customer/auth/me",
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200, a customer', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  const u = pm.response.json().data;",
+                  "  pm.expect(u.role).to.eql('CUSTOMER');",
+                  "  // a number after the LOS sign-in, null after username/password",
+                  "  pm.expect(u.losUserId === null || typeof u.losUserId === 'number').to.eql(true);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Join my conversation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{chatUrl}}/api/v1/customer/conversations/join",
+            "description": "Opens the customer's chat (or reuses it). Saves chatConvId, which every request below and the Staff folder use.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 or 201', () => pm.expect([200,201]).to.include(pm.response.code));",
+                  "pm.environment.set('chatConvId', pm.response.json().data.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Send a message",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{chatUrl}}/api/v1/customer/conversations/{{chatConvId}}/messages",
+            "description": "Uses a new clientId each run.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientId\": \"{{msgClientId}}\",\n  \"text\": \"Hi, can I change my repayment date to the 25th?\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.environment.set('msgClientId', pm.variables.replaceIn('{{$guid}}'));"]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201', () => pm.response.to.have.status(201));",
+                  "pm.test('the text came back', () => pm.expect(pm.response.json().data.content).to.include('repayment date'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Send the same message again (no duplicate)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{chatUrl}}/api/v1/customer/conversations/{{chatConvId}}/messages",
+            "description": "Run right after 'Send a message': the same clientId returns the original with 200, not a second message.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientId\": \"{{msgClientId}}\",\n  \"text\": \"Hi, can I change my repayment date to the 25th?\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('200: the original message comes back', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "My messages",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{chatUrl}}/api/v1/customer/conversations/{{chatConvId}}/messages?limit=30",
+            "description": "Oldest to newest."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200, a list with paging info', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  const b = pm.response.json();",
+                  "  pm.expect(b.data).to.be.an('array');",
+                  "  pm.expect(b.meta).to.have.property('hasMore');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{chatCustomerToken}}",
+            "type": "string"
+          }
+        ]
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const isSignIn = /^\\d/.test(pm.info.requestName);",
+              "if (!isSignIn && !pm.environment.get('chatCustomerToken')) pm.variables.set('missingSession', 'No Chat session yet: run Customer / 2 (a sign-in step) first (it saves chatCustomerToken)');"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const missing = pm.variables.get('missingSession');",
+              "if (missing) pm.test(missing, () => { throw new Error(missing); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Staff",
+      "description": "Run Customer first. Requests inherit Bearer {{chatStaffToken}}.",
+      "item": [
+        {
+          "name": "1. Chat login (username and password)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{chatUrl}}/api/v1/admin/auth/login",
+            "description": "One step for staff. The backend tries LOS with these credentials first, then a Chat account (for example the seeded agent1). Saves chatStaffToken and chatStaffRefresh.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{chatStaffUsername}}\",\n  \"password\": \"{{chatStaffPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let body; try { body = pm.response.json(); } catch (e) { body = null; }",
+                  "if (pm.response.code === 200) { ",
+                  "  const d = body.data;",
+                  "  pm.environment.set('chatStaffToken', d.accessToken);",
+                  "  pm.environment.set('chatStaffRefresh', d.refreshToken);",
+                  "} else {",
+                  "  pm.environment.unset('chatStaffToken');",
+                  "  pm.environment.unset('chatStaffRefresh');",
+                  "}",
+                  "pm.test('200 and a Chat session', () => {",
+                  "  pm.expect([200]).to.include(pm.response.code);",
+                  "  pm.expect(body.data.accessToken).to.be.a('string');",
+                  "  pm.expect(body.data.refreshToken).to.be.a('string');",
+                  "  pm.expect(body.data.user.role).to.not.eql('CUSTOMER');",
+                  "});",
+                  "if (!body || !body.data) pm.test('reason: ' + JSON.stringify(body && (body.error || body.message) || 'no JSON'), () => { throw new Error('see test name'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2. Refresh the session",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{chatUrl}}/api/v1/admin/auth/refresh",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{chatStaffRefresh}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 and a new pair', () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json().data;",
+                  "pm.environment.set('chatStaffToken', d.accessToken);",
+                  "pm.environment.set('chatStaffRefresh', d.refreshToken);  // the old refresh token is dead now"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Who am I",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{chatUrl}}/api/v1/admin/auth/me",
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200, a staff role', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().data.role).to.not.eql('CUSTOMER');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Inbox: conversations",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{chatUrl}}/api/v1/admin/conversations?size=20",
+            "description": "Does not change chatConvId."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200, a list', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().data).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Open the customer's conversation",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{chatUrl}}/api/v1/admin/conversations/{{chatConvId}}",
+            "description": "Needs chatConvId: run Customer / Join my conversation first."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200, the customer\\'s conversation', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().data.id).to.eql(pm.environment.get('chatConvId'));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Conversation history",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{chatUrl}}/api/v1/admin/conversations/{{chatConvId}}/messages",
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200, the customer\\'s messages', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().data).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Take the conversation (needed before replying)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{chatUrl}}/api/v1/admin/conversations/{{chatConvId}}/assign",
+            "description": "Only the agent who owns an open conversation can reply (otherwise 403).",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('200', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reply to the customer",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{chatUrl}}/api/v1/admin/conversations/{{chatConvId}}/messages",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientId\": \"{{$guid}}\",\n  \"text\": \"Received your payslip. Your repayment date is now the 25th.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201, an agent message', () => {",
+                  "  pm.response.to.have.status(201);",
+                  "  pm.expect(pm.response.json().data.senderType).to.eql('AGENT');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Release the conversation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{chatUrl}}/api/v1/admin/conversations/{{chatConvId}}/unassign",
+            "description": "Puts it back in the shared queue so the next run starts clean.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('200', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ]
+        }
+      ],
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{chatStaffToken}}",
+            "type": "string"
+          }
+        ]
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const isSignIn = /^\\d/.test(pm.info.requestName);",
+              "if (!isSignIn && !pm.environment.get('chatStaffToken')) pm.variables.set('missingSession', 'No Chat session yet: run Staff / 1 first (it saves chatStaffToken)');"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const missing = pm.variables.get('missingSession');",
+              "if (missing) pm.test(missing, () => { throw new Error(missing); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Optional: PDF attachment",
+      "description": "Customer sends fixtures/sample.pdf, staff download it. Copy docs/postman/fixtures/sample.pdf into Postman's working directory (or pick it in the 'file' field) first. Skipped unless the environment variable runPdf is 'yes' (needs the sample file).",
+      "item": [
+        {
+          "name": "Customer: send a PDF",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{chatUrl}}/api/v1/customer/conversations/{{chatConvId}}/files",
+            "description": "Saves chatPdfId for the Staff folder. If Postman cannot find the file, pick docs/postman/fixtures/sample.pdf in the 'file' field.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "fixtures/sample.pdf"
+                },
+                {
+                  "key": "clientId",
+                  "type": "text",
+                  "value": "{{$guid}}"
+                },
+                {
+                  "key": "text",
+                  "type": "text",
+                  "value": "My payslip"
+                }
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{chatCustomerToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 and an attachment', () => {",
+                  "  pm.response.to.have.status(201);",
+                  "  pm.expect(pm.response.json().data.attachments[0].id).to.be.a('string');",
+                  "});",
+                  "const a = (pm.response.json().data.attachments || [])[0];",
+                  "if (a) pm.environment.set('chatPdfId', a.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Staff: download the PDF",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{chatUrl}}/api/v1/admin/attachments/{{chatPdfId}}/download",
+            "description": "Needs chatPdfId: run Customer / Send a PDF first.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{chatStaffToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200, a PDF', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.headers.get('Content-Type')).to.include('pdf');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": ["if (pm.environment.get('runPdf') !== 'yes') pm.execution.skipRequest();"]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Checks (each must be refused)",
+      "description": "Negative checks. Set chatCustomerUsername, chatCustomerPassword and chatStaffUsername. The last one needs a customer session.",
+      "item": [
+        {
+          "name": "Wrong password is refused",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{chatUrl}}/api/v1/customer/auth/login",
+            "description": "Generic 401: it must not reveal whether the username exists.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{chatCustomerUsername}}\",\n  \"password\": \"definitely-wrong\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('401', () => pm.expect([401]).to.include(pm.response.code));"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Unknown username is refused",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{chatUrl}}/api/v1/customer/auth/login",
+            "description": "Same 401 as a wrong password.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"no-such-user-xyz\",\n  \"password\": \"definitely-wrong\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('401', () => pm.expect([401]).to.include(pm.response.code));"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "A customer cannot use the staff login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{chatUrl}}/api/v1/admin/auth/login",
+            "description": "A right password on the wrong endpoint looks like a wrong password.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{chatCustomerUsername}}\",\n  \"password\": \"{{chatCustomerPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('401', () => pm.expect([401]).to.include(pm.response.code));"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Wrong staff password is refused",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{chatUrl}}/api/v1/admin/auth/login",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{chatStaffUsername}}\",\n  \"password\": \"definitely-wrong\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('401', () => pm.expect([401]).to.include(pm.response.code));"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "A bad body is refused",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{chatUrl}}/api/v1/customer/auth/login",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"x\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('400', () => pm.expect([400]).to.include(pm.response.code));"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "A made-up refresh token is refused",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{chatUrl}}/api/v1/customer/auth/refresh",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('401', () => pm.expect([401]).to.include(pm.response.code));"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "No token is refused",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{chatUrl}}/api/v1/customer/auth/me",
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('401', () => pm.expect([401]).to.include(pm.response.code));"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "A bad LOS token is refused",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{chatUrl}}/api/v1/customer/auth/los",
+            "description": "Negative check: a made-up token (long enough to be checked) must give a generic 401.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"losToken\": \"aaaaaaaaaaaa.bbbbbbbbbbbb.cccccccccccc\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('401', () => pm.response.to.have.status(401));"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "A customer token cannot open the staff API",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{chatUrl}}/api/v1/admin/conversations",
+            "description": "Sends the customer token to a staff route. Needs a customer session.",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.request.headers.upsert({ key: 'Authorization', value: 'Bearer ' + pm.environment.get('chatCustomerToken') });"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('401 or 403', () => pm.expect([401,403]).to.include(pm.response.code));"]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Sign out (run last)",
+      "description": "Ends both sign-ins and clears the saved tokens.",
+      "item": [
+        {
+          "name": "Customer log out",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{chatUrl}}/api/v1/customer/auth/logout",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{chatCustomerRefresh}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('204', () => pm.response.to.have.status(204));",
+                  "pm.environment.unset('chatCustomerToken');",
+                  "pm.environment.unset('chatCustomerRefresh');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Staff log out",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{chatUrl}}/api/v1/admin/auth/logout",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{chatStaffRefresh}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('204', () => pm.response.to.have.status(204));",
+                  "pm.environment.unset('chatStaffToken');",
+                  "pm.environment.unset('chatStaffRefresh');"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Optional: customer sign-in with LOS",
+      "description": "Replaces Customer step 0 and 1. Needs a real LOS customer (customerUsername, customerPin). Skipped unless the environment variable runLos is 'yes' (needs real LOS credentials).",
+      "item": [
+        {
+          "name": "1a. LOS login (LOS checks the password)  [LOS path]",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{losUrl}}/customer/auth/login",
+            "description": "Real LOS login: LOS takes `username` and `password` (set customerUsername and customerPin; the PIN is the password). LOS allows 5 customer logins per 15 minutes: do not run this in a loop. Saves losCustomerToken.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{customerUsername}}\",\n  \"password\": \"{{customerPin}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
             }
           },
           "event": [
@@ -92,13 +1204,11 @@
           ]
         },
         {
-          "name": "2. Check the customer token's claims",
+          "name": "1b. Check the LOS token's claims  [LOS path]",
           "request": {
             "method": "GET",
             "header": [],
-            "url": {
-              "raw": "{{losUrl}}/customer/auth/me"
-            },
+            "url": "{{losUrl}}/customer/auth/me",
             "description": "Calls LOS with the customer token and checks the claims the Chat backend requires: iss, aud, type, tokenType, userId, exp.",
             "auth": {
               "type": "bearer",
@@ -132,7 +1242,7 @@
           ]
         },
         {
-          "name": "3. Chat: sign in with the LOS customer token",
+          "name": "2. Chat session from the LOS token  [LOS path]",
           "request": {
             "method": "POST",
             "header": [
@@ -141,10 +1251,8 @@
                 "value": "application/json"
               }
             ],
-            "url": {
-              "raw": "{{chatUrl}}/api/v1/customer/auth/los"
-            },
-            "description": "Sends the real LOS customer token to the Chat backend, which verifies it against LOS_JWKS_URL and returns the Chat session. The backend must run with LOS_ISSUER=los-backend and the Dev LOS_JWKS_URL. Saves chatCustomerToken. Run it twice: the second run must return the same user id (identity mapping).",
+            "url": "{{chatUrl}}/api/v1/customer/auth/los",
+            "description": "Swaps the LOS customer token for a Chat session. Saves chatCustomerToken and chatCustomerRefresh.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"losToken\": \"{{losCustomerToken}}\"\n}",
@@ -153,47 +1261,9 @@
                   "language": "json"
                 }
               }
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('200 and a Chat session', () => {",
-                  "  pm.response.to.have.status(200);",
-                  "  const d = pm.response.json().data;",
-                  "  pm.expect(d.accessToken).to.be.a('string');",
-                  "  pm.expect(d.user.role).to.eql('CUSTOMER');",
-                  "  pm.environment.set('chatCustomerToken', d.accessToken);",
-                  "  const before = pm.environment.get('chatCustomerUserId');",
-                  "  if (before) pm.expect(d.user.id).to.eql(before);   // same LOS customer -> same Chat user",
-                  "  pm.environment.set('chatCustomerUserId', d.user.id);",
-                  "});"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "4. Chat: who am I (customer)",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{chatUrl}}/api/v1/customer/auth/me"
             },
-            "description": "Uses the Chat token, not the LOS token.",
             "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "{{chatCustomerToken}}",
-                  "type": "string"
-                }
-              ]
+              "type": "noauth"
             }
           },
           "event": [
@@ -202,56 +1272,82 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('200, a customer with the LOS user id', () => {",
-                  "  pm.response.to.have.status(200);",
-                  "  const u = pm.response.json().data;",
-                  "  pm.expect(u.role).to.eql('CUSTOMER');",
-                  "  pm.expect(u.losUserId).to.be.a('number');",
-                  "});"
+                  "let body; try { body = pm.response.json(); } catch (e) { body = null; }",
+                  "if (pm.response.code === 200 || pm.response.code === 201) { ",
+                  "  const d = body.data;",
+                  "  pm.environment.set('chatCustomerToken', d.accessToken);",
+                  "  pm.environment.set('chatCustomerRefresh', d.refreshToken);",
+                  "} else {",
+                  "  pm.environment.unset('chatCustomerToken');",
+                  "  pm.environment.unset('chatCustomerRefresh');",
+                  "}",
+                  "pm.test('200 or 201 and a Chat session', () => {",
+                  "  pm.expect([200, 201]).to.include(pm.response.code);",
+                  "  pm.expect(body.data.accessToken).to.be.a('string');",
+                  "  pm.expect(body.data.refreshToken).to.be.a('string');",
+                  "  pm.expect(body.data.user.role).to.eql('CUSTOMER');",
+                  "});",
+                  "if (!body || !body.data) pm.test('reason: ' + JSON.stringify(body && (body.error || body.message) || 'no JSON'), () => { throw new Error('see test name'); });"
                 ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "5. Chat: a bad LOS token is refused",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{chatUrl}}/api/v1/customer/auth/los"
-            },
-            "description": "Negative check: a made-up token must give a generic 401.",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"losToken\": \"aaa.bbb.ccc\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": ["pm.test('401', () => pm.response.to.have.status(401));"]
               }
             }
           ]
         }
+      ],
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": ["if (pm.environment.get('runLos') !== 'yes') pm.execution.skipRequest();"]
+          }
+        }
       ]
     },
     {
-      "name": "B. Staff hand-off (LOS Web to Chat)",
-      "description": "Needs a real LOS staff account. Steps 2 to 4 pass only once LOS issues the Chat hand-off token.",
+      "name": "Optional: LOS connectivity",
+      "description": "Public checks, no credentials. Skipped unless the environment variable runLos is 'yes' (needs the Dev LOS).",
+      "item": [
+        {
+          "name": "LOS JWKS (public)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{losUrl}}/guest/.well-known/jwks.json",
+            "description": "Public. The Chat backend verifies LOS tokens with this key (RS256). Dev and Staging should have different keys; compare kid between environments."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 with one RS256 signing key', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  const keys = pm.response.json().keys;",
+                  "  pm.expect(keys.length).to.be.above(0);",
+                  "  pm.expect(keys[0].alg).to.eql('RS256');",
+                  "  console.log('kid:', keys[0].kid);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": ["if (pm.environment.get('runLos') !== 'yes') pm.execution.skipRequest();"]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Optional: staff hand-off from LOS Web",
+      "description": "Needs a real LOS staff account. Steps 2 to 4 pass only once LOS issues the Chat hand-off token. Skipped unless the environment variable runLos is 'yes' (needs real LOS credentials).",
       "item": [
         {
           "name": "1. LOS staff login",
@@ -263,9 +1359,7 @@
                 "value": "application/json"
               }
             ],
-            "url": {
-              "raw": "{{losUrl}}/admin/auth/login"
-            },
+            "url": "{{losUrl}}/admin/auth/login",
             "description": "Real LOS staff login (20 per 15 minutes). The pack gives the path but NOT the body: the field names below (username, password) are a guess; if LOS refuses, adjust them. Saves losStaffToken.",
             "body": {
               "mode": "raw",
@@ -311,9 +1405,7 @@
                 "value": "application/json"
               }
             ],
-            "url": {
-              "raw": "{{losUrl}}/admin/dashboard-embed/handoff-token"
-            },
+            "url": "{{losUrl}}/admin/dashboard-embed/handoff-token",
             "description": "30 per minute. Saves losHandoffToken. The tests show whether LOS has made the changes Chat needs: aud chat, tokenType chat-handoff, a jti, a life of about 2 minutes. Until then the first three FAIL, on purpose.",
             "body": {
               "mode": "raw",
@@ -368,9 +1460,7 @@
                 "value": "application/json"
               }
             ],
-            "url": {
-              "raw": "{{chatUrl}}/api/v1/admin/auth/los"
-            },
+            "url": "{{chatUrl}}/api/v1/admin/auth/los",
             "description": "Run within 2 minutes of step 2. Succeeds only when LOS issues the Chat-specific token (see step 2); today it answers 401, by design. Needs LOS_STAFF_ROLE_MAP to cover the staff member's LOS role, or it is refused. Saves chatStaffToken.",
             "body": {
               "mode": "raw",
@@ -410,9 +1500,7 @@
                 "value": "application/json"
               }
             ],
-            "url": {
-              "raw": "{{chatUrl}}/api/v1/admin/auth/los"
-            },
+            "url": "{{chatUrl}}/api/v1/admin/auth/los",
             "description": "Only meaningful after step 3 succeeded. The same token again must be 401 (single use, by jti).",
             "body": {
               "mode": "raw",
@@ -434,20 +1522,27 @@
             }
           ]
         }
+      ],
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": ["if (pm.environment.get('runLos') !== 'yes') pm.execution.skipRequest();"]
+          }
+        }
       ]
     },
     {
-      "name": "C. Loan data (LOS customer endpoints that exist today)",
-      "description": "Confirmed endpoints, called with the customer's own LOS token. Chat does NOT call these itself yet: its machine-to-machine access is pending at LOS. Use them to compare real responses with the pack's illustrative sample.",
+      "name": "Optional: LOS loan data (endpoints that exist today)",
+      "description": "Confirmed endpoints, called with the customer's own LOS token. Chat does NOT call these itself yet: its machine-to-machine access is pending at LOS. Use them to compare real responses with the pack's illustrative sample. Skipped unless the environment variable runLos is 'yes' (needs real LOS credentials).",
       "item": [
         {
           "name": "Latest application",
           "request": {
             "method": "GET",
             "header": [],
-            "url": {
-              "raw": "{{losUrl}}/customer/application/latest"
-            },
+            "url": "{{losUrl}}/customer/application/latest",
             "description": "Check loanDetail.loanPurpose, requestedLoanSize (USD), requestedLoanTerm (days), status, ticketNumber, appliedDate.",
             "auth": {
               "type": "bearer",
@@ -479,9 +1574,7 @@
           "request": {
             "method": "GET",
             "header": [],
-            "url": {
-              "raw": "{{losUrl}}/customer/application/loan/history"
-            },
+            "url": "{{losUrl}}/customer/application/loan/history",
             "description": "",
             "auth": {
               "type": "bearer",
@@ -509,9 +1602,7 @@
           "request": {
             "method": "GET",
             "header": [],
-            "url": {
-              "raw": "{{losUrl}}/customer/profile/detail"
-            },
+            "url": "{{losUrl}}/customer/profile/detail",
             "description": "Contains personal data (national id, salary): Chat does not store it.",
             "auth": {
               "type": "bearer",
@@ -533,6 +1624,296 @@
               }
             }
           ]
+        }
+      ],
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": ["if (pm.environment.get('runLos') !== 'yes') pm.execution.skipRequest();"]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Optional: see real loan data in Chat (run the LOS customer login and loan data first)",
+      "description": "The customer opens a chat about their real LOS application and sends a message; a Chat staff account then sees the conversation and the real loan data, exactly as the dashboard does. Afterwards open the dashboard as that staff member to see the same thing on screen. Skipped unless the environment variable runLos is 'yes' (needs real LOS credentials).",
+      "item": [
+        {
+          "name": "D1. LOS: the customer's latest application (saves losApplicationId)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{losUrl}}/customer/application/latest",
+            "description": "Real LOS data. Saves the application id: the chat must be opened about THIS application, or the agent panel stays empty.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{losCustomerToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const a = pm.response.json().data;",
+                  "pm.test('the customer has an application', () => pm.expect(a && a.id).to.be.a('number'));",
+                  "if (a && a.id) { pm.environment.set('losApplicationId', String(a.id)); pm.environment.set('losApplicationStatus', a.status); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "D2. Chat: customer signs in again (reads the application)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{chatUrl}}/api/v1/customer/auth/los",
+            "description": "Run folder A first so losCustomerToken is fresh (LOS customer tokens last 1 hour). The backend reads the application with this token right after sign-in (LOS_BASE_URL must be set). Wait a second before D5.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"losToken\": \"{{losCustomerToken}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "pm.environment.set('chatCustomerToken', pm.response.json().data.accessToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "D3. Chat: the customer opens the chat about the real application (saves chatConvId)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{chatUrl}}/api/v1/customer/conversations/join",
+            "description": "Same call the mobile app makes. applicationId is the real LOS application id from D1.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"applicationId\": \"{{losApplicationId}}\",\n  \"subject\": \"Test from Postman with a real LOS customer\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{chatCustomerToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 created or 200 existing', () => pm.expect([200, 201]).to.include(pm.response.code));",
+                  "pm.environment.set('chatConvId', String(pm.response.json().data.id));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "D4. Chat: the customer sends a message",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{chatUrl}}/api/v1/customer/conversations/{{chatConvId}}/messages",
+            "description": "This is what the agent sees arrive in the dashboard inbox.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientId\": \"{{$guid}}\",\n  \"text\": \"Hello, this is a test message from a real LOS customer.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{chatCustomerToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('message accepted', () => pm.expect([200, 201]).to.include(pm.response.code));"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "D5. Chat: a staff member signs in",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{chatUrl}}/api/v1/admin/auth/login",
+            "description": "A Chat staff account (username and password, created with `pnpm --filter @chat-dashboard/backend user:create-admin` or by an admin). This is NOT the LOS staff sign-in: that only works once LOS issues the Chat hand-off token (folder B). Saves chatStaffToken.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{chatStaffUsername}}\",\n  \"password\": \"{{chatStaffPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 and a staff role', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  const d = pm.response.json().data;",
+                  "  pm.expect(['AGENT','SUPERVISOR','ADMIN']).to.include(d.user.role);",
+                  "  pm.environment.set('chatStaffToken', d.accessToken);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "D6. Chat: the staff member sees the customer's conversation",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{chatUrl}}/api/v1/admin/conversations/{{chatConvId}}",
+            "description": "The same conversation appears in the dashboard inbox (it waits in the staff queue). 404 here means the staff role cannot see it.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{chatStaffToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200, about the real application', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  const c = pm.response.json().data;",
+                  "  pm.expect(String(c.applicationId)).to.eql(pm.environment.get('losApplicationId'));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "D7. Chat: the staff member sees the REAL loan data",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{chatUrl}}/api/v1/admin/conversations/{{chatConvId}}/application",
+            "description": "This is what the agent panel shows. Must match what LOS returned in D1. null means the backend has not read the application: check LOS_BASE_URL, that D2 ran after D1 and the customer's applications belong to that customer.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{chatStaffToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const a = pm.response.json().data;",
+                  "pm.test('200 with real data (not null)', () => { pm.response.to.have.status(200); pm.expect(a).to.not.eql(null); });",
+                  "if (a) {",
+                  "  pm.test('same application and status as LOS', () => {",
+                  "    pm.expect(String(a.applicationId)).to.eql(pm.environment.get('losApplicationId'));",
+                  "    pm.expect(a.status).to.eql(pm.environment.get('losApplicationStatus'));",
+                  "  });",
+                  "  console.log('status=' + a.status, 'purpose=' + a.loanPurpose, 'amount(USD)=' + a.requestedLoanSize, 'tenor(days)=' + a.requestedLoanTerm, 'fetchedAt=' + a.fetchedAt);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": ["if (pm.environment.get('runLos') !== 'yes') pm.execution.skipRequest();"]
+          }
         }
       ]
     }

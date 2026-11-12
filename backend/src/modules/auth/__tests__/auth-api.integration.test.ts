@@ -44,7 +44,7 @@ describe.skipIf(!url)("authentication over HTTP", () => {
 
   beforeEach(async () => {
     await db.$executeRaw`TRUNCATE users, refresh_tokens, chat_users CASCADE`;
-    await users.bootstrapAdmin({ email: "admin@example.com", displayName: "Admin", password: "admin-password" });
+    await users.bootstrapAdmin({ username: "admin", displayName: "Admin", password: "admin-password" });
   });
 
   const call = async (path: string, init: { method?: string; token?: string; body?: unknown } = {}) => {
@@ -63,8 +63,8 @@ describe.skipIf(!url)("authentication over HTTP", () => {
       body: (text ? JSON.parse(text) : null) as Record<string, any>,
     };
   };
-  const staffLogin = (email: string, password: string) =>
-    call("/api/v1/admin/auth/login", { body: { email, password } });
+  const staffLogin = (username: string, password: string) =>
+    call("/api/v1/admin/auth/login", { body: { username, password } });
 
   it("has no development sign-in with AUTH_MODE=jwt", async () => {
     expect((await call("/api/v1/dev/login", { body: { type: "staff", role: "admin" } })).status).toBe(404);
@@ -77,7 +77,7 @@ describe.skipIf(!url)("authentication over HTTP", () => {
     const { accessToken } = login.body.data;
 
     expect((await call("/api/v1/admin/auth/me", { token: accessToken })).body.data).toMatchObject({
-      email: "admin@example.com",
+      username: "admin",
       role: "ADMIN",
     });
     expect((await call("/api/v1/admin/conversations", { token: accessToken })).status).toBe(200);
@@ -86,15 +86,15 @@ describe.skipIf(!url)("authentication over HTTP", () => {
       (await call("/api/v1/admin/conversations", { token: "dev:00000000-0000-4000-8000-000000000001:ADMIN" })).status,
     ).toBe(401);
     // The password hash is stored, never the password.
-    const row = await db.authUser.findUniqueOrThrow({ where: { email: "admin@example.com" } });
+    const row = await db.authUser.findUniqueOrThrow({ where: { username: "admin" } });
     expect(row.passwordHash).toMatch(/^scrypt\$/);
   });
 
   it("lets an admin create an agent who can then sign in; agents cannot manage accounts", async () => {
-    const admin = (await staffLogin("admin@example.com", "admin-password")).body.data.accessToken;
+    const admin = (await staffLogin("admin", "admin-password")).body.data.accessToken;
     const created = await call("/api/v1/admin/users", {
       token: admin,
-      body: { email: "agent@example.com", displayName: "Agent", role: "AGENT", password: "agent-password" },
+      body: { username: "agent", displayName: "Agent", role: "AGENT", password: "agent-password" },
     });
     expect(created.status).toBe(201);
     expect(created.body.data).not.toHaveProperty("passwordHash");
@@ -112,11 +112,11 @@ describe.skipIf(!url)("authentication over HTTP", () => {
   });
 
   it("disabling an agent ends their sign-in and refuses their access token", async () => {
-    const admin = (await staffLogin("admin@example.com", "admin-password")).body.data.accessToken;
+    const admin = (await staffLogin("admin", "admin-password")).body.data.accessToken;
     const { id } = (
       await call("/api/v1/admin/users", {
         token: admin,
-        body: { email: "agent@example.com", displayName: "Agent", role: "AGENT", password: "agent-password" },
+        body: { username: "agent", displayName: "Agent", role: "AGENT", password: "agent-password" },
       })
     ).body.data;
     const agent = (await staffLogin("agent@example.com", "agent-password")).body.data;
@@ -130,7 +130,7 @@ describe.skipIf(!url)("authentication over HTTP", () => {
   });
 
   it("rotates refresh tokens and revokes the sign-in when an old one is replayed", async () => {
-    const first = (await staffLogin("admin@example.com", "admin-password")).body.data;
+    const first = (await staffLogin("admin", "admin-password")).body.data;
     const second = await call("/api/v1/admin/auth/refresh", { body: { refreshToken: first.refreshToken } });
     expect(second.status).toBe(200);
     expect((await call("/api/v1/admin/auth/refresh", { body: { refreshToken: first.refreshToken } })).status).toBe(401);
@@ -171,7 +171,7 @@ describe.skipIf(!url)("authentication over HTTP", () => {
     );
     const first = await call("/api/v1/customer/auth/los", { body: { losToken: customerToken } });
     expect(first.status).toBe(200);
-    expect(first.body.data.user).toMatchObject({ email: null, losUserId: 2, role: "CUSTOMER", displayName: "dara" });
+    expect(first.body.data.user).toMatchObject({ username: null, losUserId: 2, role: "CUSTOMER", displayName: "dara" });
     const again = await call("/api/v1/customer/auth/los", { body: { losToken: customerToken } });
     expect(again.body.data.user.id).toBe(first.body.data.user.id);
     expect((await call("/api/v1/customer/me", { token: first.body.data.accessToken })).status).toBe(200);
@@ -194,22 +194,22 @@ describe.skipIf(!url)("authentication over HTTP", () => {
 
     // The database keeps the account shapes honest.
     await expect(
-      db.$executeRaw`UPDATE users SET los_user_id = NULL, los_user_type = NULL WHERE email IS NULL`,
+      db.$executeRaw`UPDATE users SET los_user_id = NULL, los_user_type = NULL WHERE username IS NULL`,
     ).rejects.toThrow(/users_has_sign_in/);
     await expect(
-      db.$executeRaw`UPDATE users SET email = 'x@example.com' WHERE id = ${staff.body.data.user.id}::uuid`,
-    ).rejects.toThrow(/users_password_needs_email/);
+      db.$executeRaw`UPDATE users SET username = 'x-user' WHERE id = ${staff.body.data.user.id}::uuid`,
+    ).rejects.toThrow(/users_password_needs_username/);
     await expect(
       db.$executeRaw`UPDATE users SET los_user_type = 'CUSTOMER' WHERE id = ${staff.body.data.user.id}::uuid`,
     ).rejects.toThrow(/users_los_user_type_matches_role/);
   });
 
   it("keeps a staff or customer profile row with every account, editable by admins", async () => {
-    const { accessToken } = (await staffLogin("admin@example.com", "admin-password")).body.data;
+    const { accessToken } = (await staffLogin("admin", "admin-password")).body.data;
     const created = await call("/api/v1/admin/users", {
       token: accessToken,
       body: {
-        email: "agent@example.com",
+        username: "agent",
         displayName: "Agent",
         role: "AGENT",
         password: "agent-password",
@@ -221,7 +221,7 @@ describe.skipIf(!url)("authentication over HTTP", () => {
     const taken = await call("/api/v1/admin/users", {
       token: accessToken,
       body: {
-        email: "b@example.com",
+        username: "b",
         displayName: "B",
         role: "AGENT",
         password: "agent-password",
@@ -232,7 +232,7 @@ describe.skipIf(!url)("authentication over HTTP", () => {
     expect(taken.body.error.message).toMatch(/employee code/);
 
     const registered = await call("/api/v1/customer/auth/register", {
-      body: { email: "cust@example.com", password: "customer-pass", displayName: "Cust" },
+      body: { username: "cust", password: "customer-pass", displayName: "Cust" },
     });
     const customerId = registered.body.data.user.id;
     expect(registered.body.data.user.customer).toEqual({ phone: null, customerCode: null, preferredLanguage: null });
@@ -264,18 +264,18 @@ describe.skipIf(!url)("authentication over HTTP", () => {
   });
 
   it("keeps a refreshed sign-in's end and prunes expired sessions at the next sign-in", async () => {
-    const first = (await staffLogin("admin@example.com", "admin-password")).body.data;
+    const first = (await staffLogin("admin", "admin-password")).body.data;
     const refreshed = (await call("/api/v1/admin/auth/refresh", { body: { refreshToken: first.refreshToken } })).body
       .data;
     expect(refreshed.refreshTokenExpiresAt).toBe(first.refreshTokenExpiresAt);
     await db.refreshToken.updateMany({ data: { expiresAt: new Date(Date.now() - 1000) } });
-    await staffLogin("admin@example.com", "admin-password");
+    await staffLogin("admin", "admin-password");
     expect(await db.refreshToken.count()).toBe(1);
   });
 
   it("deletes every user's expired sessions in batches (the cleanup job's SQL), and only those", async () => {
     const { authService } = await import("../../../app-container.js");
-    const admin = await db.authUser.findUniqueOrThrow({ where: { email: "admin@example.com" } });
+    const admin = await db.authUser.findUniqueOrThrow({ where: { username: "admin" } });
     const session = (expiresAt: Date, revokedAt: Date | null = null) => ({
       userId: admin.id,
       familyId: crypto.randomUUID(),
@@ -295,15 +295,15 @@ describe.skipIf(!url)("authentication over HTTP", () => {
   });
 
   it("locks an account after 5 wrong passwords", async () => {
-    for (let i = 0; i < 5; i++) expect((await staffLogin("admin@example.com", "wrong")).status).toBe(401);
-    const locked = await staffLogin("admin@example.com", "admin-password");
+    for (let i = 0; i < 5; i++) expect((await staffLogin("admin", "wrong")).status).toBe(401);
+    const locked = await staffLogin("admin", "admin-password");
     expect(locked.status).toBe(429);
     expect(locked.body.error.code).toBe("ACCOUNT_LOCKED");
   });
 
   it("registers a mobile customer who can use the customer API but not the dashboard", async () => {
     const registered = await call("/api/v1/customer/auth/register", {
-      body: { email: "cus@example.com", password: "customer-pass", displayName: "Cus" },
+      body: { username: "cus", password: "customer-pass", displayName: "Cus" },
     });
     expect(registered.status).toBe(201);
     const { accessToken, refreshToken } = registered.body.data;
@@ -312,21 +312,20 @@ describe.skipIf(!url)("authentication over HTTP", () => {
     expect((await staffLogin("cus@example.com", "customer-pass")).status).toBe(401);
     expect((await call("/api/v1/admin/auth/refresh", { body: { refreshToken } })).status).toBe(401);
     expect(
-      (await call("/api/v1/customer/auth/login", { body: { email: "cus@example.com", password: "customer-pass" } }))
-        .status,
+      (await call("/api/v1/customer/auth/login", { body: { username: "cus", password: "customer-pass" } })).status,
     ).toBe(200);
     expect(
       (
         await call("/api/v1/customer/auth/register", {
-          body: { email: "CUS@example.com", password: "customer-pass", displayName: "Again" },
+          body: { username: "CUS", password: "customer-pass", displayName: "Again" },
         })
       ).status,
     ).toBe(409);
   });
 
   it("changes a password: the old one stops working and other devices are signed out", async () => {
-    const laptop = (await staffLogin("admin@example.com", "admin-password")).body.data;
-    const phone = (await staffLogin("admin@example.com", "admin-password")).body.data;
+    const laptop = (await staffLogin("admin", "admin-password")).body.data;
+    const phone = (await staffLogin("admin", "admin-password")).body.data;
     const changed = await call("/api/v1/admin/auth/me/password", {
       token: phone.accessToken,
       body: { currentPassword: "admin-password", newPassword: "admin-password-2" },
@@ -335,24 +334,24 @@ describe.skipIf(!url)("authentication over HTTP", () => {
     expect((await call("/api/v1/admin/auth/refresh", { body: { refreshToken: laptop.refreshToken } })).status).toBe(
       401,
     );
-    expect((await staffLogin("admin@example.com", "admin-password")).status).toBe(401);
-    expect((await staffLogin("admin@example.com", "admin-password-2")).status).toBe(200);
+    expect((await staffLogin("admin", "admin-password")).status).toBe(401);
+    expect((await staffLogin("admin", "admin-password-2")).status).toBe(200);
   });
 
   it("lets an admin change what a role may do; the next sign-in of that role gets it", async () => {
-    const admin = (await staffLogin("admin@example.com", "admin-password")).body.data.accessToken;
+    const admin = (await staffLogin("admin", "admin-password")).body.data.accessToken;
     const roles = (await call("/api/v1/admin/roles", { token: admin })).body.data as { id: number; name: string }[];
     const agentRole = roles.find((role) => role.name === "AGENT")!;
     const adminRole = roles.find((role) => role.name === "ADMIN")!;
     expect((await call("/api/v1/admin/permissions", { token: admin })).body.data.length).toBeGreaterThan(20);
 
-    for (const [email, name] of [
-      ["one@example.com", "One"],
-      ["two@example.com", "Two"],
+    for (const [username, name] of [
+      ["one", "One"],
+      ["two", "Two"],
     ]) {
       await call("/api/v1/admin/users", {
         token: admin,
-        body: { email, displayName: name, role: "AGENT", password: "agent-password" },
+        body: { username, displayName: name, role: "AGENT", password: "agent-password" },
       });
     }
     const tag = (await call("/api/v1/admin/tags", { token: admin, body: { name: "VIP" } })).body.data;
@@ -388,11 +387,11 @@ describe.skipIf(!url)("authentication over HTTP", () => {
   });
 
   it("keeps the chat identity in step with the account: name, role, and one row per account", async () => {
-    const admin = (await staffLogin("admin@example.com", "admin-password")).body.data.accessToken;
+    const admin = (await staffLogin("admin", "admin-password")).body.data.accessToken;
     const created = (
       await call("/api/v1/admin/users", {
         token: admin,
-        body: { email: "sam@example.com", displayName: "Sam", role: "AGENT", password: "agent-password" },
+        body: { username: "sam", displayName: "Sam", role: "AGENT", password: "agent-password" },
       })
     ).body.data;
     await call(`/api/v1/admin/users/${created.id}`, {

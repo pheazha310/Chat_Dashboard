@@ -28,8 +28,7 @@ import { ChatSearchBar, JumpToDateButton, showMessage, useChatSearchStore } from
 import { blockConversationCustomerAction, reportSpamAction } from "@/features/moderate-conversation";
 import { MessageComposer, retryMessage, useComposerStore } from "@/features/send-message";
 import { API_URL, assets } from "@/shared/config";
-import { AssetIcon, IconButton, notify, Icon, promptAction } from "@/shared/ui";
-import { useCustomerCallStore } from "@/features/customer-call";
+import { AssetIcon, IconButton, notify, Icon, promptAction, confirmAction } from "@/shared/ui";
 import HandoffCard from "./HandoffCard";
 
 const PRESENCE = {
@@ -150,7 +149,15 @@ export default function ChatWindow({
             onClick={toggleSearch}
           />
           <button
-            onClick={() => useCustomerCallStore.getState().start(conversation)}
+            onClick={() =>
+              void confirmAction({
+                title: "Coming soon",
+                description: "Calling is not available yet.",
+                confirmLabel: "OK",
+                cancelLabel: "Close",
+                destructive: false,
+              })
+            }
             aria-label={`Call ${conversation.name}`}
           >
             <AssetIcon src={assets.icons.phone} />

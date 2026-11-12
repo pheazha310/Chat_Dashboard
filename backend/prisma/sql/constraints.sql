@@ -257,11 +257,12 @@ ALTER TABLE chat_users ADD CONSTRAINT chat_users_status_check CHECK (status IN (
 ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('CUSTOMER', 'AGENT', 'SUPERVISOR', 'ADMIN'));
 ALTER TABLE users ADD CONSTRAINT users_status_check CHECK (status IN ('ACTIVE', 'DISABLED'));
 ALTER TABLE users ADD CONSTRAINT users_email_lower_check CHECK (email = lower(email));
+ALTER TABLE users ADD CONSTRAINT users_username_format_check CHECK (username ~ '^[a-z0-9][a-z0-9._-]{2,31}$');
 ALTER TABLE users ADD CONSTRAINT users_failed_login_count_check CHECK (failed_login_count >= 0);
--- Password and LOS sign-in: a password always belongs to an email, every account can sign in somehow, and the LOS
+-- Password and LOS sign-in: a password always belongs to a username, every account can sign in somehow, and the LOS
 -- link is a pair whose kind matches the role.
-ALTER TABLE users ADD CONSTRAINT users_password_needs_email CHECK ((email IS NULL) = (password_hash IS NULL));
-ALTER TABLE users ADD CONSTRAINT users_has_sign_in CHECK (email IS NOT NULL OR los_user_id IS NOT NULL);
+ALTER TABLE users ADD CONSTRAINT users_password_needs_username CHECK ((username IS NULL) = (password_hash IS NULL));
+ALTER TABLE users ADD CONSTRAINT users_has_sign_in CHECK (username IS NOT NULL OR los_user_id IS NOT NULL);
 ALTER TABLE users ADD CONSTRAINT users_los_link_pair CHECK ((los_user_id IS NULL) = (los_user_type IS NULL));
 ALTER TABLE users ADD CONSTRAINT users_los_user_type_check CHECK (los_user_type IN ('CUSTOMER', 'STAFF'));
 ALTER TABLE users ADD CONSTRAINT users_los_user_type_matches_role CHECK (los_user_type IS NULL OR (los_user_type = 'CUSTOMER') = (role = 'CUSTOMER'));

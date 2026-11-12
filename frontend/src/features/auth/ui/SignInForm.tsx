@@ -1,9 +1,9 @@
 import { useState, type FormEvent } from "react";
 import { submitSignIn } from "../model/sign-in";
 
-/** Email and password sign-in for staff. On success the app shell takes over (it follows the auth store). */
+/** Username and password sign-in for staff. On success the app shell takes over (it follows the auth store). */
 export default function SignInForm() {
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -13,7 +13,7 @@ export default function SignInForm() {
     if (pending) return;
     setPending(true);
     setError(null);
-    const result = await submitSignIn(email, password);
+    const result = await submitSignIn(username, password);
     setPending(false);
     if (!result.ok) {
       setError(result.error);
@@ -24,12 +24,14 @@ export default function SignInForm() {
   return (
     <form className="sign-in-form" onSubmit={onSubmit} noValidate>
       <label>
-        <span>Email</span>
+        <span>Username</span>
         <input
-          type="email"
+          type="text"
           autoComplete="username"
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
+          autoCapitalize="none"
+          spellCheck={false}
+          value={username}
+          onChange={(event) => setUsername(event.target.value)}
           required
           autoFocus
         />

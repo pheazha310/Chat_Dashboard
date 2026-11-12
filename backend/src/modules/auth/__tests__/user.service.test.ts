@@ -6,7 +6,7 @@ import { verifyPassword } from "../auth.password.js";
 import { UserDirectory, UserService, type AccountStatusListener } from "../user.service.js";
 import { FakeAuthRepository } from "./fake-auth-repository.js";
 
-const staff = { email: "new@example.com", displayName: "New Agent", role: "AGENT" as const, password: "initial-pass" };
+const staff = { username: "new", displayName: "New Agent", role: "AGENT" as const, password: "initial-pass" };
 
 describe("UserService", () => {
   let repo: FakeAuthRepository;
@@ -22,32 +22,32 @@ describe("UserService", () => {
     };
     service = new UserService(repo.asRepository(), status);
     const created = await service.bootstrapAdmin({
-      email: "root@example.com",
+      username: "root",
       displayName: "Root",
       password: "x".repeat(8),
     });
     admin = { userId: created.id, role: "ADMIN" };
   });
 
-  it("creates an account of any role from the command line, and refuses a taken email", async () => {
+  it("creates an account of any role from the command line, and refuses a taken username", async () => {
     const customer = {
-      email: "c@example.com",
+      username: "c",
       displayName: "Cust",
       password: "x".repeat(8),
       role: "CUSTOMER" as const,
     };
     const user = await service.bootstrapAccount(customer);
-    expect(user).toMatchObject({ email: "c@example.com", role: "CUSTOMER", status: "ACTIVE" });
+    expect(user).toMatchObject({ username: "c", role: "CUSTOMER", status: "ACTIVE" });
     expect(repo.users.get(user.id)).toMatchObject({ createdBy: null });
     expect(status.sync).toHaveBeenCalledWith({ id: user.id, role: "CUSTOMER", displayName: "Cust" });
     await expect(service.bootstrapAccount(customer)).rejects.toBeInstanceOf(ConflictError);
   });
 
-  it("lets only admins create staff, and refuses a taken email", async () => {
+  it("lets only admins create staff, and refuses a taken username", async () => {
     await expect(service.create({ userId: uid(1), role: "SUPERVISOR" }, staff)).rejects.toBeInstanceOf(ForbiddenError);
     await expect(service.create({ userId: uid(1), role: "AGENT" }, staff)).rejects.toBeInstanceOf(ForbiddenError);
     const user = await service.create(admin, staff);
-    expect(user).toMatchObject({ email: "new@example.com", role: "AGENT", status: "ACTIVE" });
+    expect(user).toMatchObject({ username: "new", role: "AGENT", status: "ACTIVE" });
     expect(repo.users.get(user.id)).toMatchObject({ createdBy: admin.userId });
     await expect(service.create(admin, staff)).rejects.toBeInstanceOf(ConflictError);
   });
@@ -127,7 +127,7 @@ describe("UserService", () => {
     });
 
     const customer = await repo.createUser({
-      email: "c@example.com",
+      username: "c",
       passwordHash: "x",
       role: "CUSTOMER",
       displayName: "C",
@@ -138,7 +138,7 @@ describe("UserService", () => {
     });
   });
 
-  it("refuses to give an LOS-only account a password (it has no email to sign in with)", async () => {
+  it("refuses to give an LOS-only account a password (it has no username to sign in with)", async () => {
     const los = await repo.createLosUser({ losUserType: "STAFF", losUserId: 7, role: "AGENT", displayName: "Sophea" });
     await expect(service.resetPassword(admin, los.id, "another-pass")).rejects.toBeInstanceOf(ConflictError);
     expect(repo.users.get(los.id)?.passwordHash).toBeNull();
@@ -175,7 +175,7 @@ describe("UserService", () => {
   it("serves names to the directory: staff as agents, customers as customers", async () => {
     const agent = await service.create(admin, staff);
     const customer = await repo.createUser({
-      email: "c@example.com",
+      username: "c",
       passwordHash: "x",
       role: "CUSTOMER",
       displayName: "Cee",
@@ -187,7 +187,7 @@ describe("UserService", () => {
     await expect(directory.getCustomer(customer.id)).resolves.toMatchObject({
       id: customer.id,
       name: "Cee",
-      email: "c@example.com",
+      email: null,
     });
     await expect(directory.getCustomer(agent.id)).resolves.toBeNull();
   });
@@ -202,7 +202,7 @@ describe("UserService: staff and customer profiles", () => {
     repo = new FakeAuthRepository();
     service = new UserService(repo.asRepository(), { setStatus: async () => {}, sync: async () => {} });
     const created = await service.bootstrapAdmin({
-      email: "root@example.com",
+      username: "root",
       displayName: "Root",
       password: "x".repeat(8),
     });
@@ -211,7 +211,7 @@ describe("UserService: staff and customer profiles", () => {
 
   const customerAccount = () =>
     service.bootstrapAccount({
-      email: "c@example.com",
+      username: "c",
       displayName: "Cust",
       password: "x".repeat(8),
       role: "CUSTOMER",
@@ -252,12 +252,12 @@ describe("UserService: staff and customer profiles", () => {
   it("refuses a taken employee or customer code with a 409 that says which", async () => {
     await service.create(admin, { ...staff, staff: { employeeCode: "E-1" } });
     await expect(
-      service.create(admin, { ...staff, email: "other@example.com", staff: { employeeCode: "E-1" } }),
+      service.create(admin, { ...staff, username: "other", staff: { employeeCode: "E-1" } }),
     ).rejects.toThrow(new ConflictError("This employee code is already in use"));
 
     const first = await customerAccount();
     const second = await service.bootstrapAccount({
-      email: "d@example.com",
+      username: "d",
       displayName: "D",
       password: "x".repeat(8),
       role: "CUSTOMER",

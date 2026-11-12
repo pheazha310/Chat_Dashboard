@@ -5,6 +5,7 @@ import { AppError, ConflictError, ForbiddenError, NotFoundError, UnauthorizedErr
 import { burnPasswordCheck, hashPassword, needsRehash, verifyPassword } from "./auth.password.js";
 import { isUniqueViolation, type AuthRepository } from "./auth.repository.js";
 import type { LosIdentity, LosTokenVerifier } from "./auth.los.js";
+import type { LosStaffCredentials } from "./auth.los-login.js";
 import type { ChangePasswordInput, DevLoginInput, LoginInput, RegisterInput } from "./auth.schema.js";
 import { hashRefreshToken, newRefreshToken, type AccessTokens } from "./auth.tokens.js";
 import {
@@ -36,7 +37,7 @@ interface Rotation {
   expiresAt: Date;
 }
 
-const INVALID_LOGIN = "Invalid email or password";
+const INVALID_LOGIN = "Invalid username or password";
 const INVALID_REFRESH = "Invalid or expired refresh token";
 const NO_PASSWORD = "This account signs in with LOS and has no password";
 
@@ -64,6 +65,8 @@ export class AuthService {
     private readonly los: LosTokenVerifier | null = null,
     /** Reads a customer's LOS application with the token they signed in with (see LoanApplicationService). */
     private readonly losApplications?: LosApplicationRefresh,
+    /** Staff sign-in with LOS username and password; null/unset when LOS_BASE_URL is not configured. */
+    private readonly losStaffLogin: LosStaffCredentials | null = null,
   ) {}
 
   /** Mobile self-registration. Always creates a CUSTOMER; staff accounts are created by an admin. */
@@ -71,14 +74,15 @@ export class AuthService {
     let user: UserRow;
     try {
       user = await this.repository.createUser({
-        email: input.email,
+        username: input.username,
+        ...(input.email === undefined ? {} : { email: input.email }),
         passwordHash: await hashPassword(input.password),
         role: "CUSTOMER",
         displayName: input.displayName,
         createdBy: null,
       });
     } catch (error) {
-      if (isUniqueViolation(error)) throw new ConflictError("An account with this email already exists");
+      if (isUniqueViolation(error)) throw new ConflictError("An account with this username already exists");
       throw error;
     }
     await this.syncIdentity(user);
@@ -86,7 +90,12 @@ export class AuthService {
   }
 
   async login(audience: Audience, input: LoginInput, client: ClientInfo): Promise<AuthTokensDto> {
-    const user = await this.repository.findUserByEmail(input.email);
+    // Staff: LOS first (their LOS username and password); anything LOS does not accept is tried as a chat account.
+    if (audience === "staff" && this.losStaffLogin && this.los) {
+      const accessToken = await this.losStaffLogin.accessToken(input.username, input.password);
+      if (accessToken) return this.signInWithLos(await this.los.verifyStaffAccess(accessToken), client);
+    }
+    const user = await this.repository.findUserByUsername(input.username);
     if (!user) {
       await burnPasswordCheck(input.password);
       throw new UnauthorizedError(INVALID_LOGIN);
@@ -107,7 +116,7 @@ export class AuthService {
 
   /**
    * Sign in with LOS: the mobile app sends the LOS customer access token it holds, the dashboard a short-lived LOS staff
-   * hand-off token. The token proves who the caller is; the account is found by its LOS id or created (no email, no
+   * hand-off token. The token proves who the caller is; the account is found by its LOS id or created (no username, no
    * password), and from then on the caller uses this backend's tokens only. For staff the role comes from LOS on every
    * sign-in; a changed role signs the account out of its other devices, as an admin role change does.
    */

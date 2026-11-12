@@ -2,7 +2,6 @@ import { useEffect, useRef, useState, type PointerEvent } from "react";
 import { canReply, useSelectedConversation } from "@/entities/conversation";
 import { AttachmentView, useConversationMessages } from "@/entities/message";
 import { MessageComposer, updateDraft } from "@/features/send-message";
-import { useCustomerCallStore } from "@/features/customer-call";
 import { useMessageSettingsStore } from "@/features/message-settings";
 import { MediaFilesPanel } from "@/features/share-files";
 import { archiveConversation, restoreConversation } from "@/features/archive-conversation";
@@ -11,7 +10,7 @@ import { TakeOverButton, takeOverConversation } from "@/features/take-over-conve
 import { useSessionStore } from "@/shared/api/session";
 import { API_URL, assets } from "@/shared/config";
 import { formatClock } from "@/shared/lib/format-time";
-import { notify, IconPill } from "@/shared/ui";
+import { confirmAction, notify, IconPill } from "@/shared/ui";
 
 export default function ExpandedChat({ onBack }: { onBack: () => void }) {
   const aiReplies = useMessageSettingsStore((state) => state.values.aiReplies);
@@ -189,7 +188,15 @@ export default function ExpandedChat({ onBack }: { onBack: () => void }) {
             className="expanded-call-trigger"
             aria-label={`Call ${conversation?.name ?? "customer"}`}
             disabled={!conversation}
-            onClick={() => conversation && useCustomerCallStore.getState().start(conversation)}
+            onClick={() =>
+              void confirmAction({
+                title: "Coming soon",
+                description: "Calling is not available yet.",
+                confirmLabel: "OK",
+                cancelLabel: "Close",
+                destructive: false,
+              })
+            }
           />
           <button
             ref={moreRef}

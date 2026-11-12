@@ -12,6 +12,7 @@ const config = {
   customerAudience: "luyleun",
   handoffAudience: "chat",
   handoffTokenType: "chat-handoff",
+  staffAccessAudience: "los-client",
 };
 
 let privateKey: CryptoKey;
@@ -60,6 +61,41 @@ describe("LosTokenVerifier", () => {
     });
     const supervisor = await sign({ ...staff, role: "SUPERVISOR" }, { aud: "chat" });
     await expect(verifier.verifyStaffHandoff(supervisor)).resolves.toMatchObject({ role: "SUPERVISOR" });
+  });
+
+  describe("staff access token (LOS username and password sign-in)", () => {
+    const access = { userId: 2, username: "admin", type: "staff", tokenType: "access", role: "ADMIN" };
+    const map = new Map([["admin", "ADMIN" as const]]);
+    const withMap = () => new LosTokenVerifier({ ...config, staffRoleMap: map }, publicKey);
+
+    it("reads an LOS staff access token (no jti needed: it never leaves the server)", async () => {
+      const token = await sign(access, { aud: "los-client", jti: null });
+      await expect(withMap().verifyStaffAccess(token)).resolves.toEqual({
+        losUserType: "STAFF",
+        losUserId: 2,
+        username: "admin",
+        role: "ADMIN",
+      });
+    });
+
+    it.each([
+      ["an unmapped admin role", () => sign(access, { aud: "los-client" }), () => verifier],
+      ["the wrong audience", () => sign(access, { aud: "chat" }), withMap],
+      ["a customer token", () => sign({ ...access, type: "customer" }, { aud: "los-client" }), withMap],
+      ["a refresh token", () => sign({ ...access, tokenType: "refresh" }, { aud: "los-client" }), withMap],
+      ["a hand-off token", () => sign({ ...access, tokenType: "chat-handoff" }, { aud: "los-client" }), withMap],
+      ["the wrong issuer", () => sign(access, { aud: "los-client", iss: "https://evil.test" }), withMap],
+    ])("refuses %s", async (_, token, subject) => {
+      await expect(subject().verifyStaffAccess(await token())).rejects.toBeInstanceOf(UnauthorizedError);
+    });
+
+    it("is off when no staff access audience is configured", async () => {
+      const { staffAccessAudience: _unused, ...without } = config;
+      const off = new LosTokenVerifier({ ...without, staffRoleMap: map }, publicKey);
+      await expect(off.verifyStaffAccess(await sign(access, { aud: "los-client" }))).rejects.toBeInstanceOf(
+        UnauthorizedError,
+      );
+    });
   });
 
   it.each([

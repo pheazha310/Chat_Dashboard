@@ -17,7 +17,8 @@
     "user:seed-test": "tsx src/scripts/seed-test-accounts.ts",
     "db:dbml": "tsx src/scripts/build-dbml.ts",
     "los:token": "tsx src/scripts/los-token.ts",
-    "los:mock": "tsx src/scripts/los-mock.ts"
+    "los:mock": "tsx src/scripts/los-mock.ts",
+    "los:check": "tsx src/scripts/los-check.ts"
   },
   "dependencies": {
     "@asteasolutions/zod-to-openapi": "^9.1.0",

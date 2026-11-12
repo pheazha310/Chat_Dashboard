@@ -2,7 +2,7 @@
   "info": {
     "name": "Chat Dashboard - Backend 2 (staff API)",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "description": "Every endpoint of the chat backend, told as one conversation. First create the test accounts once with `pnpm --filter @chat-dashboard/backend user:seed-test` (password password123). Then: the people sign in with email and password (01), the admin signs in (02), Dara opens the chat in the mobile app and asks about her loan (04), staff take it over and reply while she answers from the app (05), work on it as a team (06-08), and Bopha's phishing message is moderated (09). Folder 10 is the mobile app on its own (Sokha registers). Each request saves the ids the next ones need; see docs/postman/README.md. Staff requests use {{token}}, the app ones {{customerToken}}."
+    "description": "Every endpoint of the chat backend, told as one conversation. First create the test accounts once with `pnpm --filter @chat-dashboard/backend user:seed-test` (password password123). Then: the people sign in with username and password (01), the admin signs in (02), Dara opens the chat in the mobile app and asks about her loan (04), staff take it over and reply while she answers from the app (05), work on it as a team (06-08), and Bopha's phishing message is moderated (09). Folder 10 is the mobile app on its own (Sokha registers). Each request saves the ids the next ones need; see docs/postman/README.md. Staff requests use {{token}}, the app ones {{customerToken}}."
   },
   "auth": {
     "type": "bearer",
@@ -24,7 +24,7 @@
       "value": "http://localhost:4500"
     },
     {
-      "key": "sokhaEmail",
+      "key": "sokhaUsername",
       "value": ""
     },
     {
@@ -211,7 +211,7 @@
   "item": [
     {
       "name": "01 Start here",
-      "description": "No token needed. `GET /api/health` must say `\"database\": \"up\"`. Then the people of the story sign in with email and password (accounts from `pnpm --filter @chat-dashboard/backend user:seed-test`, password {{testPassword}}): Agent Sophea, Agent Rithy, Supervisor Srey, and the customers Dara and Bopha. Later requests use their ids and tokens.",
+      "description": "No token needed. `GET /api/health` must say `\"database\": \"up\"`. Then the people of the story sign in with username and password (accounts from `pnpm --filter @chat-dashboard/backend user:seed-test`, password {{testPassword}}): Agent Sophea, Agent Rithy, Supervisor Srey, and the customers Dara and Bopha. Later requests use their ids and tokens.",
       "item": [
         {
           "name": "GET /api/health (no auth)",
@@ -267,7 +267,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"agent1@test.local\",\n  \"password\": \"{{testPassword}}\"\n}"
+              "raw": "{\n  \"username\": \"agent1\",\n  \"password\": \"{{testPassword}}\"\n}"
             }
           },
           "event": [
@@ -308,7 +308,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"agent2@test.local\",\n  \"password\": \"{{testPassword}}\"\n}"
+              "raw": "{\n  \"username\": \"agent2\",\n  \"password\": \"{{testPassword}}\"\n}"
             }
           },
           "event": [
@@ -348,7 +348,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"supervisor@test.local\",\n  \"password\": \"{{testPassword}}\"\n}"
+              "raw": "{\n  \"username\": \"supervisor\",\n  \"password\": \"{{testPassword}}\"\n}"
             }
           },
           "event": [
@@ -388,7 +388,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"customer1@test.local\",\n  \"password\": \"{{testPassword}}\"\n}"
+              "raw": "{\n  \"username\": \"customer1\",\n  \"password\": \"{{testPassword}}\"\n}"
             }
           },
           "event": [
@@ -429,7 +429,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"customer2@test.local\",\n  \"password\": \"{{testPassword}}\"\n}"
+              "raw": "{\n  \"username\": \"customer2\",\n  \"password\": \"{{testPassword}}\"\n}"
             }
           },
           "event": [
@@ -452,7 +452,7 @@
     },
     {
       "name": "02 Staff sign-in",
-      "description": "The admin signs in with email and password and saves {{token}} and {{refreshToken}}; every later staff request uses {{token}}. See docs/api-auth.md.",
+      "description": "The admin signs in with username and password and saves {{token}} and {{refreshToken}}; every later staff request uses {{token}}. See docs/api-auth.md.",
       "item": [
         {
           "name": "Admin signs in (saves token)",
@@ -476,7 +476,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"admin@test.local\",\n  \"password\": \"{{testPassword}}\"\n}"
+              "raw": "{\n  \"username\": \"admin\",\n  \"password\": \"{{testPassword}}\"\n}"
             }
           },
           "event": [
@@ -870,7 +870,7 @@
                 "description": "Admins only. Optional staff profile: employeeCode, department, maxConcurrentChats.",
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"email\": \"agent-{{$timestamp}}@example.com\",\n  \"displayName\": \"Agent Vichea\",\n  \"role\": \"AGENT\",\n  \"password\": \"agent-password\",\n  \"staff\": {\n    \"employeeCode\": \"E-{{$timestamp}}\",\n    \"department\": \"Loans\"\n  }\n}"
+                  "raw": "{\n  \"username\": \"agent-{{$timestamp}}\",\n  \"displayName\": \"Agent Vichea\",\n  \"role\": \"AGENT\",\n  \"password\": \"agent-password\",\n  \"staff\": {\n    \"employeeCode\": \"E-{{$timestamp}}\",\n    \"department\": \"Loans\"\n  }\n}"
                 }
               },
               "event": [
@@ -4522,7 +4522,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"email\": \"{{sokhaEmail}}\",\n  \"password\": \"customer-password\",\n  \"displayName\": \"Sokha\"\n}"
+                  "raw": "{\n  \"username\": \"{{sokhaUsername}}\",\n  \"password\": \"customer-password\",\n  \"displayName\": \"Sokha\"\n}"
                 }
               },
               "event": [
@@ -4531,8 +4531,8 @@
                   "script": {
                     "type": "text/javascript",
                     "exec": [
-                      "// A new email each run, so registering works again on the same database.",
-                      "pm.collectionVariables.set('sokhaEmail', `sokha-${Date.now()}@example.com`);"
+                      "// A new username each run, so registering works again on the same database.",
+                      "pm.collectionVariables.set('sokhaUsername', `sokha-${Date.now()}`);"
                     ]
                   }
                 },
@@ -4573,7 +4573,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"email\": \"{{sokhaEmail}}\",\n  \"password\": \"customer-password\"\n}"
+                  "raw": "{\n  \"username\": \"{{sokhaUsername}}\",\n  \"password\": \"customer-password\"\n}"
                 }
               },
               "event": [

@@ -45,6 +45,12 @@ const schema = z.object({
   LOS_HANDOFF_AUDIENCE: z.string().min(1).default("chat"),
   // `tokenType` claim of the staff hand-off token.
   LOS_HANDOFF_TOKEN_TYPE: z.string().min(1).default("chat-handoff"),
+  // `aud` of the LOS staff access token this backend gets when it logs staff in to LOS with their username and password
+  // (POST /admin/auth/login tries LOS first when LOS_BASE_URL is set). Empty turns that sign-in off.
+  LOS_STAFF_ACCESS_AUDIENCE: z
+    .string()
+    .default("los-client")
+    .transform((value) => value || undefined),
   // LOS staff role names that differ from the chat's, as "losName:ROLE" pairs, e.g. "loan_officer:AGENT,manager:SUPERVISOR".
   // Names not listed are accepted when they are a chat staff role (agent, supervisor, admin; any case).
   LOS_STAFF_ROLE_MAP: z.string().default(""),

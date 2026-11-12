@@ -55,13 +55,19 @@ export class UserService {
   }
 
   /** Creates the first admin from the command line (`pnpm --filter @chat-dashboard/backend user:create-admin`). */
-  async bootstrapAdmin(input: { email: string; displayName: string; password: string }): Promise<UserDto> {
+  async bootstrapAdmin(input: {
+    username: string;
+    email?: string | undefined;
+    displayName: string;
+    password: string;
+  }): Promise<UserDto> {
     return this.bootstrapAccount({ ...input, role: "ADMIN" });
   }
 
   /** Creates an account of any role from the command line, without a signed-in admin (first admin, test accounts). */
   async bootstrapAccount(input: {
-    email: string;
+    username: string;
+    email?: string | undefined;
     displayName: string;
     password: string;
     role: Role;
@@ -146,8 +152,8 @@ export class UserService {
   async resetPassword(auth: AuthContext, userId: string, password: string): Promise<UserDto> {
     requireAdmin(auth);
     const user = await this.find(userId);
-    // A password needs an email to sign in with; an LOS-only account has none.
-    if (user.email === null) throw new ConflictError("This account signs in with LOS and has no password");
+    // A password needs a username to sign in with; an LOS-only account has none.
+    if (user.username === null) throw new ConflictError("This account signs in with LOS and has no password");
     const passwordHash = await hashPassword(password);
     await this.repository.inTransaction(async (tx) => {
       await tx.setPassword(user.id, passwordHash);
@@ -180,7 +186,8 @@ export class UserService {
   }
 
   private async createAccount(input: {
-    email: string;
+    username: string;
+    email?: string | undefined;
     displayName: string;
     role: string;
     password: string;
@@ -191,7 +198,8 @@ export class UserService {
     const user = await withProfileConflicts(async () => {
       try {
         return await this.repository.createUser({
-          email: input.email,
+          username: input.username,
+          ...(input.email === undefined ? {} : { email: input.email }),
           displayName: input.displayName,
           role: input.role,
           passwordHash,
@@ -200,7 +208,7 @@ export class UserService {
         });
       } catch (error) {
         if (isUniqueViolation(error) && !isProfileViolation(error)) {
-          throw new ConflictError("An account with this email already exists");
+          throw new ConflictError("An account with this username already exists");
         }
         throw error;
       }

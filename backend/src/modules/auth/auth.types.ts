@@ -39,7 +39,9 @@ export interface CustomerFields {
 /** A user as the API returns it. Never carries the password hash or lockout counters. */
 export interface UserDto {
   id: string;
-  /** Null for an account that only signs in through LOS. */
+  /** The sign-in name; null for an account that only signs in through LOS. */
+  username: string | null;
+  /** Optional contact address; not used to sign in. */
   email: string | null;
   /** The LOS userId when the account is linked to LOS. */
   losUserId: number | null;
@@ -67,6 +69,7 @@ export interface AuthTokensDto {
 /** The `users` columns the services read. */
 export interface UserRow {
   id: string;
+  username: string | null;
   email: string | null;
   passwordHash: string | null;
   losUserId: number | null;
@@ -102,6 +105,7 @@ export const DEFAULT_AUTH_OPTIONS: AuthOptions = {
 
 export const toUser = (row: UserRow): UserDto => ({
   id: row.id,
+  username: row.username,
   email: row.email,
   losUserId: row.losUserId,
   displayName: row.displayName,

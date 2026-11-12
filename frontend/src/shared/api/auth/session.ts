@@ -4,7 +4,9 @@ import { API_URL, AUTH_SESSION_KEY, DEV_AUTH_TOKEN } from "@/shared/config";
 /** The signed-in staff member, as `POST /auth/login` returns it (`docs/api-auth.md`). */
 export type AuthUser = {
   id: string;
-  /** Null for an account that signs in only with LOS. */
+  /** The sign-in name; null for an account that signs in only with LOS. */
+  username: string | null;
+  /** Optional contact address. */
   email: string | null;
   displayName: string;
   role: string;
@@ -108,8 +110,8 @@ async function post<T>(path: string, body: unknown): Promise<T | undefined> {
 }
 
 /** Signs a staff member in. Throws `AuthError` with the server's message (wrong password, locked, disabled, ...). */
-export async function signIn(email: string, password: string): Promise<AuthUser> {
-  const session = await post<AuthSession>("/auth/login", { email, password });
+export async function signIn(username: string, password: string): Promise<AuthUser> {
+  const session = await post<AuthSession>("/auth/login", { username, password });
   if (!session) throw new AuthError(0, "UNKNOWN_ERROR", "Unexpected answer from the chat backend");
   saveSession(session);
   return session.user;

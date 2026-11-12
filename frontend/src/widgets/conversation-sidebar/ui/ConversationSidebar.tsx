@@ -169,7 +169,7 @@ export default function ConversationSidebar({ open, onClose, onExpand }: Props) 
           }}
         />
       </div>
-      {(totalPages > 1 || canGoNext) && (
+      {visible.length > 0 && (
         <nav className="conversation-pager" aria-label="Conversation pages">
           <button type="button" disabled={page <= 1} onClick={() => setPage(page - 1)} aria-label="Previous page">
             ‹ Prev

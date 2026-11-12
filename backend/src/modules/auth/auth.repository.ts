@@ -6,6 +6,7 @@ import type { CustomerFields, StaffFields, UserRow } from "./auth.types.js";
 
 const userSelect = {
   id: true,
+  username: true,
   email: true,
   passwordHash: true,
   losUserId: true,
@@ -21,7 +22,7 @@ const userSelect = {
   customer: { select: { phone: true, customerCode: true, preferredLanguage: true } },
 } as const;
 
-/** True for a unique-constraint violation (a second account with the same email). */
+/** True for a unique-constraint violation (a second account with the same username). */
 export const isUniqueViolation = (error: unknown) =>
   typeof error === "object" && error !== null && (error as { code?: unknown }).code === "P2002";
 
@@ -55,8 +56,8 @@ export class AuthRepository {
 
   // ─── users ─────────────────────────────────────────────────────────────────
 
-  findUserByEmail(email: string): Promise<UserRow | null> {
-    return this.db.authUser.findUnique({ where: { email }, select: userSelect });
+  findUserByUsername(username: string): Promise<UserRow | null> {
+    return this.db.authUser.findUnique({ where: { username }, select: userSelect });
   }
 
   findUserByLos(losUserType: string, losUserId: number): Promise<UserRow | null> {
@@ -66,7 +67,7 @@ export class AuthRepository {
     });
   }
 
-  /** An account that signs in only through LOS: no email, no password. Created with its profile row. */
+  /** An account that signs in only through LOS: no username, no password. Created with its profile row. */
   createLosUser(data: { losUserType: string; losUserId: number; role: string; displayName: string }): Promise<UserRow> {
     return this.db.authUser.create({
       data: { ...data, createdBy: null, ...profileFor(data.role) },
@@ -85,7 +86,8 @@ export class AuthRepository {
 
   /** Creates the account and its profile row together (`staff` fields apply to staff roles only). */
   createUser(data: {
-    email: string;
+    username: string;
+    email?: string | undefined;
     passwordHash: string;
     role: string;
     displayName: string;
@@ -152,6 +154,7 @@ export class AuthRepository {
         ? {}
         : {
             OR: [
+              { username: { contains: q, mode: "insensitive" as const } },
               { email: { contains: q, mode: "insensitive" as const } },
               { displayName: { contains: q, mode: "insensitive" as const } },
             ],

@@ -30,7 +30,14 @@ import {
   type AuthSession,
 } from "./session";
 
-const user = { id: "u1", email: "ann@example.com", displayName: "Ann", role: "AGENT", status: "ACTIVE" };
+const user = {
+  id: "u1",
+  username: "ann",
+  email: "ann@example.com",
+  displayName: "Ann",
+  role: "AGENT",
+  status: "ACTIVE",
+};
 const session = (n: number, expiresInMs = 900_000): AuthSession => ({
   accessToken: `access-${n}`,
   accessTokenExpiresAt: new Date(Date.now() + expiresInMs).toISOString(),
@@ -60,25 +67,25 @@ describe("auth session", () => {
   it("signs in: posts the credentials and keeps the session", async () => {
     const fetchMock = vi.fn().mockResolvedValue(ok(session(1)));
     vi.stubGlobal("fetch", fetchMock);
-    await expect(signIn("ann@example.com", "pw")).resolves.toEqual(user);
+    await expect(signIn("ann", "pw")).resolves.toEqual(user);
 
     const [url, init] = fetchMock.mock.calls[0]!;
     expect(url).toBe("http://localhost:4000/api/v1/admin/auth/login");
-    expect(JSON.parse(init.body)).toEqual({ email: "ann@example.com", password: "pw" });
+    expect(JSON.parse(init.body)).toEqual({ username: "ann", password: "pw" });
     expect(readSession()?.accessToken).toBe("access-1");
     expect(useAuthStore.getState().user).toEqual(user);
   });
 
   it("reports the server's message when sign-in is refused, and keeps nothing", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(fail(401, "UNAUTHORIZED", "Invalid email or password")));
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(fail(401, "UNAUTHORIZED", "Invalid username or password")));
     await expect(signIn("ann@example.com", "bad")).rejects.toMatchObject({
       name: "AuthError",
       status: 401,
-      message: "Invalid email or password",
+      message: "Invalid username or password",
     });
     expect(readSession()).toBeNull();
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("offline")));
-    await expect(signIn("ann@example.com", "pw")).rejects.toMatchObject({ code: "NETWORK_ERROR" });
+    await expect(signIn("ann", "pw")).rejects.toMatchObject({ code: "NETWORK_ERROR" });
   });
 
   it("refreshes once for concurrent callers and stores the rotated pair", async () => {

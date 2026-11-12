@@ -139,7 +139,7 @@ new numbered folder before 10, keeping the mobile folder last).
 
 ### Running the whole collection
 
-Everyone signs in with **email and password**; no LOS and no dev mode are needed (`AUTH_MODE=jwt` works). Create the
+Everyone signs in with **username and password**; no LOS and no dev mode are needed (`AUTH_MODE=jwt` works). Create the
 test accounts once:
 
 ```sh
@@ -169,7 +169,7 @@ The collection then tells one conversation, top to bottom, each request saving t
    **resolve**, archive and restore the conversation.
 6. **09 Moderation:** Bopha sends a phishing link from the app. Staff report it, block her, lift the block, block her by
    id, and lift it again at the end.
-7. **10 Mobile app:** **Sokha** registers in the app (a new email each run) and uses every customer endpoint.
+7. **10 Mobile app:** **Sokha** registers in the app (a new username each run) and uses every customer endpoint.
 
 ```sh
 npx newman run docs/postman/chat-dashboard.postman_collection.json --working-dir docs/postman \
@@ -231,13 +231,33 @@ Full event list: [../websocket-events.md](../websocket-events.md).
 - Send the same `clientId` twice: **201**, then **200**.
 - A wrong URL such as `GET /` or `/api/conversations` returns 404 (the staff API is under `/api/v1/admin`).
 
-## Testing against the real LOS (Dev)
+## Chat flow and real LOS (Dev): `los-dev.*`
 
-`los-dev.postman_collection.json` and `los-dev.postman_environment.json` call the real Dev LOS (`https://api-dev.los.delightech.asia/api/v1`)
-and your local Chat backend. Import both, fill `customerPhone` and `customerPin` (and `staffUsername`/`staffPassword` for
-folder B) in Postman, and keep them out of git. The backend must run with `LOS_ISSUER=los-backend` and the Dev
-`LOS_JWKS_URL` (see `backend/.env.example`). Run the folders in order: **0** connectivity, **A** customer sign-in
-(LOS login, claim checks, Chat session, same user on a second run), **B** staff hand-off, **C** the LOS loan-data
-endpoints that exist today. Folder B's claim checks (`aud` chat, `tokenType` chat-handoff, a `jti`) fail until LOS issues
-the Chat hand-off token; that is the point. The LOS login bodies are assumptions (the pack names the paths only) and LOS
-limits logins (5 per 15 minutes for customers), so do not run login in a loop. Tokens are never printed.
+`los-dev.postman_collection.json` and `los-dev.postman_environment.json` run the Chat flow against your local backend
+(`chatUrl`, default `http://localhost:4000`). Import both, start the backend, and **Run collection**: it needs no setup
+and passes on a re-run. Leave `chatCustomerUsername` empty and the first run creates a throwaway test customer and
+reuses it; fill it in to use your own. The environment also holds the seeded dev staff account (`agent1`, see
+`pnpm --filter @chat-dashboard/backend user:seed-test`); change it for your own. If a real agent takes the test
+customer's conversation in the dashboard, the staff steps get 404: clear `chatCustomerUsername` to start a new customer.
+
+**Bruno.** The same two files import into Bruno (_Import collection_ → Postman, and _Import environment_). They are
+checked in Bruno's CLI too (`bru run -r --env dev`: 28 passed, 20 optional skipped). Bruno has no Postman working
+directory: for `runPdf`, pick `fixtures/sample.pdf` in the upload request's file field.
+
+1. **Customer.** Register (201, or 409 when it already exists), log in with username and password, refresh, join, send
+   text (and the same text again: 200, no duplicate) and read messages.
+2. **Staff.** Log in, read the customer's conversation, **take it** (an agent can reply only to a conversation they
+   own), reply and release it. It uses the `chatConvId` the Customer folder saves.
+3. **Checks.** Wrong password, unknown user, wrong endpoint, bad body, made-up refresh and LOS tokens, no token and a
+   customer token on the staff API must all be refused.
+4. **Sign out.** Ends both sign-ins.
+
+The "Optional" folders are skipped until you turn them on with an environment variable set to `yes`:
+
+- `runPdf`: the customer sends `fixtures/sample.pdf` and staff download it. Copy `docs/postman/fixtures/sample.pdf` into
+  Postman's working directory first (or pick the file in the request's `file` field).
+- `runLos`: the real Dev LOS (`https://api-dev.los.delightech.asia/api/v1`): customer sign-in with LOS (fill
+  `customerUsername` and `customerPin`, the LOS password; LOS allows 5 customer logins per 15 minutes, so do not loop
+  it), LOS connectivity, the staff hand-off from LOS Web (its claim checks fail until LOS issues the Chat hand-off
+  token, which is the point), the LOS loan-data endpoints, and "see real loan data in Chat". The backend must run with
+  `LOS_ISSUER=los-backend` and the Dev `LOS_JWKS_URL` (see `backend/.env.example`). Tokens are never printed.

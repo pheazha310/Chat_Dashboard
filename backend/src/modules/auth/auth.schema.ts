@@ -12,6 +12,20 @@ export const emailSchema = z
   .pipe(z.email({ error: "Invalid email" }))
   .transform((value) => value.toLowerCase());
 
+/** The sign-in name: 3-32 characters of a-z, 0-9, `.`, `_`, `-`, starting with a letter or digit. Stored lower-case. */
+export const usernameSchema = z
+  .string()
+  .trim()
+  .transform((value) => value.toLowerCase())
+  .pipe(
+    z
+      .string()
+      .regex(
+        /^[a-z0-9][a-z0-9._-]{2,31}$/,
+        "3-32 characters: letters, digits, '.', '_' or '-', starting with a letter or digit",
+      ),
+  );
+
 /** Length only (NIST 800-63B): at least 8 characters, at most 128 so hashing stays bounded. No composition rules. */
 export const newPasswordSchema = z.string().min(8, "At least 8 characters").max(128, "At most 128 characters");
 /** A password being checked, not set: any non-empty string up to the same bound. */
@@ -19,10 +33,12 @@ const passwordSchema = z.string().min(1).max(128);
 
 const displayName = z.string().trim().min(1).max(100);
 
-export const loginBody = z.object({ email: emailSchema, password: passwordSchema }).strict();
+export const loginBody = z.object({ username: usernameSchema, password: passwordSchema }).strict();
 export type LoginInput = z.infer<typeof loginBody>;
 
-export const registerBody = z.object({ email: emailSchema, password: newPasswordSchema, displayName }).strict();
+export const registerBody = z
+  .object({ username: usernameSchema, email: emailSchema.optional(), password: newPasswordSchema, displayName })
+  .strict();
 export type RegisterInput = z.infer<typeof registerBody>;
 
 export const refreshBody = z.object({ refreshToken: z.string().min(20).max(200) }).strict();
@@ -124,7 +140,8 @@ export type ListUsersQuery = z.infer<typeof listUsersQuery>;
 
 export const createUserBody = z
   .object({
-    email: emailSchema,
+    username: usernameSchema,
+    email: emailSchema.optional(),
     displayName,
     role: z.enum(STAFF_ROLES),
     password: newPasswordSchema,

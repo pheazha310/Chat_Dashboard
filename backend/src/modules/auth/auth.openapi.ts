@@ -40,7 +40,11 @@ const customerProfile = z
 const user = z
   .object({
     id: z.string(),
-    email: z.string().nullable().openapi({ description: "Null for an account that only signs in with LOS" }),
+    username: z
+      .string()
+      .nullable()
+      .openapi({ description: "The sign-in name; null for an account that only signs in with LOS" }),
+    email: z.string().nullable().openapi({ description: "Optional contact address; not used to sign in" }),
     losUserId: z.number().int().nullable().openapi({ description: "The LOS userId when the account is linked to LOS" }),
     displayName: z.string(),
     role: z.enum(ROLES),
@@ -78,7 +82,7 @@ export function registerAuthOpenApi(registry: OpenAPIRegistry) {
     tags,
     summary: "Sign in (staff)",
     description:
-      "Agents, supervisors and admins. A wrong password, an unknown email and a customer account all answer the same 401. After 5 wrong passwords in a row the account is locked for 15 minutes (429 `ACCOUNT_LOCKED`). A disabled account answers 403 once the password is right.",
+      "Agents, supervisors and admins. With LOS configured the username and password are tried against LOS first (the LOS access token is verified, role from LOS), then as a chat account. A wrong password, an unknown username and a customer account all answer the same 401. After 5 wrong passwords in a row the account is locked for 15 minutes (429 `ACCOUNT_LOCKED`). A disabled account answers 403 once the password is right.",
     request: { body: jsonBody(loginBody) },
     responses: {
       200: ok("Tokens", successOf(tokens)),
@@ -94,7 +98,7 @@ export function registerAuthOpenApi(registry: OpenAPIRegistry) {
     tags,
     summary: "Sign in with LOS (staff)",
     description:
-      "Exchanges the short-lived LOS staff hand-off token (RS256, `aud` = LOS_HANDOFF_AUDIENCE, `type` = staff, `tokenType` = LOS_HANDOFF_TOKEN_TYPE, a staff `role`) for this backend's tokens. The account is found by its LOS userId or created without email or password; the role follows LOS on every sign-in. Any problem with the token is the same 401. 503 `LOS_SIGN_IN_DISABLED` when LOS is not configured. The mobile app uses `POST /api/v1/customer/auth/los` with `{ losToken }`.",
+      "Exchanges the short-lived LOS staff hand-off token (RS256, `aud` = LOS_HANDOFF_AUDIENCE, `type` = staff, `tokenType` = LOS_HANDOFF_TOKEN_TYPE, a staff `role`) for this backend's tokens. The account is found by its LOS userId or created without username or password; the role follows LOS on every sign-in. Any problem with the token is the same 401. 503 `LOS_SIGN_IN_DISABLED` when LOS is not configured. The mobile app uses `POST /api/v1/customer/auth/los` with `{ losToken }`.",
     request: { body: jsonBody(losStaffBody) },
     responses: {
       200: ok("Tokens", successOf(tokens)),
@@ -168,7 +172,8 @@ export function registerAuthOpenApi(registry: OpenAPIRegistry) {
     tags: userTags,
     security,
     summary: "List accounts",
-    description: "Supervisors and admins. Filter by `role`, `status`, or `q` (email or name, case-insensitive).",
+    description:
+      "Supervisors and admins. Filter by `role`, `status`, or `q` (username, email or name, case-insensitive).",
     request: { query: listUsersQuery },
     responses: { 200: ok("Accounts", pagedOf(user)), 400: errors[400], 401: errors[401], 403: errors[403] },
   });
@@ -179,7 +184,7 @@ export function registerAuthOpenApi(registry: OpenAPIRegistry) {
     security,
     summary: "Create a staff account",
     description:
-      "Admins only. Roles AGENT, SUPERVISOR or ADMIN; customers register themselves in the mobile app. Optional `staff` fields (employeeCode, department, maxConcurrentChats) fill the account's `staff` row. 409 if the email or the employee code is taken.",
+      "Admins only. Roles AGENT, SUPERVISOR or ADMIN; customers register themselves in the mobile app. Optional `staff` fields (employeeCode, department, maxConcurrentChats) fill the account's `staff` row. 409 if the username or the employee code is taken.",
     request: { body: jsonBody(createUserBody) },
     responses: {
       201: ok("Account", successOf(user)),
@@ -224,7 +229,7 @@ export function registerAuthOpenApi(registry: OpenAPIRegistry) {
     security,
     summary: "Set a new password",
     description:
-      "Admins only. Clears a sign-in lock and signs the user out everywhere. 409 for an LOS-only account (it has no email to sign in with).",
+      "Admins only. Clears a sign-in lock and signs the user out everywhere. 409 for an LOS-only account (it has no username to sign in with).",
     request: { params: userParams, body: jsonBody(resetPasswordBody) },
     responses: {
       200: ok("Account", successOf(user)),

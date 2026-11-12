@@ -2,7 +2,7 @@
 
 This backend owns sign-in for everyone: dashboard staff (`AGENT`, `SUPERVISOR`, `ADMIN`) and mobile customers
 (`CUSTOMER`). It stores accounts and scrypt password hashes, issues access and refresh tokens, and manages accounts.
-People sign in with email and password, or with a token from LOS (the loan system, see [Sign in with LOS](#sign-in-with-los)).
+People sign in with username and password, or with a token from LOS (the loan system, see [Sign in with LOS](#sign-in-with-los)).
 Interactive reference for the staff routes: `GET /api/v1/admin/openapi.json` (tags _Auth_ and _Users_). Envelope:
 `{ "status": "success", "data": ... }`; errors `{ "status": "error", "error": { code, message, details? } }`.
 
@@ -51,7 +51,7 @@ POST /api/v1/dev/login
   `Dev Staff` / `Dev Customer`). Staff `role`: `agent`, `supervisor` or `admin`, any case (default `agent`); LOS role
   names from `LOS_STAFF_ROLE_MAP` are not used here.
 - It runs the same account logic as `POST /auth/los`: the account is found by (`type`, `userId`) or created as an
-  LOS-only account (no email or password, `losUserId` set, with its `staff` or `customers` row); the role and name
+  LOS-only account (no username or password, `losUserId` set, with its `staff` or `customers` row); the role and name
   follow what you send, and a changed role signs that account out of its other devices. So a dev account is the very
   account a real LOS token for that user reaches later.
 - The answer is the same as `POST /auth/login`; staff tokens work on `/api/v1/admin`, customer tokens on
@@ -71,6 +71,7 @@ POST /api/v1/dev/login
   "refreshTokenExpiresAt": "2026-12-07T10:00:00.000Z",
   "user": {
     "id": "6f1c…",
+    "username": "ann",
     "email": "ann@example.com",
     "losUserId": null,
     "displayName": "Ann",
@@ -92,8 +93,8 @@ same `401` as a wrong password, and a refresh token only works at the prefix it 
 
 | Method and path (after the prefix) | Auth         | Body                                              | Notes                                                                                                                                                                                        |
 | ---------------------------------- | ------------ | ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `POST /auth/register`              | none         | `{ email, password, displayName }`                | **Customer prefix only.** Creates a `CUSTOMER` and signs in. `201`; `409` if the email is taken                                                                                              |
-| `POST /auth/login`                 | none         | `{ email, password }`                             | `401` wrong email/password; `429 ACCOUNT_LOCKED`; `403` disabled                                                                                                                             |
+| `POST /auth/register`              | none         | `{ username, password, displayName, email? }`     | **Customer prefix only.** Creates a `CUSTOMER` and signs in. `201`; `409` if the username is taken                                                                                           |
+| `POST /auth/login`                 | none         | `{ username, password }`                          | `401` wrong username/password; `429 ACCOUNT_LOCKED`; `403` disabled                                                                                                                          |
 | `POST /auth/los`                   | none         | customer `{ losToken }`, staff `{ handoffToken }` | Sign in with LOS (below). `401` any token problem; `403` disabled; `503 LOS_SIGN_IN_DISABLED` if LOS is not configured, `503 LOS_SIGN_IN_UNAVAILABLE` if a hand-off token cannot be recorded |
 | `POST /auth/refresh`               | none         | `{ refreshToken }`                                | New pair; `401` unknown, expired, reused or disabled                                                                                                                                         |
 | `POST /auth/logout`                | none         | `{ refreshToken }`                                | Ends that sign-in. Always `204`                                                                                                                                                              |
@@ -103,9 +104,28 @@ same `401` as a wrong password, and a refresh token only works at the prefix it 
 
 Rules for input:
 
-- **Email** is trimmed and lower-cased (`Ann@Example.com` is the same account as `ann@example.com`); at most 254 characters.
+- **Username** is trimmed and lower-cased (`Ann` is the same account as `ann`); 3 to 32 characters of `a-z`, `0-9`, `.`, `_`, `-`, starting with a letter or digit.
+- **Email** is an optional contact address, trimmed and lower-cased, at most 254 characters, unique; it is not used to sign in.
 - **Password**: 8 to 128 characters, no composition rules (NIST 800-63B). Compared after Unicode NFKC normalisation.
 - Unknown body keys are `400`.
+
+### Staff sign-in with LOS username and password
+
+When LOS sign-in is configured (`LOS_ISSUER`, a key, and `LOS_BASE_URL`), `POST /api/v1/admin/auth/login` first tries the
+credentials against LOS: this backend calls LOS `POST /admin/auth/login` with the username and password and gets the LOS
+staff **access token** (`aud` = `LOS_STAFF_ACCESS_AUDIENCE`, default `los-client`; `type: "staff"`, `tokenType: "access"`).
+It verifies that token like any LOS token (RS256 signature, `iss`, role via `LOS_STAFF_ROLE_MAP`) and signs the staff
+member into their LOS-only account, as `POST /auth/los` does. The token never leaves the server, so, unlike the hand-off
+token, it needs no `jti` or one-use rule. The password and token are used for that one LOS request only, never stored or
+logged. If LOS refuses the credentials or cannot be reached, the same request falls back to a chat account's own
+username and password. A wrong LOS role (not agent/supervisor or mapped) is `401`. Customers
+(`/api/v1/customer/auth/login`) never go to LOS.
+
+For a whole team: every LOS staff role must be in `LOS_STAFF_ROLE_MAP` (or be `agent`/`supervisor`), or that person gets
+`401`; the first sign-in of each person creates their account, later ones reuse it. All LOS logins come from this server's
+IP, and LOS limits staff logins (the Postman pack says 20 per 15 minutes, per what is not documented), so a burst of
+sign-ins can hit that limit: the answer is then `429 LOS_RATE_LIMITED` ("try again in a minute"), not a wrong-password
+message. Ask LOS whether the limit is per IP and, if so, to allowlist this server or raise it. Empty `LOS_STAFF_ACCESS_AUDIENCE` turns this off.
 
 ### Sign in with LOS
 
@@ -133,7 +153,7 @@ on the client only uses this backend's tokens (refresh as usual); the LOS token 
   whose life (`exp` - `iat`) is longer than `LOS_HANDOFF_TOKEN_MAX_AGE` is refused too. The customer's
   LOS access token is not single-use: the app keeps it and may exchange it again.
 - **Accounts:** found by (`los_user_type`, `los_user_id`); LOS numbers customers and staff separately, so customer 2 and
-  staff member 2 are two accounts. The first sign-in creates an account **without email or password** (`email: null`);
+  staff member 2 are two accounts. The first sign-in creates an account **without username or password** (`username: null`);
   it cannot use `/auth/login`, change a password (`409`) or be given one by an admin (`409`). `display_name` follows the
   LOS `username` on every sign-in. For staff the **role follows LOS** on every sign-in; a changed role ends the account's
   other sign-ins, as an admin role change does. Admins cannot change an LOS account's role (`409`); change it in LOS. A `DISABLED` account is refused (`403`) even with a valid LOS token.
@@ -143,7 +163,7 @@ on the client only uses this backend's tokens (refresh as usual); the LOS token 
   sets the account to `DISABLED` (`PATCH /users/:userId`); for LOS staff, consider a shorter `REFRESH_TOKEN_TTL_DAYS`.
 - LOS tokens are accepted up to 30 seconds past `exp` (clock difference between LOS and this server). If the LOS keys
   cannot be loaded (`LOS_JWKS_URL` unreachable), every LOS sign-in answers `401` and a warning is logged.
-- An existing email/password account is not merged with an LOS account (the LOS token carries no email).
+- An existing email/password account is not merged with an LOS account (the LOS token carries no username).
 - Not configured (`LOS_ISSUER` unset): both endpoints answer `503 LOS_SIGN_IN_DISABLED`.
 
 **The real LOS (from the LOS integration pack, 2026-11-11).** `LOS_ISSUER=los-backend`; `LOS_JWKS_URL` is
@@ -225,18 +245,18 @@ from `.env` before pointing the backend at the real LOS.
   down, requests are let through rather than locking everyone out. Behind a load balancer set `TRUST_PROXY` to the
   number of proxies so the real client IP is used.
 - **Per user:** `POST /auth/me/password` allows the same number of requests per minute per signed-in user.
-- An unknown email takes as long as a wrong password (a dummy hash is checked), so timing does not reveal accounts.
-  Registration does reveal that an email is taken (`409`), as any sign-up form must.
+- An unknown username takes as long as a wrong password (a dummy hash is checked), so timing does not reveal accounts.
+  Registration does reveal that a username is taken (`409`), as any sign-up form must.
 
 ## Account management (`/api/v1/admin/users`)
 
-| Method and path                           | Who            | Body                                                    | Notes                                                                                        |
-| ----------------------------------------- | -------------- | ------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `GET /users?role=&status=&q=&page=&size=` | `users.read`   |                                                         | Paged. `q` matches email or name, case-insensitive                                           |
-| `GET /users/:userId`                      | `users.read`   |                                                         |                                                                                              |
-| `POST /users`                             | `users.manage` | `{ email, displayName, role, password, staff? }`        | Staff roles only (`AGENT`, `SUPERVISOR`, `ADMIN`). `201`; `409` email or employee code taken |
-| `PATCH /users/:userId`                    | `users.manage` | any of `{ displayName, role, status, staff, customer }` | See rules below                                                                              |
-| `POST /users/:userId/password`            | `users.manage` | `{ password }`                                          | Sets a new password, clears a lock, ends every sign-in; `409` for an LOS-only account        |
+| Method and path                           | Who            | Body                                                        | Notes                                                                                        |
+| ----------------------------------------- | -------------- | ----------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `GET /users?role=&status=&q=&page=&size=` | `users.read`   |                                                             | Paged. `q` matches username, email or name, case-insensitive                                 |
+| `GET /users/:userId`                      | `users.read`   |                                                             |                                                                                              |
+| `POST /users`                             | `users.manage` | `{ username, displayName, role, password, email?, staff? }` | Staff roles only (`AGENT`, `SUPERVISOR`, `ADMIN`). `201`; `409` email or employee code taken |
+| `PATCH /users/:userId`                    | `users.manage` | any of `{ displayName, role, status, staff, customer }`     | See rules below                                                                              |
+| `POST /users/:userId/password`            | `users.manage` | `{ password }`                                              | Sets a new password, clears a lock, ends every sign-in; `409` for an LOS-only account        |
 
 `users.read` is granted to supervisors and admins, `users.manage` to admins, by default; admins can change that
 (`docs/api-roles.md`).
@@ -262,7 +282,7 @@ from `.env` before pointing the backend at the real LOS.
 There is no sign-up for staff. Create the first admin from the command line (reads `DATABASE_URL`):
 
 ```sh
-ADMIN_EMAIL=admin@example.com ADMIN_NAME="Ops Admin" ADMIN_PASSWORD='a long password' \
+ADMIN_USERNAME=admin ADMIN_NAME="Ops Admin" ADMIN_PASSWORD='a long password' \
   pnpm --filter @chat-dashboard/backend user:create-admin
 ```
 
@@ -278,14 +298,14 @@ that already exist):
 pnpm --filter @chat-dashboard/backend user:seed-test   # password: password123, or set SEED_PASSWORD
 ```
 
-| Email                   | Role       |
-| ----------------------- | ---------- |
-| `admin@test.local`      | ADMIN      |
-| `supervisor@test.local` | SUPERVISOR |
-| `agent1@test.local`     | AGENT      |
-| `agent2@test.local`     | AGENT      |
-| `customer1@test.local`  | CUSTOMER   |
-| `customer2@test.local`  | CUSTOMER   |
+| Username     | Role       |
+| ------------ | ---------- |
+| `admin`      | ADMIN      |
+| `supervisor` | SUPERVISOR |
+| `agent1`     | AGENT      |
+| `agent2`     | AGENT      |
+| `customer1`  | CUSTOMER   |
+| `customer2`  | CUSTOMER   |
 
 Staff sign in with `POST /api/v1/admin/auth/login`, customers with `POST /api/v1/customer/auth/login`.
 
@@ -316,6 +336,7 @@ checked against `users.role` and `users.status` (`AccountCheckedAuthClient`). Di
 | `LOS_PUBLIC_KEY`                                 | —              | One LOS RS256 public key (PEM, `\n` allowed for newlines)                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | `LOS_CUSTOMER_AUDIENCE`                          | `luyleun`      | `aud` of the LOS customer access token                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | `LOS_HANDOFF_AUDIENCE`                           | `chat`         | `aud` of the LOS staff hand-off token                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `LOS_STAFF_ACCESS_AUDIENCE`                      | `los-client`   | `aud` of the LOS staff access token received at LOS username/password sign-in; empty turns it off                                                                                                                                                                                                                                                                                                                                                                                      |
 | `LOS_HANDOFF_TOKEN_TYPE`                         | `chat-handoff` | `tokenType` claim of the hand-off token                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | `LOS_BASE_URL`                                   | unset          | The LOS API (also turns on reading a customer's application at their LOS sign-in: api-conversations.md, "Loan application behind a conversation") (also turns on reading a customer's application at their LOS sign-in: api-conversations.md, "Loan application behind a conversation") (Dev `https://api-dev.los.delightech.asia/api/v1`, Staging `https://api-uat.los.delightech.asia/api/v1`). Its host must equal the `LOS_JWKS_URL` host: each environment signs with its own key |
 | `LOS_STAFF_SESSION_SECONDS`                      | `3600`         | How long a staff session started by an LOS hand-off lasts (300-86400), fixed at sign-in; then the dashboard needs a fresh hand-off, which LOS refuses for suspended staff and which carries a changed role. Passwords and customers are unaffected                                                                                                                                                                                                                                     |
@@ -333,7 +354,7 @@ Rotating `JWT_SECRET` invalidates every access token at once; clients recover wi
 
 - Email verification, "forgot password" by email, and multi-factor sign-in (no mail service exists here). Until then an
   admin resets a password with `POST /users/:userId/password`.
-- The dashboard has no LOS hand-off screen yet: it still signs staff in with email and password.
+- The dashboard has no LOS hand-off screen yet: it still signs staff in with username and password.
 - The dashboard signs staff in with these endpoints (sign-in screen, refresh, sign-out; `docs/frontend-integration.md`).
   It has no screens yet for password change or account management.
 

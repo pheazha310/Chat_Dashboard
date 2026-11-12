@@ -72,12 +72,13 @@ model RolePermission {
 }
 
 /// Sign-in accounts (staff and customers). This backend owns authentication: `users.id` is the id carried in access
-/// tokens (`sub`) and stored in every other table's user/agent/customer id columns. An account signs in with email and
-/// password, with an LOS token (`los_user_id`), or both; an LOS-only account has no email or password.
+/// tokens (`sub`) and stored in every other table's user/agent/customer id columns. An account signs in with username and
+/// password, with an LOS token (`los_user_id`), or both; an LOS-only account has no username or password.
 model AuthUser {
   id                String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  email             String?        @unique @db.VarChar(254) /// Lower-case; unique. Null for an account that only signs in through LOS
-  passwordHash      String?        @map("password_hash") @db.VarChar(255) /// scrypt$N$r$p$salt$hash, never returned by the API. Set exactly when email is (CHECK)
+  username          String?        @unique @db.VarChar(32) /// The sign-in name: 3-32 of a-z 0-9 . _ - (lower-case, CHECK); unique. Null for an account that only signs in through LOS
+  email             String?        @unique @db.VarChar(254) /// Optional contact address (lower-case; unique); not used to sign in
+  passwordHash      String?        @map("password_hash") @db.VarChar(255) /// scrypt$N$r$p$salt$hash, never returned by the API. Set exactly when username is (CHECK)
   losUserId         Int?           @map("los_user_id") /// The LOS userId, for accounts that sign in with an LOS token
   losUserType       String?        @map("los_user_type") @db.VarChar(20) /// CUSTOMER or STAFF (LOS numbers each kind separately); set exactly when los_user_id is (CHECK)
   role              String         @db.VarChar(20) /// roles.name: CUSTOMER, AGENT, SUPERVISOR, ADMIN

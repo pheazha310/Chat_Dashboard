@@ -92,21 +92,21 @@ describe.skipIf(!url || !redisUrl)("live chat between a customer and an agent (H
   };
 
   /** A mobile customer who registers in the app. */
-  const registerCustomer = async (email: string, displayName: string) => {
+  const registerCustomer = async (username: string, displayName: string) => {
     const session = await ok(
       "POST",
       "/customer/auth/register",
       null,
-      { email, password: "customer-pw-1", displayName },
+      { username, password: "customer-pw-1", displayName },
       201,
     );
     return { token: session.accessToken as string, id: session.user.id as string };
   };
 
   /** A dashboard agent created by an admin, who signs in with a password. */
-  const signInAgent = async (email: string, displayName: string) => {
-    await users.bootstrapAccount({ email, displayName, password: AGENT_PASSWORD, role: "AGENT" });
-    const session = await ok("POST", "/admin/auth/login", null, { email, password: AGENT_PASSWORD });
+  const signInAgent = async (username: string, displayName: string) => {
+    await users.bootstrapAccount({ username, displayName, password: AGENT_PASSWORD, role: "AGENT" });
+    const session = await ok("POST", "/admin/auth/login", null, { username, password: AGENT_PASSWORD });
     return { token: session.accessToken as string, id: session.user.id as string };
   };
 
@@ -129,8 +129,8 @@ describe.skipIf(!url || !redisUrl)("live chat between a customer and an agent (H
 
   /** Customer opens the chat screen, agent opens the dashboard; both sockets are connected. */
   async function setUp() {
-    const customer = await registerCustomer("dara@example.com", "Dara");
-    const agent = await signInAgent("sophea@example.com", "Sophea");
+    const customer = await registerCustomer("dara", "Dara");
+    const agent = await signInAgent("sophea", "Sophea");
     const conversation = await ok("POST", "/customer/conversations/join", customer.token, {}, 201);
     const agentWs = await connect(agent.token, ORIGIN);
     const customerWs = await connect(customer.token);
@@ -273,9 +273,9 @@ describe.skipIf(!url || !redisUrl)("live chat between a customer and an agent (H
 
   it("keeps the chat private: other customers and agents who do not own it see nothing", async () => {
     const { customer, agent, conversationId: id, agentWs, customerWs } = await setUp();
-    const other = await registerCustomer("noah@example.com", "Noah");
+    const other = await registerCustomer("noah", "Noah");
     const otherWs = await connect(other.token);
-    const bystander = await signInAgent("bopha@example.com", "Bopha");
+    const bystander = await signInAgent("bopha", "Bopha");
     const bystanderWs = await connect(bystander.token, ORIGIN);
 
     // Another customer cannot join this room, read it or write to it.

@@ -13,6 +13,7 @@ import { AccountCheckedAuthClient } from "@modules/auth/auth.account-check.js";
 import { AuthRepository } from "@modules/auth/auth.repository.js";
 import { AuthService } from "@modules/auth/auth.service.js";
 import { losVerifierFrom } from "@modules/auth/auth.los.js";
+import { LosStaffLogin } from "@modules/auth/auth.los-login.js";
 import { BearerTokenAuth, LosDataClient } from "@modules/los-data/los-data.client.js";
 import { LoanApplicationRepository } from "@modules/los-data/los-data.repository.js";
 import { LoanApplicationService } from "@modules/los-data/los-data.service.js";
@@ -75,6 +76,8 @@ export const authService = new AuthService(
   losVerifier,
   // `loanApplications` is built below, once the conversation access it needs exists.
   { refreshFromCustomerToken: (customerId, token) => loanApplications.refreshFromCustomerToken(customerId, token) },
+  // Staff sign in with their LOS username and password (tried before the chat accounts); needs LOS_BASE_URL.
+  env.LOS_BASE_URL ? new LosStaffLogin(env.LOS_BASE_URL) : null,
 );
 
 /** Account management (admins), and the `local` directory of names. */

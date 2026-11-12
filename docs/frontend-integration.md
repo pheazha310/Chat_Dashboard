@@ -15,7 +15,7 @@ features) is the same in both, so the mock demo keeps working.
 pnpm dev:backend                      # http://localhost:4000, ws://localhost:4000/ws
 
 # 2. a staff account to sign in with (the first admin; more are created under /api/v1/admin/users)
-ADMIN_EMAIL=admin@example.com ADMIN_PASSWORD='a long password' pnpm --filter @chat-dashboard/backend user:create-admin
+ADMIN_USERNAME=admin ADMIN_PASSWORD='a long password' pnpm --filter @chat-dashboard/backend user:create-admin
 
 # 3. frontend: shows a sign-in screen, then the dashboard
 cd frontend
@@ -25,11 +25,11 @@ VITE_WS_URL=ws://localhost:4000/ws pnpm dev
 VITE_WS_URL=ws://localhost:4000/ws VITE_AUTH_TOKEN=dev:00000000-0000-4000-8000-000000000003:AGENT pnpm dev
 ```
 
-| Variable          | Meaning                                                                                                                           |
-| ----------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `VITE_WS_URL`     | gateway URL. Setting it switches to the backend mode.                                                                             |
-| `VITE_API_URL`    | REST base URL. Default: the WebSocket URL's host with `/api/v1/admin` (`ws://h:4000/ws` → `http://h:4000/api/v1/admin`).          |
-| `VITE_AUTH_TOKEN` | fixed development access token; skips the sign-in screen. Without it, staff sign in with email and password (`docs/api-auth.md`). |
+| Variable          | Meaning                                                                                                                              |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `VITE_WS_URL`     | gateway URL. Setting it switches to the backend mode.                                                                                |
+| `VITE_API_URL`    | REST base URL. Default: the WebSocket URL's host with `/api/v1/admin` (`ws://h:4000/ws` → `http://h:4000/api/v1/admin`).             |
+| `VITE_AUTH_TOKEN` | fixed development access token; skips the sign-in screen. Without it, staff sign in with username and password (`docs/api-auth.md`). |
 
 ### Sign-in and tokens
 
