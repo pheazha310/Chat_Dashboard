@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { AppError } from "@shared/errors/AppError.js";
+import { logger } from "@config/logger.js";
 import { LosStaffLogin } from "../auth.los-login.js";
 
 const jwt = (tag: string) => `h.${tag}.s`;
@@ -27,6 +28,14 @@ describe("LosStaffLogin", () => {
   it("answers null when LOS refuses the credentials", async () => {
     const fetchFn = vi.fn<typeof fetch>().mockImplementation(() => json(401, { status: "error" }));
     await expect(new LosStaffLogin(BASE, fetchFn).accessToken("admin", "bad")).resolves.toBeNull();
+  });
+
+  it("warns when LOS refuses the request itself (426, 400), which is not a wrong password", async () => {
+    const warn = vi.spyOn(logger, "warn").mockImplementation(() => undefined);
+    const fetchFn = vi.fn<typeof fetch>().mockImplementation(() => json(426, { status: "error" }));
+    await expect(new LosStaffLogin(BASE, fetchFn).accessToken("admin", "pw")).resolves.toBeNull();
+    expect(warn).toHaveBeenCalledWith(expect.objectContaining({ status: 426 }), expect.any(String));
+    warn.mockRestore();
   });
 
   it("says so when LOS is limiting logins, instead of looking like a wrong password", async () => {

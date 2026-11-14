@@ -15,23 +15,23 @@ id returned by Create. The database must be reachable: `GET /api/health` should 
 
 ## Health and spec (no auth)
 
-| Method | URL                          |
-| ------ | ---------------------------- |
-| GET    | `/api/health`                |
-| GET    | `/api/v1/admin/openapi.json` |
+| Method | URL                           |
+| ------ | ----------------------------- |
+| GET    | `/api/health`                 |
+| GET    | `/api/v1/agents/openapi.json` |
 
 ## Conversations
 
-| Method | URL                                                                           | Body  |
-| ------ | ----------------------------------------------------------------------------- | ----- |
-| GET    | `/api/v1/admin/conversations?filter=all&page=1&size=20`                       |       |
-| POST   | `/api/v1/admin/conversations`                                                 | below |
-| GET    | `/api/v1/admin/conversations/{id}`                                            |       |
-| GET    | `/api/v1/admin/conversations/{id}/activities?page=1&size=20`                  |       |
-| PATCH  | `/api/v1/admin/conversations/{id}/status`                                     | below |
-| POST   | `/api/v1/admin/conversations/{id}/archive`                                    | `{}`  |
-| POST   | `/api/v1/admin/conversations/{id}/restore`                                    | `{}`  |
-| GET    | `/api/v1/admin/conversations?customerId=00000000-0000-4000-8000-000000000100` |       |
+| Method | URL                                                                            | Body  |
+| ------ | ------------------------------------------------------------------------------ | ----- |
+| GET    | `/api/v1/agents/conversations?filter=all&page=1&size=20`                       |       |
+| POST   | `/api/v1/agents/conversations`                                                 | below |
+| GET    | `/api/v1/agents/conversations/{id}`                                            |       |
+| GET    | `/api/v1/agents/conversations/{id}/activities?page=1&size=20`                  |       |
+| PATCH  | `/api/v1/agents/conversations/{id}/status`                                     | below |
+| POST   | `/api/v1/agents/conversations/{id}/archive`                                    | `{}`  |
+| POST   | `/api/v1/agents/conversations/{id}/restore`                                    | `{}`  |
+| GET    | `/api/v1/agents/conversations?customerId=00000000-0000-4000-8000-000000000100` |       |
 
 List filters: `filter` = all, mine, unread, unassigned, archived; optional `status`, `priority`, `tag`, `q`, `customerId`,
 `excludeId`.
@@ -57,25 +57,25 @@ Status (`OPEN`, `RESOLVED` or `CLOSED`; 409 if unchanged):
 
 ## Assignment
 
-| Method | URL                                            | Body                                                                                                                                                            |
-| ------ | ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| POST   | `/api/v1/admin/conversations/{id}/assign`      | `{}` takes over as the caller                                                                                                                                   |
-| POST   | `/api/v1/admin/conversations/{id}/assign`      | supervisor only: `{ "agentId": "00000000-0000-4000-8000-000000000004", "note": "please handle" }` (token `dev:00000000-0000-4000-8000-000000000009:SUPERVISOR`) |
-| POST   | `/api/v1/admin/conversations/{id}/transfer`    | `{ "agentId": "00000000-0000-4000-8000-000000000004", "note": "handover" }`                                                                                     |
-| POST   | `/api/v1/admin/conversations/{id}/unassign`    | `{ "note": "back to queue" }`                                                                                                                                   |
-| GET    | `/api/v1/admin/conversations/{id}/assignments` |                                                                                                                                                                 |
+| Method | URL                                             | Body                                                                                                                                                            |
+| ------ | ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| POST   | `/api/v1/agents/conversations/{id}/assign`      | `{}` takes over as the caller                                                                                                                                   |
+| POST   | `/api/v1/agents/conversations/{id}/assign`      | supervisor only: `{ "agentId": "00000000-0000-4000-8000-000000000004", "note": "please handle" }` (token `dev:00000000-0000-4000-8000-000000000009:SUPERVISOR`) |
+| POST   | `/api/v1/agents/conversations/{id}/transfer`    | `{ "agentId": "00000000-0000-4000-8000-000000000004", "note": "handover" }`                                                                                     |
+| POST   | `/api/v1/agents/conversations/{id}/unassign`    | `{ "note": "back to queue" }`                                                                                                                                   |
+| GET    | `/api/v1/agents/conversations/{id}/assignments` |                                                                                                                                                                 |
 
 ## Messages (only the owner of an open conversation can send)
 
-| Method | URL                                                               | Body                                                              |
-| ------ | ----------------------------------------------------------------- | ----------------------------------------------------------------- |
-| POST   | `/api/v1/admin/conversations/{id}/messages`                       | below                                                             |
-| GET    | `/api/v1/admin/conversations/{id}/messages?limit=50`              |                                                                   |
-| GET    | `/api/v1/admin/conversations/{id}/messages?before={messageId}`    | page back                                                         |
-| GET    | `/api/v1/admin/conversations/{id}/messages?after={sequence}`      | what you missed                                                   |
-| POST   | `/api/v1/admin/conversations/{id}/messages/{messageId}/delivered` | `{}` (customer messages only)                                     |
-| POST   | `/api/v1/admin/conversations/{id}/read`                           | `{}` or `{ "messageId": "00000000-0000-4000-8000-000000000012" }` |
-| POST   | `/api/v1/admin/conversations/{id}/unread`                         | `{}`                                                              |
+| Method | URL                                                                | Body                                                              |
+| ------ | ------------------------------------------------------------------ | ----------------------------------------------------------------- |
+| POST   | `/api/v1/agents/conversations/{id}/messages`                       | below                                                             |
+| GET    | `/api/v1/agents/conversations/{id}/messages?limit=50`              |                                                                   |
+| GET    | `/api/v1/agents/conversations/{id}/messages?before={messageId}`    | page back                                                         |
+| GET    | `/api/v1/agents/conversations/{id}/messages?after={sequence}`      | what you missed                                                   |
+| POST   | `/api/v1/agents/conversations/{id}/messages/{messageId}/delivered` | `{}` (customer messages only)                                     |
+| POST   | `/api/v1/agents/conversations/{id}/read`                           | `{}` or `{ "messageId": "00000000-0000-4000-8000-000000000012" }` |
+| POST   | `/api/v1/agents/conversations/{id}/unread`                         | `{}`                                                              |
 
 Send (201; a retry with the same `clientId` returns 200 with the original message; `text` up to 4000 characters):
 
@@ -85,15 +85,15 @@ Send (201; a retry with the same `clientId` returns 200 with the original messag
 
 ## Notifications
 
-| Method | URL                                                      | Body                             |
-| ------ | -------------------------------------------------------- | -------------------------------- |
-| GET    | `/api/v1/admin/notifications?unread=true&page=1&size=20` |                                  |
-| GET    | `/api/v1/admin/notifications/unread-count`               |                                  |
-| PATCH  | `/api/v1/admin/notifications/{notifId}/read`             | `{}`                             |
-| POST   | `/api/v1/admin/notifications/read-all`                   | `{}`                             |
-| GET    | `/api/v1/admin/notifications/preferences`                |                                  |
-| PUT    | `/api/v1/admin/notifications/preferences`                | below (any subset, at least one) |
-| PUT    | `/api/v1/admin/conversations/{id}/mute`                  | `{ "muted": true }`              |
+| Method | URL                                                       | Body                             |
+| ------ | --------------------------------------------------------- | -------------------------------- |
+| GET    | `/api/v1/agents/notifications?unread=true&page=1&size=20` |                                  |
+| GET    | `/api/v1/agents/notifications/unread-count`               |                                  |
+| PATCH  | `/api/v1/agents/notifications/{notifId}/read`             | `{}`                             |
+| POST   | `/api/v1/agents/notifications/read-all`                   | `{}`                             |
+| GET    | `/api/v1/agents/notifications/preferences`                |                                  |
+| PUT    | `/api/v1/agents/notifications/preferences`                | below (any subset, at least one) |
+| PUT    | `/api/v1/agents/conversations/{id}/mute`                  | `{ "muted": true }`              |
 
 ```json
 { "newMessage": true, "assignment": true, "transfer": true, "mention": true, "sound": false, "browser": true }
@@ -101,18 +101,18 @@ Send (201; a retry with the same `clientId` returns 200 with the original messag
 
 ## Presence
 
-| Method | URL                         | Body                                            |
-| ------ | --------------------------- | ----------------------------------------------- |
-| GET    | `/api/v1/admin/presence`    | (lists only agents with an open WebSocket)      |
-| PUT    | `/api/v1/admin/presence/me` | `{ "status": "AVAILABLE" }` (or `BUSY`, `AWAY`) |
+| Method | URL                          | Body                                            |
+| ------ | ---------------------------- | ----------------------------------------------- |
+| GET    | `/api/v1/agents/presence`    | (lists only agents with an open WebSocket)      |
+| PUT    | `/api/v1/agents/presence/me` | `{ "status": "AVAILABLE" }` (or `BUSY`, `AWAY`) |
 
 ## Customer info
 
-| Method | URL                                                       |
-| ------ | --------------------------------------------------------- |
-| GET    | `/api/v1/admin/conversations/{id}/customer`               |
-| GET    | `/api/v1/admin/conversations/{id}/customer/conversations` |
-| GET    | `/api/v1/admin/conversations/{id}/participants`           |
+| Method | URL                                                        |
+| ------ | ---------------------------------------------------------- |
+| GET    | `/api/v1/agents/conversations/{id}/customer`               |
+| GET    | `/api/v1/agents/conversations/{id}/customer/conversations` |
+| GET    | `/api/v1/agents/conversations/{id}/participants`           |
 
 ## How the collection is organised
 
@@ -229,7 +229,7 @@ Full event list: [../websocket-events.md](../websocket-events.md).
 - Agent 4 sends a message to it: rejected.
 - No token: **401**.
 - Send the same `clientId` twice: **201**, then **200**.
-- A wrong URL such as `GET /` or `/api/conversations` returns 404 (the staff API is under `/api/v1/admin`).
+- A wrong URL such as `GET /` or `/api/conversations` returns 404 (the staff API is under `/api/v1/agents`).
 
 ## Chat flow and real LOS (Dev): `los-dev.*`
 
@@ -261,3 +261,20 @@ The "Optional" folders are skipped until you turn them on with an environment va
   it), LOS connectivity, the staff hand-off from LOS Web (its claim checks fail until LOS issues the Chat hand-off
   token, which is the point), the LOS loan-data endpoints, and "see real loan data in Chat". The backend must run with
   `LOS_ISSUER=los-backend` and the Dev `LOS_JWKS_URL` (see `backend/.env.example`). Tokens are never printed.
+
+## Which collection to use
+
+| File                                                                          | Use it for                                                                                          |
+| ----------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `chat-dashboard.postman_collection.json`                                      | Every staff endpoint under `/api/v1/agents`, with dev tokens (`AUTH_MODE=dev`).                     |
+| `chat-backend.postman_collection.json` + `.postman_environment.template.json` | Manual sign-in against the real LOS dev server (customer and staff, one folder each), with refresh. |
+| `los-dev.postman_collection.json` + `los-dev.postman_environment.json`        | The automated Chat flow against your local backend (runnable as a collection).                      |
+
+For `chat-backend.*`, set Postman's working directory to `docs/postman` so the upload request finds
+`fixtures/sample.pdf`. Fill the secret variables in your own copy of the environment; never commit them.
+
+`chat-backend.postman_collection.json` uses the same base URLs on every platform: `{{baseUrl}}/api/v1/customer` for the
+customer (sign-in and chat) and `{{baseUrl}}/api/v1/agents` for staff. `baseUrl` is `http://localhost:4000`. The
+backend also serves the app-style aliases `/customer/api/v1` and `/agent/api/v1` (see `routes.ts`), but the
+collection does not use them. `los-dev.postman_environment.template.json` is the same environment as
+`chat-backend.postman_environment.template.json`, for importing next to the `los-dev` files.

@@ -76,8 +76,10 @@ export class LosStaffLogin implements LosStaffCredentials {
     if (response.status === 429) throw new LosRateLimitedError();
     if (response.status >= 500) throw new Error(`LOS answered ${response.status}`);
     if (!response.ok) {
-      // Status only: a refusal is normal for a chat-only account.
-      logger.info({ path, status: response.status }, "LOS staff login step refused");
+      // Status only. 401/403 is normal for a chat-only account; anything else (e.g. 426 "client out of date", 400) means
+      // LOS rejected the request itself, which would otherwise look like a wrong password.
+      const expected = response.status === 401 || response.status === 403;
+      logger[expected ? "info" : "warn"]({ path, status: response.status }, "LOS staff login step refused");
       return null;
     }
     return response.json().catch(() => null);

@@ -39,3 +39,7 @@ coverage/
 
 # Uploaded files (local storage driver)
 /backend/storage/
+
+# Local Postman/newman environments (hold LOS credentials)
+docs/postman/*.local.json
+docs/postman/local.env.json

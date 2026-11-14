@@ -141,6 +141,11 @@ export const listUsersQuery = pageQuery.extend({
   q: z.string().trim().min(1).max(100).optional(),
   role: z.enum(ROLES).optional(),
   status: z.enum(USER_STATUSES).optional(),
+  /** `false`: only accounts with no chat password (LOS-only); `true`: only accounts that have one. */
+  chatLogin: z
+    .enum(["true", "false"])
+    .transform((value) => value === "true")
+    .optional(),
 });
 export type ListUsersQuery = z.infer<typeof listUsersQuery>;
 

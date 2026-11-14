@@ -208,7 +208,10 @@ export class FakeAuthRepository {
 
   async listUsers(query: ListUsersQuery) {
     const items = [...this.users.values()].filter(
-      (u) => (!query.role || u.role === query.role) && (!query.status || u.status === query.status),
+      (u) =>
+        (!query.role || u.role === query.role) &&
+        (!query.status || u.status === query.status) &&
+        (query.chatLogin === undefined || (u.passwordHash !== null) === query.chatLogin),
     );
     return { items, total: items.length };
   }

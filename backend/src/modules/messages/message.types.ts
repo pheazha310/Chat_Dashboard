@@ -54,6 +54,8 @@ export interface AttachmentDto {
   /** The message that carries it, or null if it is not linked to one. */
   messageId: string | null;
   kind: "IMAGE" | "DOCUMENT" | "AUDIO" | "VIDEO";
+  /** Where the file sits in storage (the storage key, e.g. `conversations/<id>/<uuid>.png`). Never a URL: bucket, host and signing stay private. */
+  filePath: string;
   fileName: string;
   mimeType: string;
   fileSize: number;

@@ -36,7 +36,7 @@ Both return the same response and the same kind of session, so everything downst
 
 > **Limit to know about.** A session started by an LOS hand-off lasts `LOS_STAFF_SESSION_SECONDS` (default 1 hour, fixed
 > at sign-in) and renewing it needs a fresh hand-off from LOS. With LOS down, an account that has **no chat
-> credentials** cannot sign in again after that. Give such accounts a username and password (see 3). The refresh
+> credentials** cannot sign in again after that. Give such accounts a username and password (see 3); `GET /users?chatLogin=false` lists them. The refresh
 > then answers `401 SESSION_EXPIRED` (not the generic `UNAUTHORIZED`) so a client can say so and offer the chat sign-in.
 
 ## 2. One person, one chat account: identity mapping

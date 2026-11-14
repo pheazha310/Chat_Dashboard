@@ -26,6 +26,7 @@ export const toAttachment = (row: AttachmentRow, messageId: string | null = null
   conversationId: idToString(row.conversationId),
   messageId,
   kind: KIND_BY_PREFIX.find(([prefix]) => row.mimeType.startsWith(prefix))?.[1] ?? "DOCUMENT",
+  filePath: row.storageKey,
   fileName: row.fileName,
   mimeType: row.mimeType,
   fileSize: Number(row.fileSize),

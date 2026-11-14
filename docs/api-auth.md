@@ -250,13 +250,13 @@ from `.env` before pointing the backend at the real LOS.
 
 ## Account management (`/api/v1/admin/users`)
 
-| Method and path                           | Who            | Body                                                        | Notes                                                                                        |
-| ----------------------------------------- | -------------- | ----------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `GET /users?role=&status=&q=&page=&size=` | `users.read`   |                                                             | Paged. `q` matches username, email or name, case-insensitive                                 |
-| `GET /users/:userId`                      | `users.read`   |                                                             |                                                                                              |
-| `POST /users`                             | `users.manage` | `{ username, displayName, role, password, email?, staff? }` | Staff roles only (`AGENT`, `SUPERVISOR`, `ADMIN`). `201`; `409` email or employee code taken |
-| `PATCH /users/:userId`                    | `users.manage` | any of `{ displayName, role, status, staff, customer }`     | See rules below                                                                              |
-| `POST /users/:userId/password`            | `users.manage` | `{ password }`                                              | Sets a new password, clears a lock, ends every sign-in; `409` for an LOS-only account        |
+| Method and path                                      | Who            | Body                                                        | Notes                                                                                                                           |
+| ---------------------------------------------------- | -------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /users?role=&status=&q=&chatLogin=&page=&size=` | `users.read`   |                                                             | Paged. `q` matches username, email or name, case-insensitive. `chatLogin=false`: only accounts with no chat password (LOS-only) |
+| `GET /users/:userId`                                 | `users.read`   |                                                             |                                                                                                                                 |
+| `POST /users`                                        | `users.manage` | `{ username, displayName, role, password, email?, staff? }` | Staff roles only (`AGENT`, `SUPERVISOR`, `ADMIN`). `201`; `409` email or employee code taken                                    |
+| `PATCH /users/:userId`                               | `users.manage` | any of `{ displayName, role, status, staff, customer }`     | See rules below                                                                                                                 |
+| `POST /users/:userId/password`                       | `users.manage` | `{ password }`                                              | Sets a new password, clears a lock, ends every sign-in; `409` for an LOS-only account                                           |
 
 `users.read` is granted to supervisors and admins, `users.manage` to admins, by default; admins can change that
 (`docs/api-roles.md`).

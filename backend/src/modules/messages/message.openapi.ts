@@ -20,6 +20,7 @@ export const attachment = z
     conversationId: z.string(),
     messageId: z.string().nullable(),
     kind: z.enum(["IMAGE", "DOCUMENT", "AUDIO", "VIDEO"]),
+    filePath: z.string(),
     fileName: z.string(),
     mimeType: z.string(),
     fileSize: z.number().int(),

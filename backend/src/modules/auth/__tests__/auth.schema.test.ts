@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   createUserBody,
   devLoginBody,
+  listUsersQuery,
   loginBody,
   registerBody,
   updateUserBody,
@@ -83,5 +84,14 @@ describe("username", () => {
     expect(createUserBody.safeParse(base).success).toBe(true);
     expect(createUserBody.parse({ ...base, email: "Ann@Example.com" }).email).toBe("ann@example.com");
     expect(createUserBody.safeParse({ ...base, email: "nope" }).success).toBe(false);
+  });
+});
+
+describe("listUsersQuery chatLogin", () => {
+  it("reads chatLogin=false as a boolean and leaves it unset by default", () => {
+    expect(listUsersQuery.parse({ chatLogin: "false" }).chatLogin).toBe(false);
+    expect(listUsersQuery.parse({ chatLogin: "true" }).chatLogin).toBe(true);
+    expect(listUsersQuery.parse({}).chatLogin).toBeUndefined();
+    expect(() => listUsersQuery.parse({ chatLogin: "maybe" })).toThrow();
   });
 });

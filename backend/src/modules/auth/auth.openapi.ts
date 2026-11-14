@@ -175,7 +175,7 @@ export function registerAuthOpenApi(registry: OpenAPIRegistry) {
     security,
     summary: "List accounts",
     description:
-      "Supervisors and admins. Filter by `role`, `status`, or `q` (username, email or name, case-insensitive).",
+      "Supervisors and admins. Filter by `role`, `status`, or `q` (username, email or name, case-insensitive). `chatLogin=false` lists accounts with no chat password (LOS-only, who cannot sign in while LOS is down); `chatLogin=true` the others.",
     request: { query: listUsersQuery },
     responses: { 200: ok("Accounts", pagedOf(user)), 400: errors[400], 401: errors[401], 403: errors[403] },
   });

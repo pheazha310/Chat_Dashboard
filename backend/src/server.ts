@@ -23,6 +23,30 @@ const sessionCleanupJob = new IntervalJob(
 );
 sessionCleanupJob.start();
 
+// ws re-emits the HTTP server's errors on `wss`; without a listener Node crashes with a raw stack trace.
+wss.on("error", (err: NodeJS.ErrnoException) => {
+  if (err.code === "EADDRINUSE") {
+    const red = (s: string) => `\x1b[31m${s}\x1b[0m`;
+    const bold = (s: string) => `\x1b[1m${s}\x1b[0m`;
+    const cyan = (s: string) => `\x1b[36m${s}\x1b[0m`;
+    console.error(
+      [
+        "",
+        red(bold(`  ✖ Port ${env.PORT} is already in use`)),
+        "",
+        "  Another backend is probably still running.",
+        "",
+        `  ${bold("Fix 1:")} stop it    ${cyan(`lsof -ti :${env.PORT} | xargs kill`)}`,
+        `  ${bold("Fix 2:")} new port   ${cyan("set PORT=4001 in backend/.env")}`,
+        "",
+      ].join("\n"),
+    );
+  } else {
+    logger.error({ err }, "Server failed to start");
+  }
+  process.exit(1);
+});
+
 server.listen(env.PORT, () => {
   logger.info({ port: env.PORT }, "API listening (ws at /ws)");
 });

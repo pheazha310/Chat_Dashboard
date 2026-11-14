@@ -215,6 +215,7 @@ export class AuthRepository {
     const where = {
       ...(query.role === undefined ? {} : { role: query.role }),
       ...(query.status === undefined ? {} : { status: query.status }),
+      ...(query.chatLogin === undefined ? {} : { passwordHash: query.chatLogin ? { not: null } : null }),
       ...(q === undefined
         ? {}
         : {

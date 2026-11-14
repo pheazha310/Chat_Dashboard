@@ -62,6 +62,17 @@ describe("UserService", () => {
     await expect(service.get({ userId: uid(1), role: "SUPERVISOR" }, uid(99))).rejects.toBeInstanceOf(NotFoundError);
   });
 
+  it("lists accounts without a chat password (LOS-only) with chatLogin=false", async () => {
+    const withPassword = await service.create(admin, staff);
+    const losOnly = { ...repo.users.get(withPassword.id)!, id: uid(77), username: null, passwordHash: null };
+    repo.users.set(losOnly.id, losOnly);
+    const none = await service.list(admin, { page: 1, size: 25, chatLogin: false });
+    expect(none.items.map((u) => u.id)).toEqual([losOnly.id]);
+    const some = await service.list(admin, { page: 1, size: 25, chatLogin: true });
+    expect(some.items.map((u) => u.id)).toEqual(expect.arrayContaining([admin.userId, withPassword.id]));
+    expect(some.items.map((u) => u.id)).not.toContain(losOnly.id);
+  });
+
   it("disabling signs the user out everywhere and tells the identity mapping; re-enabling clears a lock", async () => {
     const user = await service.create(admin, staff);
     await repo.createSession({

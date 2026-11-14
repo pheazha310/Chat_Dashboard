@@ -31,6 +31,7 @@ The message carries `attachments[]`:
       "id": "…",
       "messageId": "…",
       "kind": "AUDIO",
+      "filePath": "conversations/…/….webm",
       "fileName": "voice-message.webm",
       "mimeType": "audio/webm",
       "fileSize": 18234,
@@ -73,6 +74,12 @@ paths and control characters and limited to 255 characters, and it never reaches
 | Delete                         | The uploader, or a supervisor/admin.                                                                                  |
 
 Customers cannot use these routes (the dashboard token roles only). Deleting a message also soft-deletes its files.
+
+## `filePath` and privacy
+
+Every attachment carries `filePath`: the storage key stored in `attachments.storage_key` (`conversations/<conversationId>/<uuid>.<ext>`).
+It is only a path inside the storage (local folder or S3 bucket). It never holds a URL, bucket name, host or signature, so the
+storage location stays private. Clients cannot fetch it directly; the bytes come from `downloadPath` after the access check.
 
 ## Secure preview and download
 
