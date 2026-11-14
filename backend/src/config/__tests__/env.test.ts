@@ -94,3 +94,25 @@ describe("storage settings", () => {
     expect(minio).toMatchObject({ S3_ENDPOINT: "http://localhost:9000", S3_FORCE_PATH_STYLE: true });
   });
 });
+
+describe("S3 credentials", () => {
+  const s3 = { ...noS3, S3_ACCESS_KEY: undefined, S3_SECRET_KEY: undefined };
+
+  it("reads an explicit key pair for an S3-compatible store", async () => {
+    const env = await loadEnv({ ...s3, S3_ACCESS_KEY: "access", S3_SECRET_KEY: "secret" });
+
+    expect(env).toMatchObject({ S3_ACCESS_KEY: "access", S3_SECRET_KEY: "secret" });
+  });
+
+  it("accepts neither (the standard AWS chain is used then)", async () => {
+    const env = await loadEnv(s3);
+
+    expect(env.S3_ACCESS_KEY).toBeUndefined();
+    expect(env.S3_SECRET_KEY).toBeUndefined();
+  });
+
+  it("refuses half a pair", async () => {
+    await expect(loadEnv({ ...s3, S3_ACCESS_KEY: "access" })).rejects.toThrow("S3_SECRET_KEY");
+    await expect(loadEnv({ ...s3, S3_SECRET_KEY: "secret" })).rejects.toThrow("S3_ACCESS_KEY");
+  });
+});

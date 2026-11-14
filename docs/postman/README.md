@@ -256,6 +256,7 @@ The "Optional" folders are skipped until you turn them on with an environment va
 
 - `runPdf`: the customer sends `fixtures/sample.pdf` and staff download it. Copy `docs/postman/fixtures/sample.pdf` into
   Postman's working directory first (or pick the file in the request's `file` field).
+- `runChannel`: the app-style `/conversation` endpoints (get my conversation, send, resend, upload and send a PDF once, read messages); needs `fixtures/sample.pdf`.
 - `runLos`: the real Dev LOS (`https://api-dev.los.delightech.asia/api/v1`): customer sign-in with LOS (fill
   `customerUsername` and `customerPin`, the LOS password; LOS allows 5 customer logins per 15 minutes, so do not loop
   it), LOS connectivity, the staff hand-off from LOS Web (its claim checks fail until LOS issues the Chat hand-off
@@ -264,17 +265,12 @@ The "Optional" folders are skipped until you turn them on with an environment va
 
 ## Which collection to use
 
-| File                                                                          | Use it for                                                                                          |
-| ----------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| `chat-dashboard.postman_collection.json`                                      | Every staff endpoint under `/api/v1/agents`, with dev tokens (`AUTH_MODE=dev`).                     |
-| `chat-backend.postman_collection.json` + `.postman_environment.template.json` | Manual sign-in against the real LOS dev server (customer and staff, one folder each), with refresh. |
-| `los-dev.postman_collection.json` + `los-dev.postman_environment.json`        | The automated Chat flow against your local backend (runnable as a collection).                      |
+| File                                                                   | Use it for                                                                                               |
+| ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `chat-dashboard.postman_collection.json`                               | Every staff endpoint under `/api/v1/agents`, with dev tokens (`AUTH_MODE=dev`).                          |
+| `los-dev.postman_collection.json` + `los-dev.postman_environment.json` | The Chat flow against your local backend (runnable), plus the optional real-LOS and app-channel folders. |
 
-For `chat-backend.*`, set Postman's working directory to `docs/postman` so the upload request finds
-`fixtures/sample.pdf`. Fill the secret variables in your own copy of the environment; never commit them.
-
-`chat-backend.postman_collection.json` uses the same base URLs on every platform: `{{baseUrl}}/api/v1/customer` for the
-customer (sign-in and chat) and `{{baseUrl}}/api/v1/agents` for staff. `baseUrl` is `http://localhost:4000`. The
-backend also serves the app-style aliases `/customer/api/v1` and `/agent/api/v1` (see `routes.ts`), but the
-collection does not use them. `los-dev.postman_environment.template.json` is the same environment as
-`chat-backend.postman_environment.template.json`, for importing next to the `los-dev` files.
+Fill the secret variables in your own copy of the environment; never commit them. The old `chat-backend` collection was
+merged into `los-dev`: its app-style `/api/v1/customer/conversation` requests are the optional folder "customer app
+channel" (turn it on with `runChannel` = `yes`; the PDF steps need `fixtures/sample.pdf` in Postman's working
+directory), and its LOS sign-in steps are the existing LOS folders.

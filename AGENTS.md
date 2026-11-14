@@ -31,6 +31,7 @@ Node 22, pnpm 10 (pinned in `.mise.toml` and root `package.json`).
 - Data model and DB rules: [docs/database-schema.md](docs/database-schema.md), `backend/prisma/schema/` (one file per domain)
 - Backend behaviour (flows, permissions, protocol gaps): [docs/chat-logic-design.md](docs/chat-logic-design.md)
 - Mobile app integration (customer REST + socket flow): [docs/mobile-integration.md](docs/mobile-integration.md)
+- DEV/STG deployment next to LOS (Docker, Nginx, Jenkins, blue-green, open questions): [docs/deployment.md](docs/deployment.md); files in `deployment/`, `Jenkinsfile`, `backend/Dockerfile`, `frontend/Dockerfile`
 - Standalone mode (chat sign-in without LOS, identity linking, revocation, audit): [docs/standalone-mode.md](docs/standalone-mode.md)
 - WebSocket contract: backend [docs/websocket-events.md](docs/websocket-events.md); the frontend's `shared/api/ws/protocol.ts` is its own vocabulary, translated in `shared/api/ws/backend/`
 

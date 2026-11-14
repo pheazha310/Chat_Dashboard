@@ -367,11 +367,11 @@ changes). Integration (`auth-api.integration.test.ts`, needs `TEST_DATABASE_URL`
 HTTP, account creation, disabling, rotation and replay, lockout, customer registration and the staff/customer split,
 and password change.
 
-## Session URLs of the "Chat Backend" Postman collection
+## Session URLs of the app-style API
 
-[postman/chat-backend.postman_collection.json](postman/chat-backend.postman_collection.json) (with
-`chat-backend.postman_environment.template.json`) uses two base URLs: `{{baseUrl}}/api/v1/customer` and
-`{{baseUrl}}/api/v1/agents` (the staff API, the same router as `/api/v1/admin`, without a `/chat` segment).
+The apps use two base URLs: `/api/v1/customer` and `/api/v1/agents` (the staff API, the same router as
+`/api/v1/admin`, without a `/chat` segment). The Postman flow is
+[postman/los-dev.postman_collection.json](postman/los-dev.postman_collection.json), which calls `/api/v1/admin`.
 
 | Request                                                      | Same as                          | Success |
 | ------------------------------------------------------------ | -------------------------------- | ------- |

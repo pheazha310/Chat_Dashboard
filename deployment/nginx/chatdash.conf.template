@@ -1,0 +1,62 @@
+# Chat Dashboard, host-level Nginx, ONE environment. Rendered by scripts/render-nginx.sh and installed by a person
+# after review. A separate file with its own upstream/map names (chatdash_*): it never edits the LOS server blocks.
+# The upstream ports live in ${UPSTREAM_INC}, rewritten by the deploy script at each blue-green flip.
+
+include ${UPSTREAM_INC};
+
+# Own variable name, so it cannot clash with a $connection_upgrade the LOS config may already define.
+map $http_upgrade $chatdash_connection_upgrade {
+  default upgrade;
+  ""      close;
+}
+
+server {
+  listen 80;
+  server_name ${CHAT_SERVER_NAME};
+  return 301 https://$host$request_uri;
+}
+
+server {
+  listen 443 ssl;
+  http2 on;
+  server_name ${CHAT_SERVER_NAME};
+
+  # Certificate paths: ask infra how LOS certificates are issued (not known to this repo).
+  ssl_certificate     ${SSL_CERT};
+  ssl_certificate_key ${SSL_KEY};
+
+  # Uploads: MAX_UPLOAD_BYTES is 25 MiB; leave room for multipart overhead.
+  client_max_body_size 30m;
+
+  proxy_http_version 1.1;
+  proxy_set_header Host $host;
+  proxy_set_header X-Real-IP $remote_addr;
+  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+  proxy_set_header X-Forwarded-Proto $scheme;
+
+  # Native WebSocket gateway (clients authenticate with a first `auth` frame; the server pings every 30 s).
+  location = /ws {
+    proxy_pass http://chatdash_${CHAT_ENV}_api;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection $chatdash_connection_upgrade;
+    proxy_read_timeout 3600s;
+    proxy_send_timeout 3600s;
+    proxy_buffering off;
+  }
+
+  # REST for the dashboard (/api/v1/admin) and the LOS mobile app (/api/v1/customer), plus /api/health.
+  location /api/ {
+    proxy_pass http://chatdash_${CHAT_ENV}_api;
+    proxy_set_header Connection "";
+    proxy_read_timeout 120s;
+    proxy_send_timeout 120s;
+    # Stream uploads to the API (it enforces its own per-type limits) instead of buffering 25 MiB on disk first.
+    proxy_request_buffering off;
+  }
+
+  # The dashboard. Its container sets the CSP frame-ancestors header; do not add X-Frame-Options here.
+  location / {
+    proxy_pass http://chatdash_${CHAT_ENV}_web;
+    proxy_set_header Connection "";
+  }
+}

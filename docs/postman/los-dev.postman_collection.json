@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Chat Dashboard - Chat flow and real LOS (Dev)",
-    "description": "One folder per person. Import with los-dev.postman_environment.json and fill the secret variables in Postman (never commit them).\n\nCustomer: sign in by LOS (1a, 1b, 2) or by username and password (0 once, then 2), then 3 refresh, join, send, read.\nStaff: 1 login, then read, take the conversation, reply.\nRun order: Customer, Staff, Checks, Sign out. The Staff folder uses chatConvId and chatPdfId that the Customer folder saves. The last folders are optional checks against real LOS data.",
+    "description": "One folder per person. Import with los-dev.postman_environment.json and fill the secret variables in Postman (never commit them).\n\nCustomer: sign in by LOS (1a, 1b, 2) or by username and password (0 once, then 2), then 3 refresh, join, send, read.\nStaff: 1 login, then read, take the conversation, reply.\nRun order: Customer, Staff, Checks, Sign out. The Staff folder uses chatConvId and chatPdfId that the Customer folder saves. The last folders are optional checks against real LOS data.\nThe 'Optional: customer app channel' folder (runChannel) covers the app-style /conversation endpoints that used to live in the separate chat-backend collection.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -764,6 +764,291 @@
             "type": "text/javascript",
             "exec": ["if (pm.environment.get('runPdf') !== 'yes') pm.execution.skipRequest();"]
           }
+        }
+      ]
+    },
+    {
+      "name": "Optional: customer app channel (/conversation)",
+      "description": "The customer-app endpoints that need no conversation id (`/api/v1/customer/conversation`, `/attachments`): get my conversation, send, resend (idempotent), upload a PDF and send it once, read messages. Uses the Customer sign-in, so run Customer first. Copy docs/postman/fixtures/sample.pdf into Postman's working directory first. Skipped unless the environment variable runChannel is 'yes'.",
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{chatCustomerToken}}",
+            "type": "string"
+          }
+        ]
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": ["if (pm.environment.get('runChannel') !== 'yes') pm.execution.skipRequest();"]
+          }
+        }
+      ],
+      "item": [
+        {
+          "name": "Get my conversation",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "let body; try { body = pm.response.json(); } catch (e) { body = null; }",
+                  "pm.test('JSON envelope with status success', () => pm.expect(body && body.status).to.eql('success'));",
+                  "const d = body && body.data;",
+                  "pm.test('has an id', () => pm.expect(d.id).to.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i));",
+                  "pm.test('customer-safe shape', () => pm.expect(d).to.include.keys('status','agentAssigned','lastSequenceNumber'));",
+                  "pm.environment.set('channelConvId', d.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{chatUrl}}/api/v1/customer/conversation",
+              "host": ["{{chatUrl}}"],
+              "path": ["api", "v1", "customer", "conversation"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Send a message",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.environment.set('channelClientId', pm.variables.replaceIn('{{$guid}}'));"]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "let body; try { body = pm.response.json(); } catch (e) { body = null; }",
+                  "pm.test('JSON envelope with status success', () => pm.expect(body && body.status).to.eql('success'));",
+                  "const d = body && body.data;",
+                  "pm.test('stored as a customer TEXT message', () => { pm.expect(d.type).to.eql('TEXT'); pm.expect(d.senderType).to.eql('CUSTOMER'); pm.expect(d.content).to.include('repayment date'); });",
+                  "pm.test('echoes the client id', () => pm.expect(d.clientId).to.eql(pm.environment.get('channelClientId')));",
+                  "pm.environment.set('channelConvId', d.conversationId);",
+                  "pm.environment.set('channelMsgId', d.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientMessageId\": \"{{channelClientId}}\",\n  \"type\": \"TEXT\",\n  \"text\": \"Hi, can I change my repayment date to the 25th?\"\n}"
+            },
+            "url": {
+              "raw": "{{chatUrl}}/api/v1/customer/conversation/messages",
+              "host": ["{{chatUrl}}"],
+              "path": ["api", "v1", "customer", "conversation", "messages"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Resend the same message (idempotent)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "let body; try { body = pm.response.json(); } catch (e) { body = null; }",
+                  "pm.test('JSON envelope with status success', () => pm.expect(body && body.status).to.eql('success'));",
+                  "const d = body && body.data;",
+                  "pm.test('same message returned, not a duplicate', () => pm.expect(d.id).to.eql(pm.environment.get('channelMsgId')));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientMessageId\": \"{{channelClientId}}\",\n  \"type\": \"TEXT\",\n  \"text\": \"Hi, can I change my repayment date to the 25th?\"\n}"
+            },
+            "url": {
+              "raw": "{{chatUrl}}/api/v1/customer/conversation/messages",
+              "host": ["{{chatUrl}}"],
+              "path": ["api", "v1", "customer", "conversation", "messages"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Upload a PDF",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "let body; try { body = pm.response.json(); } catch (e) { body = null; }",
+                  "pm.test('JSON envelope with status success', () => pm.expect(body && body.status).to.eql('success'));",
+                  "const d = body && body.data;",
+                  "pm.test('has an id', () => pm.expect(d.id).to.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i));",
+                  "pm.test('PDF metadata', () => { pm.expect(d.mimeType).to.eql('application/pdf'); pm.expect(d.kind).to.eql('DOCUMENT'); pm.expect(d.fileSize).to.be.above(0); });",
+                  "pm.environment.set('channelPdfId', d.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "contentType": "application/pdf",
+                  "src": "fixtures/sample.pdf"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{chatUrl}}/api/v1/customer/attachments",
+              "host": ["{{chatUrl}}"],
+              "path": ["api", "v1", "customer", "attachments"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Send the PDF",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "let body; try { body = pm.response.json(); } catch (e) { body = null; }",
+                  "pm.test('JSON envelope with status success', () => pm.expect(body && body.status).to.eql('success'));",
+                  "const d = body && body.data;",
+                  "pm.test('FILE message carrying the PDF', () => { pm.expect(d.attachments).to.have.length(1); pm.expect(d.attachments[0].id).to.eql(pm.environment.get('channelPdfId')); });",
+                  "pm.test('caption kept', () => pm.expect(d.content).to.eql('My payslip'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientMessageId\": \"{{$guid}}\",\n  \"type\": \"FILE\",\n  \"attachmentId\": \"{{channelPdfId}}\",\n  \"text\": \"My payslip\"\n}"
+            },
+            "url": {
+              "raw": "{{chatUrl}}/api/v1/customer/conversation/messages",
+              "host": ["{{chatUrl}}"],
+              "path": ["api", "v1", "customer", "conversation", "messages"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Send the PDF again (must be refused, one use)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('status 404', () => pm.response.to.have.status(404));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientMessageId\": \"{{$guid}}\",\n  \"type\": \"FILE\",\n  \"attachmentId\": \"{{channelPdfId}}\",\n  \"text\": \"My payslip\"\n}"
+            },
+            "url": {
+              "raw": "{{chatUrl}}/api/v1/customer/conversation/messages",
+              "host": ["{{chatUrl}}"],
+              "path": ["api", "v1", "customer", "conversation", "messages"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "My messages (latest page, oldest to newest)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "let body; try { body = pm.response.json(); } catch (e) { body = null; }",
+                  "pm.test('JSON envelope with status success', () => pm.expect(body && body.status).to.eql('success'));",
+                  "const d = body && body.data;",
+                  "pm.test('a list, latest page', () => { pm.expect(d).to.be.an('array'); pm.expect(d.length).to.be.at.most(30); });",
+                  "pm.test('contains the message just sent', () => pm.expect(d.map(m => m.id)).to.include(pm.environment.get('channelMsgId')));",
+                  "pm.test('ordered by sequenceNumber', () => { const n = d.map(m => BigInt(m.sequenceNumber)); pm.expect(n.every((v,i) => i===0 || n[i-1] < v)).to.be.true; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{chatUrl}}/api/v1/customer/conversation/messages?size=30",
+              "host": ["{{chatUrl}}"],
+              "path": ["api", "v1", "customer", "conversation", "messages"],
+              "query": [
+                {
+                  "key": "size",
+                  "value": "30"
+                }
+              ]
+            }
+          },
+          "response": []
         }
       ]
     },

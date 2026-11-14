@@ -1,0 +1,30 @@
+# API + web for one slot of one environment (project chatdash-<env>[-<slot>]). Joins the environment's private network
+# created by infra.yml and publishes only on 127.0.0.1: the host Nginx is the single public entry.
+# Required in the environment: CHAT_ENV, IMAGE_TAG, ENV_FILE, API_PORT, WEB_PORT, LOS_WEB_ORIGIN, CHAT_WS_ORIGIN.
+services:
+  api:
+    image: chatdash-api:${IMAGE_TAG:?}
+    restart: unless-stopped
+    env_file: ${ENV_FILE:?}
+    environment:
+      PORT: "4000"
+    ports:
+      - "127.0.0.1:${API_PORT:?}:4000"
+    networks: [chat]
+    # Time to finish after SIGTERM before Docker kills it (the process exits as soon as its connections are closed).
+    stop_grace_period: 30s
+
+  web:
+    image: chatdash-web:${IMAGE_TAG:?}
+    restart: unless-stopped
+    environment:
+      LOS_WEB_ORIGIN: ${LOS_WEB_ORIGIN:?}
+      CHAT_WS_ORIGIN: ${CHAT_WS_ORIGIN:?}
+    ports:
+      - "127.0.0.1:${WEB_PORT:?}:8080"
+    networks: [chat]
+
+networks:
+  chat:
+    external: true
+    name: chatdash_${CHAT_ENV:?}_net

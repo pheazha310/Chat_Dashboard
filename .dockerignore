@@ -1,0 +1,23 @@
+# Build context is the repo root (pnpm workspace). Keep secrets and local state out of every image.
+.git
+.github
+.claude
+.agents
+.pnpm-store
+**/node_modules
+**/dist
+**/coverage
+**/.env
+**/.env.*
+!**/.env.example
+backend/storage
+backend/.los-dev
+backend/prisma/generated
+backend/.agents
+backend/.windsurf
+docs
+postman
+.postman
+deployment
+**/*.log
+.DS_Store

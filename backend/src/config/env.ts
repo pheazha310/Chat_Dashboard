@@ -76,12 +76,14 @@ const schema = z.object({
   // bucket, or an S3-compatible store such as MinIO or R2 through S3_ENDPOINT, so several API servers share them.
   STORAGE_DRIVER: z.enum(["local", "s3"]).default("local"),
   STORAGE_DIR: z.string().min(1).default("./storage"),
-  // Required with STORAGE_DRIVER=s3. Credentials come from the standard AWS chain (AWS_ACCESS_KEY_ID and
-  // AWS_SECRET_ACCESS_KEY, a shared profile, or the server's IAM role), never from this file.
+  // Required with STORAGE_DRIVER=s3. Credentials: S3_ACCESS_KEY and S3_SECRET_KEY (an S3-compatible store), or, when
+  // both are unset, the standard AWS chain (AWS_ACCESS_KEY_ID, a shared profile, the server's IAM role).
   S3_BUCKET: z.string().min(1).optional(),
   S3_REGION: z.string().min(1).optional(),
   // Only for S3-compatible stores; MinIO also needs S3_FORCE_PATH_STYLE=true (bucket in the path, not the host name).
   S3_ENDPOINT: z.url().optional(),
+  S3_ACCESS_KEY: z.string().min(1).optional(),
+  S3_SECRET_KEY: z.string().min(1).optional(),
   S3_FORCE_PATH_STYLE: z
     .enum(["true", "false"])
     .default("false")
@@ -143,6 +145,14 @@ export const env = schema
   .refine((value) => value.STORAGE_DRIVER !== "s3" || Boolean(value.S3_REGION), {
     message: "STORAGE_DRIVER=s3 needs S3_REGION",
     path: ["S3_REGION"],
+  })
+  .refine((value) => !value.S3_SECRET_KEY || Boolean(value.S3_ACCESS_KEY), {
+    message: "S3_SECRET_KEY needs S3_ACCESS_KEY",
+    path: ["S3_ACCESS_KEY"],
+  })
+  .refine((value) => !value.S3_ACCESS_KEY || Boolean(value.S3_SECRET_KEY), {
+    message: "S3_ACCESS_KEY needs S3_SECRET_KEY",
+    path: ["S3_SECRET_KEY"],
   })
   .refine((value) => !(value.NODE_ENV === "production" && value.BACKEND1_MODE === "dev"), {
     message: "BACKEND1_MODE=dev is not allowed in production",

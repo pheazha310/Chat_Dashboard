@@ -1,0 +1,41 @@
+# Static server for the dashboard build. Runtime variables (envsubst):
+#   LOS_WEB_ORIGIN  exact origin of LOS Web, the only page allowed to frame this app
+#   CHAT_WS_ORIGIN  the wss:// origin of the gateway (Safari does not cover ws with 'self')
+server {
+  listen 8080;
+  server_name _;
+  root /usr/share/nginx/html;
+  index index.html;
+
+  # frame-ancestors is the iframe restriction (it replaces X-Frame-Options, which must not be sent: it cannot name
+  # a second origin). It is enforced. The full policy is report-only until checked in a browser against the real app.
+  add_header Content-Security-Policy "frame-ancestors 'self' ${LOS_WEB_ORIGIN}" always;
+  add_header Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self' data:; connect-src 'self' ${CHAT_WS_ORIGIN}; object-src 'none'; base-uri 'self'; form-action 'self'" always;
+  add_header X-Content-Type-Options "nosniff" always;
+  add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
+  location = /healthz {
+    access_log off;
+    default_type text/plain;
+    return 200 "ok\n";
+  }
+
+  # Hashed build assets never change.
+  location /assets/ {
+    expires 1y;
+    add_header Cache-Control "public, immutable";
+    # add_header in a location replaces the server-level ones, so repeat them.
+    add_header Content-Security-Policy "frame-ancestors 'self' ${LOS_WEB_ORIGIN}" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    try_files $uri =404;
+  }
+
+  location / {
+    add_header Cache-Control "no-cache";
+    add_header Content-Security-Policy "frame-ancestors 'self' ${LOS_WEB_ORIGIN}" always;
+    add_header Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self' data:; connect-src 'self' ${CHAT_WS_ORIGIN}; object-src 'none'; base-uri 'self'; form-action 'self'" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    try_files $uri /index.html;
+  }
+}

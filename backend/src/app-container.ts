@@ -39,7 +39,14 @@ const csv = (value: string) =>
 const storage: Storage =
   env.STORAGE_DRIVER === "s3"
     ? new S3Storage(
-        new S3Client({ region: env.S3_REGION, endpoint: env.S3_ENDPOINT, forcePathStyle: env.S3_FORCE_PATH_STYLE }),
+        new S3Client({
+          region: env.S3_REGION,
+          endpoint: env.S3_ENDPOINT,
+          forcePathStyle: env.S3_FORCE_PATH_STYLE,
+          ...(env.S3_ACCESS_KEY && env.S3_SECRET_KEY
+            ? { credentials: { accessKeyId: env.S3_ACCESS_KEY, secretAccessKey: env.S3_SECRET_KEY } }
+            : {}),
+        }),
         env.S3_BUCKET as string,
       )
     : new LocalStorage(env.STORAGE_DIR);

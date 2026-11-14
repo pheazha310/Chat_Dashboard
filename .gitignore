@@ -43,3 +43,6 @@ coverage/
 # Local Postman/newman environments (hold LOS credentials)
 docs/postman/*.local.json
 docs/postman/local.env.json
+
+# Server-side deploy state (active slot, image tags, DB dumps); see docs/deployment.md
+/.deploy/
